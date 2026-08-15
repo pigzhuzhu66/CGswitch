@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -16,28 +24,39 @@ jobs:
           - name: windows-x64
             os: windows-latest
             rust-target: x86_64-pc-windows-msvc
+            host-checks: true
           - name: macos-arm64
             os: macos-latest
             rust-target: aarch64-apple-darwin
+            host-checks: true
+          # macos-latest 是 ARM 机型，x64 目标为交叉编译；
+          # fmt/clippy/test 只依赖宿主架构，在 arm64 任务上跑即可，避免重复
           - name: macos-x64
             os: macos-latest
             rust-target: x86_64-apple-darwin
+            host-checks: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: corepack enable
         shell: bash
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
       - run: rustup target add ${{ matrix.rust-target }}
         shell: bash
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: cargo fmt --all -- --check
+        if: matrix.host-checks
         working-directory: src-tauri
-      - run: cargo clippy -- -D warnings
+      - run: cargo clippy --all-targets -- -D warnings
+        if: matrix.host-checks
         working-directory: src-tauri
       - run: cargo test
+        if: matrix.host-checks
         working-directory: src-tauri
       - run: pnpm tauri build --target ${{ matrix.rust-target }}
