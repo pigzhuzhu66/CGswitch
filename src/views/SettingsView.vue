@@ -45,10 +45,10 @@ async function save() {
 </script>
 
 <template>
-  <section class="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-    <div class="panel rounded-3xl p-6">
-      <h1 class="text-3xl font-black tracking-tight">设置</h1>
-      <p class="muted mt-2">控制外观、Codex 路径和重启行为。</p>
+  <section class="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+    <div class="panel rounded-lg p-5">
+      <h1 class="text-2xl font-bold tracking-tight">设置</h1>
+      <p class="muted mt-1.5">控制外观、Codex 路径和重启行为。</p>
 
       <n-form class="mt-7" label-placement="top">
         <n-form-item label="主题">
@@ -72,7 +72,7 @@ async function save() {
       </n-form>
     </div>
 
-    <div class="panel rounded-3xl p-6">
+    <div class="panel rounded-lg p-5">
       <h2 class="text-lg font-bold">数据与路径</h2>
       <p class="muted mt-2">所有本机数据固定保存在用户 Home 目录，不会进入 Git。</p>
       <n-divider />
