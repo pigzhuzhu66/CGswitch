@@ -152,11 +152,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="mx-auto max-w-6xl">
+  <section class="mx-auto max-w-5xl">
     <header class="flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-bold tracking-tight">配置档案</h1>
-        <p class="muted mt-1.5">捕获当前 Codex 配置，一键切换模型与 Provider。</p>
+        <h1 class="apple-title">配置档案</h1>
+        <p class="muted mt-2 text-sm">保存常用配置，在需要时切换并重启 Codex。</p>
       </div>
       <div class="flex gap-2">
         <n-button @click="emit('refresh')">刷新</n-button>
@@ -165,21 +165,23 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <div class="panel mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg px-4 py-3">
+    <div class="apple-group mt-7 flex flex-wrap items-center justify-between gap-5 px-5 py-4">
       <div class="min-w-0">
-        <div class="muted text-xs font-medium">当前生效档案</div>
-        <div class="mt-1 truncate font-semibold">
+        <div class="muted text-sm">当前使用</div>
+        <div class="mt-1 truncate text-lg font-semibold tracking-tight">
           {{ state.profiles.find((profile) => profile.id === state.active_profile_id)?.name ?? "未匹配" }}
         </div>
       </div>
-      <div class="flex items-center gap-2 text-sm">
-        <span class="h-2 w-2 rounded-full" :class="state.codex.running ? 'bg-emerald-500' : 'bg-zinc-400'" />
-        Codex {{ state.codex.running ? "运行中" : "未运行" }}
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full" :class="state.codex.running ? 'bg-[#34c759]' : 'bg-zinc-400'" />
+          Codex {{ state.codex.running ? "运行中" : "未运行" }}
+        </div>
+        <div class="muted">自动重启{{ state.settings.auto_restart ? "已开启" : "已关闭" }}</div>
       </div>
-      <div class="muted text-sm">自动重启：{{ state.settings.auto_restart ? "已开启" : "已关闭" }}</div>
     </div>
 
-    <div v-if="restartStage !== 'idle'" class="panel mt-4 rounded-lg p-4">
+    <div v-if="restartStage !== 'idle'" class="apple-group mt-4 p-4">
       <div class="flex items-center justify-between gap-3">
         <div class="font-semibold">重启进度</div>
         <n-tag size="small" :type="restartStage === 'error' ? 'error' : restartStage === 'success' ? 'success' : 'default'">
@@ -190,18 +192,14 @@ onBeforeUnmount(() => {
       <p v-if="restartMessage" class="muted mt-3 text-sm">{{ restartMessage }}</p>
     </div>
 
-    <div class="mt-6">
-      <n-empty v-if="state.profiles.length === 0" description="还没有配置档案。先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。" class="panel rounded-lg py-14" />
+    <div class="mt-8">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold tracking-tight">我的档案</h2>
+        <span class="muted text-sm">{{ state.profiles.length }} 个档案</span>
+      </div>
+      <n-empty v-if="state.profiles.length === 0" description="还没有配置档案。先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。" class="apple-group mt-3 py-14" />
       <template v-else>
-        <div class="muted hidden grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto_auto] gap-4 border-b px-4 py-2 text-xs font-medium lg:grid">
-          <div>名称</div>
-          <div>模型</div>
-          <div>Provider</div>
-          <div>推理强度</div>
-          <div>状态</div>
-          <div>操作</div>
-        </div>
-        <div class="divide-y divide-[var(--panel-border)] border-y border-[var(--panel-border)]">
+        <div class="apple-group mt-3 divide-y divide-[var(--panel-border)]">
           <ProfileCard
             v-for="profile in state.profiles"
             :key="profile.id"
