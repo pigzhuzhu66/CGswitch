@@ -1,0 +1,48 @@
+pub mod codex;
+pub mod commands;
+pub mod database;
+pub mod error;
+pub mod fsutil;
+pub mod models;
+pub mod paths;
+pub mod services;
+
+use crate::services::AppContext;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let context = AppContext::new(paths::app_paths().expect("无法定位用户数据目录"))
+        .expect("无法初始化 SwitchGPT 数据库");
+
+    tauri::Builder::default()
+        .manage(context)
+        .invoke_handler(tauri::generate_handler![
+            commands::get_state,
+            commands::capture_profile,
+            commands::rename_profile,
+            commands::delete_profile,
+            commands::apply_profile,
+            commands::restart_codex,
+            commands::get_settings,
+            commands::save_settings,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running SwitchGPT");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::AppResult;
+
+    #[test]
+    fn service_context_initializes_empty_database() -> AppResult<()> {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths::from_home(dir.path())?;
+        let context = AppContext::new(paths)?;
+        let state = context.get_state()?;
+        assert!(state.profiles.is_empty());
+        assert!(state.active_profile_id.is_none());
+        Ok(())
+    }
+}

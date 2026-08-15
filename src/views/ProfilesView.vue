@@ -1,0 +1,226 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  NButton,
+  NEmpty,
+  NInput,
+  NModal,
+  NProgress,
+  NTag,
+  useDialog,
+  useMessage,
+} from "naive-ui";
+import ProfileCard from "../components/ProfileCard.vue";
+import { api } from "../api";
+import type { AppState, ProfileSummary, RestartStage } from "../types";
+
+const props = defineProps<{ state: AppState }>();
+const emit = defineEmits<{ refresh: [] }>();
+
+const message = useMessage();
+const dialog = useDialog();
+const busy = ref(false);
+const restartStage = ref<RestartStage>("idle");
+const restartMessage = ref("");
+const modalVisible = ref(false);
+const modalMode = ref<"capture" | "rename">("capture");
+const profileName = ref("");
+const editingProfile = ref<ProfileSummary | null>(null);
+
+let unlisten: (() => void) | null = null;
+
+const progress = computed(() => {
+  const values: Record<RestartStage, number> = {
+    idle: 0,
+    stopping: 18,
+    waiting: 48,
+    launching: 82,
+    success: 100,
+    error: 100,
+  };
+  return values[restartStage.value];
+});
+
+const stageText = computed(() => {
+  const values: Record<RestartStage, string> = {
+    idle: "空闲",
+    stopping: "正在停止 Codex",
+    waiting: "等待进程退出",
+    launching: "正在启动 Codex",
+    success: "重启成功",
+    error: "重启失败",
+  };
+  return values[restartStage.value];
+});
+
+function openCapture() {
+  modalMode.value = "capture";
+  editingProfile.value = null;
+  profileName.value = "";
+  modalVisible.value = true;
+}
+
+function openRename(profile: ProfileSummary) {
+  modalMode.value = "rename";
+  editingProfile.value = profile;
+  profileName.value = profile.name;
+  modalVisible.value = true;
+}
+
+async function submitModal() {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    if (modalMode.value === "capture") {
+      await api.captureProfile(profileName.value);
+      message.success("配置档案已捕获");
+    } else if (editingProfile.value) {
+      await api.renameProfile(editingProfile.value.id, profileName.value);
+      message.success("配置档案已重命名");
+    }
+    modalVisible.value = false;
+    emit("refresh");
+  } catch (error) {
+    message.error(String(error));
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function applyProfile(profile: ProfileSummary) {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    await api.applyProfile(profile.id);
+    message.success("模型配置已应用");
+    if (props.state.settings.auto_restart) {
+      await restart(true);
+    }
+    emit("refresh");
+  } catch (error) {
+    message.error(String(error));
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function removeProfile(profile: ProfileSummary) {
+  dialog.warning({
+    title: "删除配置档案",
+    content: `确定删除“${profile.name}”吗？此操作不会修改当前 config.toml。`,
+    positiveText: "删除",
+    negativeText: "取消",
+    onPositiveClick: async () => {
+      try {
+        await api.deleteProfile(profile.id);
+        message.success("配置档案已删除");
+        emit("refresh");
+      } catch (error) {
+        message.error(String(error));
+      }
+    },
+  });
+}
+
+async function restart(force = false) {
+  if (busy.value && !force) return;
+  busy.value = true;
+  restartStage.value = "stopping";
+  restartMessage.value = "";
+  try {
+    await api.restartCodex();
+    message.success("Codex 已重启");
+    emit("refresh");
+  } catch (error) {
+    restartMessage.value = String(error);
+    message.error(String(error));
+  } finally {
+    busy.value = false;
+  }
+}
+
+onMounted(async () => {
+  unlisten = await api.onRestartProgress((payload) => {
+    restartStage.value = payload.stage;
+    restartMessage.value = payload.message ?? "";
+  });
+});
+
+onBeforeUnmount(() => {
+  unlisten?.();
+});
+</script>
+
+<template>
+  <section class="mx-auto max-w-6xl">
+    <header class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h1 class="text-3xl font-black tracking-tight">配置档案</h1>
+        <p class="muted mt-2">捕获当前 Codex 配置，一键切换模型与 Provider。</p>
+      </div>
+      <div class="flex gap-2">
+        <n-button @click="emit('refresh')">刷新</n-button>
+        <n-button type="primary" :disabled="busy" @click="openCapture">捕获当前配置</n-button>
+        <n-button secondary :disabled="busy" :loading="restartStage !== 'idle' && restartStage !== 'success' && restartStage !== 'error'" @click="restart(false)">重启 Codex</n-button>
+      </div>
+    </header>
+
+    <div class="mt-6 grid gap-4 md:grid-cols-3">
+      <div class="panel rounded-2xl p-5">
+        <div class="muted text-xs font-semibold">生效档案</div>
+        <div class="mt-2 truncate text-xl font-bold">
+          {{ state.profiles.find((profile) => profile.id === state.active_profile_id)?.name ?? "未匹配" }}
+        </div>
+      </div>
+      <div class="panel rounded-2xl p-5">
+        <div class="muted text-xs font-semibold">Codex 状态</div>
+        <div class="mt-2 flex items-center gap-2 text-xl font-bold">
+          <span class="h-3 w-3 rounded-full" :class="state.codex.running ? 'bg-emerald-500' : 'bg-zinc-400'" />
+          {{ state.codex.running ? "运行中" : "未运行" }}
+        </div>
+      </div>
+      <div class="panel rounded-2xl p-5">
+        <div class="muted text-xs font-semibold">自动重启</div>
+        <div class="mt-2 text-xl font-bold">{{ state.settings.auto_restart ? "已开启" : "已关闭" }}</div>
+      </div>
+    </div>
+
+    <div class="panel mt-5 rounded-2xl p-5">
+      <div class="flex items-center justify-between gap-3">
+        <div class="font-semibold">重启进度</div>
+        <n-tag size="small" :type="restartStage === 'error' ? 'error' : restartStage === 'success' ? 'success' : 'default'">
+          {{ stageText }}
+        </n-tag>
+      </div>
+      <n-progress class="mt-3" type="line" :percentage="progress" :status="restartStage === 'error' ? 'error' : restartStage === 'success' ? 'success' : 'default'" :show-indicator="false" />
+      <p v-if="restartMessage" class="muted mt-3 text-sm">{{ restartMessage }}</p>
+    </div>
+
+    <div class="mt-6 space-y-4">
+      <n-empty v-if="state.profiles.length === 0" description="还没有配置档案。先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。" class="panel rounded-2xl py-14" />
+      <ProfileCard
+        v-for="profile in state.profiles"
+        :key="profile.id"
+        :profile="profile"
+        :active="profile.id === state.active_profile_id"
+        :busy="busy"
+        @apply="applyProfile(profile)"
+        @rename="openRename(profile)"
+        @remove="removeProfile(profile)"
+      />
+    </div>
+
+    <n-modal v-model:show="modalVisible" preset="card" class="max-w-[460px]" title="配置档案">
+      <div class="space-y-4">
+        <p class="muted text-sm">
+          {{ modalMode === "capture" ? "为当前 Codex 配置创建一个可回滚的档案。" : "输入新的配置档案名称。" }}
+        </p>
+        <n-input v-model:value="profileName" maxlength="50" show-count placeholder="例如：ZAI GLM 高推理" @keyup.enter="submitModal" />
+        <div class="flex justify-end gap-2">
+          <n-button @click="modalVisible = false">取消</n-button>
+          <n-button type="primary" :loading="busy" @click="submitModal">保存</n-button>
+        </div>
+      </div>
+    </n-modal>
+  </section>
+</template>

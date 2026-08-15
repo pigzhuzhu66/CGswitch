@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+          - name: macos-arm64
+            os: macos-latest
+            rust-target: aarch64-apple-darwin
+          - name: macos-x64
+            os: macos-latest
+            rust-target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+        shell: bash
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: rustup target add ${{ matrix.rust-target }}
+        shell: bash
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: cargo fmt --all -- --check
+        working-directory: src-tauri
+      - run: cargo clippy -- -D warnings
+        working-directory: src-tauri
+      - run: cargo test
+        working-directory: src-tauri
+      - run: pnpm tauri build --target ${{ matrix.rust-target }}
