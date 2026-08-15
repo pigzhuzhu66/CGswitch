@@ -14,7 +14,7 @@ import {
   useMessage,
 } from "naive-ui";
 import { api } from "../api";
-import type { AppState, Settings } from "../types";
+import type { AppState, PathInfo, Settings } from "../types";
 
 const props = defineProps<{ state: AppState }>();
 const emit = defineEmits<{ refresh: []; saved: [settings: Settings]; previewTheme: [theme: Settings["theme"]] }>();
@@ -22,6 +22,7 @@ const message = useMessage();
 
 const form = reactive<Settings>({ ...props.state.settings });
 const saving = ref(false);
+const openingPath = ref<string | null>(null);
 const section = ref<"general" | "codex" | "about">("general");
 const themeOptions = [
   { label: "跟随系统", value: "system" },
@@ -46,6 +47,18 @@ async function save() {
 
 function previewTheme(theme: Settings["theme"]) {
   emit("previewTheme", theme);
+}
+
+async function openPath(item: PathInfo) {
+  if (openingPath.value) return;
+  openingPath.value = item.path;
+  try {
+    await api.openPath(item.path);
+  } catch (error) {
+    message.error(String(error));
+  } finally {
+    openingPath.value = null;
+  }
 }
 </script>
 
@@ -102,9 +115,19 @@ function previewTheme(theme: Settings["theme"]) {
       <n-divider />
       <n-list class="bg-transparent" :show-divider="true">
         <n-list-item v-for="item in state.paths" :key="item.label">
-          <div class="min-w-0">
-            <div class="text-sm font-semibold">{{ item.label }}</div>
-            <div class="mono muted mt-1 break-all text-xs">{{ item.path }}</div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="min-w-0">
+              <div class="text-sm font-semibold">{{ item.label }}</div>
+              <div class="mono muted mt-1 break-all text-xs">{{ item.path }}</div>
+            </div>
+            <n-button size="small" secondary :loading="openingPath === item.path" :disabled="Boolean(openingPath)" title="在资源管理器中打开" @click="openPath(item)">
+              <template #icon>
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <path d="M3.75 7.75A2.75 2.75 0 0 1 6.5 5h3l1.7 2h6.05A2.75 2.75 0 0 1 20 9.75v7.75a2.75 2.75 0 0 1-2.75 2.75h-10.5A2.75 2.75 0 0 1 4 17.5V9.75" stroke-linejoin="round" />
+                </svg>
+              </template>
+              打开
+            </n-button>
           </div>
         </n-list-item>
       </n-list>

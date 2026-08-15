@@ -25,6 +25,7 @@ pub fn run() {
             commands::restart_codex,
             commands::get_settings,
             commands::save_settings,
+            commands::open_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SwitchGPT");

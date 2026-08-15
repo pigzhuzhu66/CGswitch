@@ -121,9 +121,9 @@ body {
 }
 
 .apple-title {
-  font-size: clamp(1.8rem, 2.5vw, 2.25rem);
+  font-size: clamp(1.5rem, 2vw, 1.75rem);
   font-weight: 700;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.025em;
   line-height: 1.1;
 }
 
@@ -133,6 +133,13 @@ body {
   border-radius: 18px;
   background: var(--panel-bg);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.theme-transition-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--app-bg);
 }
 
 button {

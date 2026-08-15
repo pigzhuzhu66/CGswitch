@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   NButton,
   NConfigProvider,
@@ -19,6 +19,7 @@ type View = "profiles" | "settings";
 
 const view = ref<View>("profiles");
 const sidebarCollapsed = ref(false);
+const themeTransitioning = ref(false);
 const state = ref<AppState | null>(null);
 const loadError = ref("");
 const systemDark = ref(window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -33,6 +34,7 @@ const isDark = computed(() => {
   return theme === "dark" || (theme === "system" && systemDark.value);
 });
 const naiveTheme = computed(() => (isDark.value ? darkTheme : null));
+let themeTransitionId = 0;
 
 async function refresh() {
   try {
@@ -48,9 +50,17 @@ async function saveSettings(settings: Settings) {
   state.value = { ...state.value, settings };
 }
 
-function previewTheme(theme: Settings["theme"]) {
-  if (!state.value) return;
+async function previewTheme(theme: Settings["theme"]) {
+  if (!state.value || state.value.settings.theme === theme) return;
+  const transitionId = ++themeTransitionId;
+  themeTransitioning.value = true;
+  await nextTick();
+  if (transitionId !== themeTransitionId || !state.value) return;
   state.value = { ...state.value, settings: { ...state.value.settings, theme } };
+  await nextTick();
+  requestAnimationFrame(() => {
+    if (transitionId === themeTransitionId) themeTransitioning.value = false;
+  });
 }
 
 watch(
@@ -59,7 +69,7 @@ watch(
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.style.colorScheme = dark ? "dark" : "light";
   },
-  { immediate: true, flush: "sync" },
+  { immediate: true },
 );
 
 onMounted(async () => {
@@ -126,6 +136,7 @@ onBeforeUnmount(() => {
               <ProfilesView v-if="view === 'profiles'" :state="state" @refresh="refresh" />
               <SettingsView v-else :state="state" @preview-theme="previewTheme" @refresh="refresh" @saved="saveSettings" />
             </main>
+            <div v-if="themeTransitioning" class="theme-transition-cover" aria-hidden="true" />
           </div>
         </n-layout>
 

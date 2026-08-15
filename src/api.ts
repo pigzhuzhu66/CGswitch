@@ -119,6 +119,7 @@ export const api = {
   restartCodex: () => call<void>("restart_codex"),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<Settings>("save_settings", { settings }),
+  openPath: (path: string) => call<void>("open_path", { path }),
   onRestartProgress: async (handler: RestartProgressHandler) => {
     if (!isTauri) return () => undefined;
     const { listen } = await import("@tauri-apps/api/event");
