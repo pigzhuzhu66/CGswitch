@@ -5,13 +5,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:tauri": "tauri dev",
-    "build": "vite build",
-    "build:debug": "tauri build --debug",
+    "sync-version": "node scripts/sync-version.mjs",
+    "dev": "pnpm sync-version && vite",
+    "dev:tauri": "pnpm sync-version && tauri dev",
+    "build": "pnpm sync-version && vite build",
+    "build:debug": "pnpm sync-version && tauri build --debug",
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "pnpm sync-version && tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

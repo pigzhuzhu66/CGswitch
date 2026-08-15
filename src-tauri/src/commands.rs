@@ -43,3 +43,8 @@ pub fn get_settings(state: State<'_, AppContext>) -> AppResult<Settings> {
 pub fn save_settings(settings: Settings, state: State<'_, AppContext>) -> AppResult<Settings> {
     state.save_settings(&settings)
 }
+
+#[tauri::command]
+pub fn open_path(path: String, state: State<'_, AppContext>) -> AppResult<()> {
+    state.open_path(&path)
+}

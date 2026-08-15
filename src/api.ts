@@ -36,11 +36,11 @@ const webProfiles: ProfileSummary[] = [
 ];
 
 const webPaths = [
-  { label: "数据库", path: "C:\\Users\\zwf\\.switchgpt\\switchgpt.db" },
-  { label: "Codex 配置", path: "C:\\Users\\zwf\\.codex\\config.toml" },
-  { label: "配置备份", path: "C:\\Users\\zwf\\.switchgpt\\backups\\config" },
-  { label: "数据库备份", path: "C:\\Users\\zwf\\.switchgpt\\backups\\database" },
-  { label: "日志", path: "C:\\Users\\zwf\\.switchgpt\\logs" },
+  { label: "数据库", path: "C:\\Users\\<user>\\.switchgpt\\switchgpt.db" },
+  { label: "Codex 配置", path: "C:\\Users\\<user>\\.codex\\config.toml" },
+  { label: "配置备份", path: "C:\\Users\\<user>\\.switchgpt\\backups\\config" },
+  { label: "数据库备份", path: "C:\\Users\\<user>\\.switchgpt\\backups\\database" },
+  { label: "日志", path: "C:\\Users\\<user>\\.switchgpt\\logs" },
 ];
 
 let webSettings: Settings = {
@@ -119,6 +119,7 @@ export const api = {
   restartCodex: () => call<void>("restart_codex"),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<Settings>("save_settings", { settings }),
+  openPath: (path: string) => call<void>("open_path", { path }),
   onRestartProgress: async (handler: RestartProgressHandler) => {
     if (!isTauri) return () => undefined;
     const { listen } = await import("@tauri-apps/api/event");

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NCard, NTag } from "naive-ui";
+import { NButton, NTag } from "naive-ui";
 import type { ProfileSummary } from "../types";
 
 defineProps<{
@@ -16,48 +16,22 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <n-card class="profile-card" :class="{ active }" content-class="!p-5">
-    <div class="flex items-start justify-between gap-4">
-      <div class="min-w-0">
-        <div class="flex flex-wrap items-center gap-2">
-          <h3 class="truncate text-lg font-bold">{{ profile.name }}</h3>
-          <n-tag v-if="active" type="success" size="small" round>当前生效</n-tag>
-        </div>
-        <dl class="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-          <div>
-            <dt class="muted text-xs">模型</dt>
-            <dd class="mono mt-1 truncate font-semibold">{{ profile.model ?? "未设置" }}</dd>
-          </div>
-          <div>
-            <dt class="muted text-xs">Provider</dt>
-            <dd class="mono mt-1 truncate font-semibold">{{ profile.provider ?? "官方" }}</dd>
-          </div>
-          <div>
-            <dt class="muted text-xs">推理强度</dt>
-            <dd class="mono mt-1 truncate font-semibold">{{ profile.reasoning_effort ?? "默认" }}</dd>
-          </div>
-        </dl>
+  <article class="flex flex-col gap-4 px-5 py-4 transition-colors sm:flex-row sm:items-center sm:justify-between" :class="active ? 'bg-[var(--selection-bg)]' : 'hover:bg-black/3 dark:hover:bg-white/4'">
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-2">
+        <h3 class="truncate font-semibold">{{ profile.name }}</h3>
+        <n-tag v-if="active" type="success" size="small">当前生效</n-tag>
       </div>
-
-      <div class="flex shrink-0 flex-col gap-2">
-        <n-button type="primary" size="small" :disabled="busy || active" @click="emit('apply')">应用</n-button>
-        <n-button size="small" :disabled="busy" @click="emit('rename')">重命名</n-button>
-        <n-button size="small" quaternary type="error" :disabled="busy" @click="emit('remove')">删除</n-button>
+      <div class="muted mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+        <span class="mono">{{ profile.model ?? "未设置" }}</span>
+        <span>{{ profile.provider ?? "官方" }}</span>
+        <span>推理：{{ profile.reasoning_effort ?? "默认" }}</span>
       </div>
     </div>
-  </n-card>
+    <div class="flex shrink-0 items-center gap-2">
+      <n-button type="primary" size="small" :disabled="busy || active" @click="emit('apply')">应用</n-button>
+      <n-button size="small" :disabled="busy" @click="emit('rename')">重命名</n-button>
+      <n-button size="small" quaternary type="error" :disabled="busy" @click="emit('remove')">删除</n-button>
+    </div>
+  </article>
 </template>
-
-<style scoped>
-.profile-card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.profile-card:hover {
-  transform: translateY(-1px);
-}
-
-.profile-card.active {
-  box-shadow: 0 0 0 1px rgba(34, 195, 142, 0.32), 0 18px 42px rgba(34, 195, 142, 0.1);
-}
-</style>

@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{path::Path, sync::Mutex};
 
 use tauri::{AppHandle, Emitter};
 
@@ -187,6 +187,13 @@ impl AppContext {
         Ok(settings)
     }
 
+    pub fn open_path(&self, path: &str) -> AppResult<()> {
+        if !self.is_managed_path(path) {
+            return Err(app_err!("不能打开未列出的本机路径"));
+        }
+        open_in_file_explorer(Path::new(path))
+    }
+
     fn active_profile_id(&self, profiles: &[StoredProfile]) -> AppResult<Option<String>> {
         let config_path = self.paths.codex_config();
         let Ok(text) = std::fs::read_to_string(config_path) else {
@@ -228,6 +235,10 @@ impl AppContext {
             },
         ]
     }
+
+    fn is_managed_path(&self, path: &str) -> bool {
+        self.path_info().iter().any(|item| item.path == path)
+    }
 }
 
 fn validated_name(name: &str) -> AppResult<String> {
@@ -243,6 +254,61 @@ fn emit(app: &AppHandle, stage: &str, message: Option<&str>) {
         "restart-progress",
         serde_json::json!({ "stage": stage, "message": message }),
     );
+}
+
+fn open_in_file_explorer(path: &Path) -> AppResult<()> {
+    #[cfg(windows)]
+    {
+        use windows::{
+            core::HSTRING,
+            Win32::{
+                System::Com::CoInitialize,
+                UI::Shell::{ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems},
+            },
+        };
+
+        let _ = unsafe { CoInitialize(None) };
+        let folder = if path.is_file() {
+            path.parent().unwrap_or(path)
+        } else {
+            path
+        };
+        let folder_text = HSTRING::from(folder);
+        let folder_id = unsafe { ILCreateFromPathW(&folder_text) };
+        if folder_id.is_null() {
+            return Err(app_err!("无法定位资源管理器路径：{}", folder.display()));
+        }
+        let item_text = HSTRING::from(path);
+        let item_id = path
+            .is_file()
+            .then(|| unsafe { ILCreateFromPathW(&item_text) });
+        let selection = item_id
+            .filter(|item| !item.is_null())
+            .map(|item| [item.cast_const()]);
+        let result = unsafe {
+            SHOpenFolderAndSelectItems(
+                folder_id.cast_const(),
+                selection.as_ref().map(|items| &items[..]),
+                0,
+            )
+        };
+        unsafe {
+            ILFree(Some(folder_id.cast_const()));
+            if let Some(item) = item_id.filter(|item| !item.is_null()) {
+                ILFree(Some(item.cast_const()));
+            }
+        }
+        result.map_err(|error| app_err!("无法打开资源管理器：{error}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        std::process::Command::new("open")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| app_err!("无法打开文件管理器：{error}"))
+    }
 }
 
 #[cfg(test)]
@@ -305,5 +371,14 @@ experimental_bearer_token = "old"
         assert!(text.contains("https://api.example"));
         assert!(text.contains("[mcp_servers.keep]"));
         assert!(context.paths.config_backup.read_dir().unwrap().count() > 0);
+    }
+
+    #[test]
+    fn only_exposed_paths_can_be_opened() {
+        let home = tempfile::tempdir().unwrap();
+        let context = AppContext::new(crate::paths::from_home(home.path()).unwrap()).unwrap();
+
+        assert!(context.is_managed_path(&context.paths.database.display().to_string()));
+        assert!(!context.is_managed_path("C:\\unmanaged-path"));
     }
 }
