@@ -72,20 +72,20 @@ onBeforeUnmount(() => {
         <n-global-style />
         <n-layout v-if="state" class="h-full! rounded-none! bg-transparent!">
           <div class="flex h-full">
-            <aside class="panel hidden w-[236px] shrink-0 border-r p-5 lg:block">
+            <aside class="hidden w-[220px] shrink-0 border-r border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 lg:block">
               <div class="flex items-center gap-3">
-                <div class="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-emerald-400 text-lg font-black text-white">SG</div>
+                <div class="grid h-8 w-8 place-items-center rounded-md bg-indigo-600 text-sm font-bold text-white">SG</div>
                 <div>
-                  <div class="text-base font-bold">SwitchGPT</div>
+                  <div class="text-sm font-bold">SwitchGPT</div>
                   <div class="muted text-xs">Codex Profile Manager</div>
                 </div>
               </div>
 
-              <nav class="mt-8 space-y-2">
-                <button type="button" class="h-11 w-full rounded-xl px-4 text-left text-sm font-semibold transition" :class="view === 'profiles' ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/25' : 'hover:bg-black/5 dark:hover:bg-white/5'" @click="view = 'profiles'">
+              <nav class="mt-7 space-y-1">
+                <button type="button" class="h-9 w-full border-l-2 px-3 text-left text-sm font-medium transition-colors" :class="view === 'profiles' ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-white/5 dark:text-indigo-300' : 'border-transparent hover:bg-black/4 dark:hover:bg-white/4'" @click="view = 'profiles'">
                   配置档案
                 </button>
-                <button type="button" class="h-11 w-full rounded-xl px-4 text-left text-sm font-semibold transition" :class="view === 'settings' ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/25' : 'hover:bg-black/5 dark:hover:bg-white/5'" @click="view = 'settings'">
+                <button type="button" class="h-9 w-full border-l-2 px-3 text-left text-sm font-medium transition-colors" :class="view === 'settings' ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-white/5 dark:text-indigo-300' : 'border-transparent hover:bg-black/4 dark:hover:bg-white/4'" @click="view = 'settings'">
                   设置
                 </button>
               </nav>
