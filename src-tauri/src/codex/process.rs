@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 
 use crate::error::{app_err, AppResult};
 
@@ -13,7 +13,7 @@ pub const WINDOWS_CODEX_AUMIDS: &[&str] = &[
 ];
 
 pub fn find_process_ids(manual_path: Option<&str>) -> Vec<u32> {
-    let system = System::new_all();
+    let system = process_system();
     system
         .processes()
         .iter()
@@ -23,7 +23,7 @@ pub fn find_process_ids(manual_path: Option<&str>) -> Vec<u32> {
 }
 
 pub fn terminate_process_ids(ids: &[u32]) {
-    let system = System::new_all();
+    let system = process_system();
     for id in ids {
         if let Some(process) = system.process(Pid::from_u32(*id)) {
             let _ = process.kill();
@@ -32,11 +32,17 @@ pub fn terminate_process_ids(ids: &[u32]) {
 }
 
 pub fn running_process_ids(ids: &[u32]) -> Vec<u32> {
-    let system = System::new_all();
+    let system = process_system();
     ids.iter()
         .copied()
         .filter(|id| system.process(Pid::from_u32(*id)).is_some())
         .collect()
+}
+
+fn process_system() -> System {
+    System::new_with_specifics(
+        RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    )
 }
 
 pub fn wait_for_exit_with<F, S>(

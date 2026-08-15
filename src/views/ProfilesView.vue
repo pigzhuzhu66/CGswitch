@@ -152,7 +152,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl">
+  <section class="mx-auto w-full max-w-none">
     <header class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="apple-title">配置档案</h1>
@@ -177,7 +177,15 @@ onBeforeUnmount(() => {
           <span class="h-2 w-2 rounded-full" :class="state.codex.running ? 'bg-[#34c759]' : 'bg-zinc-400'" />
           Codex {{ state.codex.running ? "运行中" : "未运行" }}
         </div>
-        <div class="muted">自动重启{{ state.settings.auto_restart ? "已开启" : "已关闭" }}</div>
+        <span v-if="state.settings.auto_restart" class="ml-1 border-l border-[var(--panel-border)] pl-3" title="应用配置后自动重启已开启" aria-label="应用配置后自动重启已开启">
+          <span class="flex h-5 w-9 items-center rounded-full bg-[#007aff] p-[2px]" aria-hidden="true">
+            <span class="ml-auto grid h-4 w-4 place-items-center rounded-full bg-white text-[#007aff]">
+              <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                <path d="m7 12 3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+          </span>
+        </span>
       </div>
     </div>
 

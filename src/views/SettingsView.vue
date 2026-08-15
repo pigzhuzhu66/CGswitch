@@ -22,6 +22,7 @@ const message = useMessage();
 
 const form = reactive<Settings>({ ...props.state.settings });
 const saving = ref(false);
+const savingGeneral = ref(false);
 const openingPath = ref<string | null>(null);
 const section = ref<"general" | "codex" | "about">("general");
 const themeOptions = [
@@ -45,8 +46,36 @@ async function save() {
   }
 }
 
-function previewTheme(theme: Settings["theme"]) {
+async function saveGeneral() {
+  if (savingGeneral.value) return;
+  const previous = props.state.settings;
+  savingGeneral.value = true;
+  try {
+    const settings = await api.saveSettings({
+      ...previous,
+      theme: form.theme,
+      auto_restart: form.auto_restart,
+    });
+    emit("saved", settings);
+  } catch (error) {
+    form.theme = previous.theme;
+    form.auto_restart = previous.auto_restart;
+    emit("previewTheme", previous.theme);
+    message.error(String(error));
+  } finally {
+    savingGeneral.value = false;
+  }
+}
+
+function updateTheme(theme: Settings["theme"]) {
+  form.theme = theme;
   emit("previewTheme", theme);
+  void saveGeneral();
+}
+
+function updateAutoRestart(autoRestart: boolean) {
+  form.auto_restart = autoRestart;
+  void saveGeneral();
 }
 
 async function openPath(item: PathInfo) {
@@ -63,7 +92,7 @@ async function openPath(item: PathInfo) {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl">
+  <section class="mx-auto w-full max-w-none">
     <h1 class="apple-title">设置</h1>
     <p class="muted mt-2 text-sm">控制外观、Codex 路径和重启行为。</p>
 
@@ -78,19 +107,16 @@ async function openPath(item: PathInfo) {
       <n-form class="mt-5" label-placement="top">
         <n-form-item label="主题">
           <div class="w-full space-y-2">
-            <n-select v-model:value="form.theme" :options="themeOptions" @update:value="previewTheme" />
-            <p class="muted text-xs">选择后立即预览；点击“保存设置”后会保留该主题。</p>
+            <n-select v-model:value="form.theme" :options="themeOptions" :loading="savingGeneral" @update:value="updateTheme" />
+            <p class="muted text-xs">选择后立即生效并保存。</p>
           </div>
         </n-form-item>
         <n-form-item label="应用配置后自动重启 Codex">
           <div class="flex items-center gap-3">
-            <n-switch v-model:value="form.auto_restart" />
+            <n-switch v-model:value="form.auto_restart" :loading="savingGeneral" @update:value="updateAutoRestart" />
             <span class="muted text-sm">关闭时仅写入 config.toml，由你手动点击重启。</span>
           </div>
         </n-form-item>
-        <div class="flex justify-end">
-          <n-button type="primary" :loading="saving" @click="save">保存设置</n-button>
-        </div>
       </n-form>
     </div>
 

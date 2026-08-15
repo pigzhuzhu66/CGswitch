@@ -1,4 +1,4 @@
-use std::{path::Path, process::Command, sync::Mutex};
+use std::{path::Path, sync::Mutex};
 
 use tauri::{AppHandle, Emitter};
 
@@ -257,17 +257,58 @@ fn emit(app: &AppHandle, stage: &str, message: Option<&str>) {
 }
 
 fn open_in_file_explorer(path: &Path) -> AppResult<()> {
-    let target = if path.is_file() {
-        let selection = format!("/select,{}", path.display());
-        Command::new("explorer.exe").arg(selection).spawn()
-    } else {
-        Command::new("explorer.exe")
-            .arg(path.parent().unwrap_or(path))
+    #[cfg(windows)]
+    {
+        use windows::{
+            core::HSTRING,
+            Win32::{
+                System::Com::CoInitialize,
+                UI::Shell::{ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems},
+            },
+        };
+
+        let _ = unsafe { CoInitialize(None) };
+        let folder = if path.is_file() {
+            path.parent().unwrap_or(path)
+        } else {
+            path
+        };
+        let folder_text = HSTRING::from(folder);
+        let folder_id = unsafe { ILCreateFromPathW(&folder_text) };
+        if folder_id.is_null() {
+            return Err(app_err!("无法定位资源管理器路径：{}", folder.display()));
+        }
+        let item_text = HSTRING::from(path);
+        let item_id = path
+            .is_file()
+            .then(|| unsafe { ILCreateFromPathW(&item_text) });
+        let selection = item_id
+            .filter(|item| !item.is_null())
+            .map(|item| [item.cast_const()]);
+        let result = unsafe {
+            SHOpenFolderAndSelectItems(
+                folder_id.cast_const(),
+                selection.as_ref().map(|items| &items[..]),
+                0,
+            )
+        };
+        unsafe {
+            ILFree(Some(folder_id.cast_const()));
+            if let Some(item) = item_id.filter(|item| !item.is_null()) {
+                ILFree(Some(item.cast_const()));
+            }
+        }
+        result.map_err(|error| app_err!("无法打开资源管理器：{error}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        std::process::Command::new("open")
+            .arg(path)
             .spawn()
-    };
-    target
-        .map(|_| ())
-        .map_err(|error| app_err!("无法打开资源管理器：{error}"))
+            .map(|_| ())
+            .map_err(|error| app_err!("无法打开文件管理器：{error}"))
+    }
 }
 
 #[cfg(test)]
