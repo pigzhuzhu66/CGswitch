@@ -90,13 +90,6 @@ onBeforeUnmount(() => {
                 </button>
               </nav>
 
-              <div class="panel mt-8 rounded-2xl p-4">
-                <div class="text-xs font-semibold opacity-70">Codex 状态</div>
-                <div class="mt-2 flex items-center gap-2 text-sm font-semibold">
-                  <span class="h-2.5 w-2.5 rounded-full" :class="state.codex.running ? 'bg-emerald-500' : 'bg-zinc-400'" />
-                  {{ state.codex.running ? "运行中" : "未运行" }}
-                </div>
-              </div>
             </aside>
 
             <main class="min-w-0 flex-1 overflow-auto px-5 py-6 lg:px-8">
