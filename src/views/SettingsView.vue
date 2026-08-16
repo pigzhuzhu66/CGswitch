@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import {
   NButton,
   NDivider,
@@ -10,26 +11,147 @@ import {
   NList,
   NListItem,
   NSwitch,
+  useDialog,
   useMessage,
 } from "naive-ui";
-import { api } from "../api";
+import { api, isTauri } from "../api";
+import ChatGPTAccount from "../components/ChatGPTAccount.vue";
 import SegmentedControl from "../components/SegmentedControl.vue";
-import type { AppState, PathInfo, Settings } from "../types";
+import type { AppState, DatabaseBackupInfo, PathInfo, Settings } from "../types";
 
 const props = defineProps<{ state: AppState }>();
 const emit = defineEmits<{ refresh: []; saved: [settings: Settings]; previewTheme: [theme: Settings["theme"]] }>();
 const message = useMessage();
+const dialog = useDialog();
 
 const form = reactive<Settings>({ ...props.state.settings });
 const saving = ref(false);
 const savingGeneral = ref(false);
 const openingPath = ref<string | null>(null);
-const section = ref<"general" | "codex" | "about">("general");
+const section = ref<"general" | "codex" | "account" | "about" | "advanced">("general");
+const backups = ref<DatabaseBackupInfo[]>([]);
+const exporting = ref(false);
+const importing = ref(false);
 const themeOptions: { label: string; value: Settings["theme"] }[] = [
   { label: "浅色", value: "light" },
   { label: "深色", value: "dark" },
   { label: "跟随系统", value: "system" },
 ];
+
+async function loadBackups() {
+  try {
+    backups.value = await api.listDatabaseBackups();
+  } catch {
+    backups.value = [];
+  }
+}
+
+async function exportBackupToFile() {
+  if (exporting.value) return;
+  try {
+    let target: string | null = null;
+    if (isTauri) {
+      const picked = await saveDialog({
+        title: "导出数据库备份",
+        defaultPath: `switchgpt-export-${Date.now()}.db`,
+        filters: [{ name: "SQLite 数据库", extensions: ["db"] }],
+      });
+      target = typeof picked === "string" ? picked : null;
+    }
+    if (!target && isTauri) return;
+    exporting.value = true;
+    const path = isTauri
+      ? await api.exportDatabaseTo(target!)
+      : await api.exportDatabase();
+    message.success(`数据库已导出：${path}`);
+    await loadBackups();
+  } catch (error) {
+    message.error(String(error));
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function importBackupFromFile() {
+  if (importing.value) return;
+  try {
+    let picked: string | null = null;
+    if (isTauri) {
+      const result = await openDialog({
+        title: "选择数据库备份",
+        multiple: false,
+        filters: [{ name: "SQLite 数据库", extensions: ["db"] }],
+      });
+      picked = typeof result === "string" ? result : null;
+    }
+    if (!picked && isTauri) return;
+    importing.value = true;
+    await api.importDatabase(picked ?? "mock-backup.db");
+    message.success("数据库已导入并恢复");
+    emit("refresh");
+    await loadBackups();
+  } catch (error) {
+    message.error(String(error));
+  } finally {
+    importing.value = false;
+  }
+}
+
+function restoreBackup(backup: DatabaseBackupInfo) {
+  dialog.warning({
+    title: "恢复数据库备份",
+    content: `确定用「${backup.name}」覆盖当前所有档案数据吗？恢复后无法撤销。`,
+    positiveText: "恢复",
+    negativeText: "取消",
+    positiveButtonProps: { type: "error" },
+    onPositiveClick: async () => {
+      try {
+        await api.restoreDatabase(backup.name);
+        message.success("数据库已恢复");
+        emit("refresh");
+        await loadBackups();
+      } catch (error) {
+        message.error(String(error));
+      }
+    },
+  });
+}
+
+function deleteBackup(backup: DatabaseBackupInfo) {
+  dialog.warning({
+    title: "删除数据库备份",
+    content: `确定删除「${backup.name}」吗？删除后不可恢复。`,
+    positiveText: "删除",
+    negativeText: "取消",
+    positiveButtonProps: { type: "error" },
+    onPositiveClick: async () => {
+      try {
+        await api.deleteDatabaseBackup(backup.name);
+        message.success("备份已删除");
+        await loadBackups();
+      } catch (error) {
+        message.error(String(error));
+      }
+    },
+  });
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function openBackupFolder() {
+  const item = props.state.paths.find((path) => path.label === "数据库备份");
+  if (!item) {
+    message.warning("找不到备份目录");
+    return;
+  }
+  api.openPath(item.path).catch((error) => message.error(String(error)));
+}
+
+onMounted(loadBackups);
 
 async function save() {
   if (saving.value) return;
@@ -55,11 +177,17 @@ async function saveGeneral() {
       ...previous,
       theme: form.theme,
       auto_restart: form.auto_restart,
+      autostart_enabled: form.autostart_enabled,
+      silent_start: form.silent_start,
+      minimize_to_tray: form.minimize_to_tray,
     });
     emit("saved", settings);
   } catch (error) {
     form.theme = previous.theme;
     form.auto_restart = previous.auto_restart;
+    form.autostart_enabled = previous.autostart_enabled;
+    form.silent_start = previous.silent_start;
+    form.minimize_to_tray = previous.minimize_to_tray;
     emit("previewTheme", previous.theme);
     message.error(String(error));
   } finally {
@@ -75,6 +203,11 @@ function updateTheme(theme: Settings["theme"]) {
 
 function updateAutoRestart(autoRestart: boolean) {
   form.auto_restart = autoRestart;
+  void saveGeneral();
+}
+
+function updateStartupToggle(key: "autostart_enabled" | "silent_start" | "minimize_to_tray", value: boolean) {
+  form[key] = value;
   void saveGeneral();
 }
 
@@ -94,7 +227,6 @@ async function openPath(item: PathInfo) {
 <template>
   <section class="mx-auto w-full max-w-none">
     <h1 class="apple-title">设置</h1>
-    <p class="muted mt-2 text-sm">控制外观、Codex 路径和重启行为。</p>
 
     <SegmentedControl
       v-model="section"
@@ -102,43 +234,122 @@ async function openPath(item: PathInfo) {
       :options="[
         { value: 'general', label: '通用' },
         { value: 'codex', label: '应用' },
+        { value: 'account', label: '账号' },
+        { value: 'advanced', label: '高级' },
         { value: 'about', label: '关于' },
       ]"
     />
 
     <div v-if="section === 'general'" class="apple-group mt-4 p-5 sm:p-6">
-      <n-form label-placement="top">
-        <n-form-item label="主题">
-          <div>
-            <div class="apple-group inline-flex gap-1 p-1">
-              <button
-                v-for="option in themeOptions"
-                :key="option.value"
-                type="button"
-                class="inline-flex h-9 w-28 items-center justify-center gap-1.5 rounded-xl text-sm transition-colors"
-                :class="form.theme === option.value ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'"
-                :aria-pressed="form.theme === option.value"
-                @click="updateTheme(option.value)"
-              >
-                <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                  <template v-if="option.value === 'system'">
-                    <rect x="3.5" y="5" width="17" height="11" rx="2" />
-                    <path d="M9.5 19.5h5M12 16v3.5" stroke-linecap="round" />
-                  </template>
-                  <template v-else-if="option.value === 'light'">
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="M12 3.5v1.8M12 18.7v1.8M3.5 12h1.8M18.7 12h1.8M6 6l1.3 1.3M16.7 16.7 18 18M18 6l-1.3 1.3M7.3 16.7 6 18" stroke-linecap="round" />
-                  </template>
-                  <template v-else>
-                    <path d="M20 13.6A8.2 8.2 0 1 1 10.4 4a6.4 6.4 0 0 0 9.6 9.6Z" stroke-linejoin="round" />
-                  </template>
-                </svg>
-                <span>{{ option.label }}</span>
-              </button>
+      <div class="field-label mb-2">主题</div>
+      <div class="apple-group inline-flex gap-1 p-1">
+        <button
+          v-for="option in themeOptions"
+          :key="option.value"
+          type="button"
+          class="inline-flex h-9 w-28 items-center justify-center gap-1.5 rounded-xl text-sm transition-colors"
+          :class="form.theme === option.value ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'"
+          :aria-pressed="form.theme === option.value"
+          @click="updateTheme(option.value)"
+        >
+          <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <template v-if="option.value === 'system'">
+              <rect x="3.5" y="5" width="17" height="11" rx="2" />
+              <path d="M9.5 19.5h5M12 16v3.5" stroke-linecap="round" />
+            </template>
+            <template v-else-if="option.value === 'light'">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 3.5v1.8M12 18.7v1.8M3.5 12h1.8M18.7 12h1.8M6 6l1.3 1.3M16.7 16.7 18 18M18 6l-1.3 1.3M7.3 16.7 6 18" stroke-linecap="round" />
+            </template>
+            <template v-else>
+              <path d="M20 13.6A8.2 8.2 0 1 1 10.4 4a6.4 6.4 0 0 0 9.6 9.6Z" stroke-linejoin="round" />
+            </template>
+          </svg>
+          <span>{{ option.label }}</span>
+        </button>
+      </div>
+      <n-divider :style="{ marginTop: '16px' }" />
+      <div class="flex flex-col gap-5">
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex items-start gap-3">
+            <svg class="mt-0.5 h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M12 3.5v7" stroke-linecap="round" />
+              <path d="M7.2 6.2a7.5 7.5 0 1 0 9.6 0" stroke-linecap="round" />
+            </svg>
+            <div>
+              <div class="text-sm font-semibold">开机自启</div>
+              <div class="muted mt-0.5 text-xs">登录系统后自动启动 SwitchGPT</div>
             </div>
           </div>
-        </n-form-item>
-      </n-form>
+          <n-switch
+            v-model:value="form.autostart_enabled"
+            @update:value="updateStartupToggle('autostart_enabled', $event)"
+          />
+        </div>
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex items-start gap-3">
+            <svg class="mt-0.5 h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M20 13.6A8.2 8.2 0 1 1 10.4 4a6.4 6.4 0 0 0 9.6 9.6Z" stroke-linejoin="round" />
+            </svg>
+            <div>
+              <div class="text-sm font-semibold">静默启动</div>
+              <div class="muted mt-0.5 text-xs">启动时不显示主窗口，驻留系统托盘</div>
+            </div>
+          </div>
+          <n-switch
+            v-model:value="form.silent_start"
+            @update:value="updateStartupToggle('silent_start', $event)"
+          />
+        </div>
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex items-start gap-3">
+            <svg class="mt-0.5 h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 14v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" stroke-linecap="round" />
+              <path d="M12 3.5v8" stroke-linecap="round" />
+              <path d="m8.5 8.5 3.5 3.5 3.5-3.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <div>
+              <div class="text-sm font-semibold">关闭时最小化到托盘</div>
+              <div class="muted mt-0.5 text-xs">点击关闭按钮时隐藏到托盘而不是退出</div>
+            </div>
+          </div>
+          <n-switch
+            v-model:value="form.minimize_to_tray"
+            @update:value="updateStartupToggle('minimize_to_tray', $event)"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="section === 'advanced'" class="apple-group mt-4 p-5 sm:p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <div class="text-sm font-semibold">数据备份</div>
+          <div class="muted mt-0.5 text-xs">导入/导出档案数据库</div>
+        </div>
+        <div class="flex gap-2">
+          <n-button size="small" secondary :loading="importing" @click="importBackupFromFile">导入备份</n-button>
+          <n-button size="small" secondary :loading="exporting" @click="exportBackupToFile">导出备份</n-button>
+          <n-button size="small" secondary @click="openBackupFolder">打开备份文件夹</n-button>
+        </div>
+      </div>
+      <div v-if="backups.length" class="mt-3 space-y-2">
+        <div
+          v-for="backup in backups"
+          :key="backup.name"
+          class="flex items-center justify-between gap-3 rounded-lg border border-[var(--panel-border)] px-3 py-2"
+        >
+          <div class="min-w-0">
+            <div class="mono truncate text-xs font-medium">{{ backup.name }}</div>
+            <div class="muted text-xs">{{ formatSize(backup.size_bytes) }}</div>
+          </div>
+          <div class="flex shrink-0 gap-1.5">
+            <n-button size="tiny" secondary type="primary" @click="restoreBackup(backup)">恢复</n-button>
+            <n-button size="tiny" quaternary type="error" @click="deleteBackup(backup)">删除</n-button>
+          </div>
+        </div>
+      </div>
+      <p v-else class="muted mt-3 text-xs">还没有导出过备份。</p>
     </div>
 
     <div v-else-if="section === 'codex'" class="apple-group mt-4 p-5 sm:p-6">
@@ -159,6 +370,13 @@ async function openPath(item: PathInfo) {
           <n-button type="primary" :loading="saving" @click="save">保存设置</n-button>
         </div>
       </n-form>
+    </div>
+
+    <div v-else-if="section === 'account'" class="apple-group mt-4 p-5 sm:p-6">
+      <h2 class="text-[15px] font-semibold tracking-tight">ChatGPT 账号</h2>
+      <div class="mt-4">
+        <ChatGPTAccount />
+      </div>
     </div>
 
     <div v-else class="apple-group mt-4 p-5 sm:p-6">

@@ -1,6 +1,7 @@
+use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Row};
 use rusqlite_migration::{Migrations, M};
 use serde::{Deserialize, Serialize};
 
@@ -113,6 +114,15 @@ impl Database {
             ("codex_app_path", serde_json::json!(settings.codex_app_path)),
             ("auto_restart", serde_json::json!(settings.auto_restart)),
             (
+                "autostart_enabled",
+                serde_json::json!(settings.autostart_enabled),
+            ),
+            ("silent_start", serde_json::json!(settings.silent_start)),
+            (
+                "minimize_to_tray",
+                serde_json::json!(settings.minimize_to_tray),
+            ),
+            (
                 "restart_timeout_ms",
                 serde_json::json!(settings.restart_timeout_ms),
             ),
@@ -133,7 +143,7 @@ impl Database {
     pub fn profiles(&self) -> AppResult<Vec<StoredProfile>> {
         let connection = self.lock()?;
         let mut statement = connection
-            .prepare("SELECT id, name, payload_json, icon, created_at, updated_at FROM profiles ORDER BY updated_at DESC")
+            .prepare("SELECT id, name, payload_json, icon, created_at, updated_at FROM profiles ORDER BY created_at ASC, id ASC")
             .map_err(|error| app_err!("无法读取配置档案: {error}"))?;
         let rows = statement
             .query_map([], profile_from_row)
@@ -259,11 +269,125 @@ impl Database {
         Ok(())
     }
 
+    /// 最近一次成功应用的档案 id（应用记录被删除时返回 None 由调用方回退匹配）。
+    pub fn latest_applied_profile(&self) -> AppResult<Option<String>> {
+        let connection = self.lock()?;
+        connection
+            .query_row(
+                "SELECT profile_id FROM switch_events
+                 WHERE action = 'apply' AND status = 'success' AND profile_id IS NOT NULL
+                 ORDER BY created_at DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| app_err!("无法读取最近应用记录: {error}"))
+    }
+
+    /// 把当前数据库导出为一致性快照文件（VACUUM INTO）。
+    pub fn export_database(&self, target: &Path) -> AppResult<()> {
+        let connection = self.lock()?;
+        connection
+            .execute(
+                "VACUUM INTO ?1",
+                params![target.to_string_lossy().to_string()],
+            )
+            .map_err(|error| app_err!("数据库导出失败: {error}"))?;
+        Ok(())
+    }
+
+    /// 从备份文件把数据恢复进当前数据库（清空现有数据后复制）。
+    pub fn restore_from_backup(&self, backup: &Path) -> AppResult<()> {
+        let source = Connection::open_with_flags(backup, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|error| app_err!("无法打开备份文件: {error}"))?;
+        let has_profiles: i64 = source
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='profiles'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| app_err!("备份文件不是有效的 SwitchGPT 数据库: {error}"))?;
+        if has_profiles == 0 {
+            return Err(app_err!("备份文件不是有效的 SwitchGPT 数据库"));
+        }
+
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| app_err!("无法开启恢复事务: {error}"))?;
+        transaction
+            .execute("DELETE FROM switch_events", [])
+            .and_then(|_| transaction.execute("DELETE FROM profiles", []))
+            .and_then(|_| transaction.execute("DELETE FROM settings", []))
+            .map_err(|error| app_err!("恢复前清理数据失败: {error}"))?;
+
+        copy_table(
+            &source,
+            &transaction,
+            "settings",
+            "SELECT key, value FROM settings",
+            "INSERT INTO settings(key, value) VALUES(?1, ?2)",
+        )?;
+        copy_table(
+            &source,
+            &transaction,
+            "profiles",
+            "SELECT id, name, payload_json, icon, created_at, updated_at FROM profiles",
+            "INSERT INTO profiles(id, name, payload_json, icon, created_at, updated_at)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+        )?;
+        copy_table(
+            &source,
+            &transaction,
+            "switch_events",
+            "SELECT id, profile_id, action, status, message, created_at FROM switch_events",
+            "INSERT INTO switch_events(id, profile_id, action, status, message, created_at)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+        )?;
+
+        transaction
+            .commit()
+            .map_err(|error| app_err!("恢复事务提交失败: {error}"))?;
+        Ok(())
+    }
+
     fn lock(&self) -> AppResult<std::sync::MutexGuard<'_, Connection>> {
         self.connection
             .lock()
             .map_err(|_| app_err!("数据库连接锁已损坏，请重启 SwitchGPT"))
     }
+}
+
+fn copy_table(
+    source: &Connection,
+    destination: &rusqlite::Transaction<'_>,
+    table: &str,
+    select_sql: &str,
+    insert_sql: &str,
+) -> AppResult<()> {
+    let mut statement = source
+        .prepare(select_sql)
+        .map_err(|error| app_err!("读取备份表 {table} 失败: {error}"))?;
+    let column_count = statement.column_count();
+    let mut rows = statement
+        .query([])
+        .map_err(|error| app_err!("读取备份表 {table} 失败: {error}"))?;
+    while let Some(row) = rows
+        .next()
+        .map_err(|error| app_err!("读取备份表 {table} 失败: {error}"))?
+    {
+        let mut values: Vec<rusqlite::types::Value> = Vec::with_capacity(column_count);
+        for index in 0..column_count {
+            values.push(
+                row.get::<_, rusqlite::types::Value>(index)
+                    .map_err(|error| app_err!("读取备份表 {table} 失败: {error}"))?,
+            );
+        }
+        destination
+            .execute(insert_sql, rusqlite::params_from_iter(values))
+            .map_err(|error| app_err!("恢复表 {table} 失败: {error}"))?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,13 +426,48 @@ fn summary(
     ProfileSummary {
         id: id.into(),
         name: name.into(),
-        model: payload.model_values.get("model").cloned(),
+        model: display_text(payload.model_values.get("model")),
         provider: payload.provider_id.clone(),
-        reasoning_effort: payload.model_values.get("model_reasoning_effort").cloned(),
+        reasoning_effort: display_text(payload.model_values.get("model_reasoning_effort")),
+        has_key: payload_has_key(payload),
         icon: icon.map(str::to_string),
         created_at: created_at.into(),
         updated_at: updated_at.into(),
     }
+}
+
+fn payload_has_key(payload: &ProfilePayload) -> bool {
+    let Some(body) = payload.provider_body.as_deref() else {
+        return false;
+    };
+    let Ok(document) = body.parse::<toml_edit::DocumentMut>() else {
+        return false;
+    };
+    let Some(key) = document
+        .as_table()
+        .get("experimental_bearer_token")
+        .and_then(toml_edit::Item::as_str)
+    else {
+        return false;
+    };
+    if key.trim().is_empty() {
+        return false;
+    }
+    if let Some(kind) = payload.builtin.as_deref() {
+        if let Ok(template) = crate::builtin::template(kind) {
+            if template
+                .placeholder
+                .is_some_and(|placeholder| placeholder == key.as_bytes())
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn display_text(value: Option<&String>) -> Option<String> {
+    value.map(|raw| raw.trim().trim_matches('"').to_string())
 }
 
 pub fn profile_summary(profile: &StoredProfile) -> ProfileSummary {

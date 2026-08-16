@@ -25,6 +25,28 @@ const indicatorTop = ref(8);
 const state = ref<AppState | null>(null);
 const loadError = ref("");
 const systemDark = ref(window.matchMedia("(prefers-color-scheme: dark)").matches);
+let codexPollTimer: number | undefined;
+let codexPolling = false;
+
+function startCodexPolling() {
+  if (codexPollTimer !== undefined) return;
+  codexPollTimer = window.setInterval(pollCodexStatus, 3000);
+}
+
+function stopCodexPolling() {
+  if (codexPollTimer !== undefined) {
+    window.clearInterval(codexPollTimer);
+    codexPollTimer = undefined;
+  }
+}
+
+function syncCodexPolling() {
+  if (document.hidden) {
+    stopCodexPolling();
+  } else {
+    startCodexPolling();
+  }
+}
 
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 const mediaListener = (event: MediaQueryListEvent) => {
@@ -64,6 +86,19 @@ async function refresh() {
   }
 }
 
+async function pollCodexStatus() {
+  if (codexPolling || !state.value) return;
+  codexPolling = true;
+  try {
+    const codex = await api.getCodexStatus();
+    if (state.value) state.value = { ...state.value, codex };
+  } catch {
+    // 轮询失败时保留上次状态，不打扰用户
+  } finally {
+    codexPolling = false;
+  }
+}
+
 async function saveSettings(settings: Settings) {
   if (!state.value) return;
   state.value = { ...state.value, settings };
@@ -92,9 +127,17 @@ onMounted(async () => {
   media.addEventListener("change", mediaListener);
   updateSidebarIndicator();
   await refresh();
+  syncCodexPolling();
+  document.addEventListener("visibilitychange", syncCodexPolling);
+  window.addEventListener("blur", stopCodexPolling);
+  window.addEventListener("focus", syncCodexPolling);
 });
 
 onBeforeUnmount(() => {
+  stopCodexPolling();
+  document.removeEventListener("visibilitychange", syncCodexPolling);
+  window.removeEventListener("blur", stopCodexPolling);
+  window.removeEventListener("focus", syncCodexPolling);
   media.removeEventListener("change", mediaListener);
 });
 </script>
@@ -104,10 +147,10 @@ onBeforeUnmount(() => {
     <n-dialog-provider>
       <n-message-provider>
         <n-layout class="h-full! rounded-none! bg-transparent!">
-          <div class="flex min-h-screen">
-            <aside class="apple-sidebar relative min-h-screen shrink-0" :class="isSidebarCollapsed ? ['w-[60px]', 'apple-sidebar--collapsed'] : 'w-[160px]'">
+          <div class="flex h-screen">
+            <aside class="apple-sidebar relative h-full shrink-0" :class="isSidebarCollapsed ? ['w-[60px]', 'apple-sidebar--collapsed'] : 'w-[160px]'">
               <div class="apple-sidebar-brand mx-3 mt-3 flex items-center gap-3">
-                <div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-sm font-bold text-[#007aff] shadow-sm dark:bg-white/10">SG</div>
+                <img src="/logo.png" alt="SwitchGPT" class="h-9 w-9 shrink-0" />
                 <div class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">
                   <div class="text-sm font-bold">SwitchGPT</div>
                   <div class="app-version" :aria-label="`版本 ${version.trim()}`">

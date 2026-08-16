@@ -1,5 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppState, ProfileDetail, ProfileSummary, RestartStage, Settings } from "./types";
+import { builtinPresetByKind } from "./presets";
+import type {
+  AppState,
+  AuthStatus,
+  CodexAppStatus,
+  DatabaseBackupInfo,
+  DeviceCodeResponse,
+  ManagedAccount,
+  ProfileDetail,
+  ProfileConnectionResult,
+  ProfileSummary,
+  RestartStage,
+  Settings,
+} from "./types";
 
 export const isTauri = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
 
@@ -12,6 +25,7 @@ const webProfiles: ProfileSummary[] = [
     model: "glm-5.3",
     provider: "ZAI",
     reasoning_effort: "high",
+    has_key: true,
     icon: "zhipu",
     created_at: "2026-08-15 10:00:00",
     updated_at: "2026-08-15 10:00:00",
@@ -22,6 +36,7 @@ const webProfiles: ProfileSummary[] = [
     model: "glm-5-turbo",
     provider: "ZAI",
     reasoning_effort: "low",
+    has_key: false,
     icon: null,
     created_at: "2026-08-15 10:01:00",
     updated_at: "2026-08-15 10:01:00",
@@ -32,6 +47,7 @@ const webProfiles: ProfileSummary[] = [
     model: "gpt-5.6",
     provider: null,
     reasoning_effort: "medium",
+    has_key: false,
     icon: "openai-chatgpt",
     created_at: "2026-08-15 10:02:00",
     updated_at: "2026-08-15 10:02:00",
@@ -100,6 +116,12 @@ function webProfileDetail(id: string): ProfileDetail {
     api_key: detail?.api_key ?? null,
     model_values: detail?.model_values ?? {},
     config_fragment: detail?.config_fragment ?? "",
+    auth_content: detail?.api_key
+      ? '{\n  "OPENAI_API_KEY": "sk-demo-real-value"\n}'
+      : null,
+    catalog_content: detail?.model_values.model_catalog_json
+      ? '{\n  "models": [\n    { "id": "glm-5.3", "name": "GLM 5.3" }\n  ]\n}'
+      : null,
     updated_at: profile.updated_at,
   };
 }
@@ -109,7 +131,12 @@ let webSettings: Settings = {
   codex_app_path: null,
   auto_restart: false,
   restart_timeout_ms: 5000,
+  autostart_enabled: false,
+  silent_start: false,
+  minimize_to_tray: false,
 };
+
+let webBackups: DatabaseBackupInfo[] = [];
 
 function webState(): AppState {
   return {
@@ -131,6 +158,8 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
     case "get_state":
     case "get_settings":
       return webState() as T;
+    case "get_codex_status":
+      return webState().codex as T;
     case "capture_profile": {
       const now = new Date().toISOString();
       const profile: ProfileSummary = {
@@ -139,12 +168,71 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         model: "glm-5.3",
         provider: "ZAI",
         reasoning_effort: "high",
+        has_key: true,
         icon: null,
         created_at: now,
         updated_at: now,
       };
       webProfiles.unshift(profile);
       return profile as T;
+    }
+    case "add_builtin_profile": {
+      const preset = builtinPresetByKind(String(args?.kind ?? ""));
+      if (!preset) throw new Error("未知的内置档案类型");
+      const rawKey = String(args?.apiKey ?? "");
+      const apiKey = preset.provider ? rawKey : null;
+      const rawBaseUrl = String(args?.baseUrl ?? "");
+      const baseUrl = preset.provider ? rawBaseUrl || preset.base_url : null;
+      if (preset.provider && !rawKey.trim()) throw new Error("请先填写 API 密钥");
+      const now = new Date().toISOString();
+      const profile: ProfileSummary = {
+        id: `profile-${Date.now()}`,
+        name: preset.name,
+        model: preset.model,
+        provider: preset.provider,
+        reasoning_effort: preset.model_values.model_reasoning_effort?.replace(/^"|"$/g, "") ?? null,
+        has_key: Boolean(preset.provider),
+        icon: preset.icon,
+        created_at: now,
+        updated_at: now,
+      };
+      webProfiles.unshift(profile);
+      webDetails[profile.id] = {
+        base_url: baseUrl,
+        api_key: apiKey,
+        model_values: preset.model_values,
+        config_fragment: preset.fragment,
+      };
+      return profile as T;
+    }
+    case "get_builtin_catalog": {
+      const preset = builtinPresetByKind(String(args?.kind ?? ""));
+      if (!preset?.model_values.model_catalog_json) return null as T;
+      return '{\n  "models": [\n    { "id": "preview", "name": "模型目录预览" }\n  ]\n}' as T;
+    }
+    case "test_profile_connection": {
+      const profile = webProfiles.find((item) => item.id === args?.id);
+      if (!profile) throw new Error("配置档案不存在");
+      if (!profile.provider) throw new Error("该档案没有供应商配置，无法测试连通性");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return { ok: true, latency_ms: 87, status: 200, error: null } as T;
+    }
+    case "export_database": {
+      const name = `switchgpt-export-${Date.now()}.db`;
+      webBackups.unshift({ name, size_bytes: 20480 });
+      return `C:\\Users\\<user>\\.switchgpt\\backups\\database\\${name}` as T;
+    }
+    case "export_database_to":
+      return String(args?.path ?? "") as T;
+    case "import_database":
+      return undefined as T;
+    case "list_database_backups":
+      return [...webBackups] as T;
+    case "restore_database":
+      return undefined as T;
+    case "delete_database_backup": {
+      webBackups = webBackups.filter((backup) => backup.name !== args?.name);
+      return undefined as T;
     }
     case "rename_profile": {
       const profile = webProfiles.find((item) => item.id === args?.id);
@@ -164,8 +252,8 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       profile.name = String(args?.name ?? profile.name);
       const detail = webDetails[profile.id];
       if (detail) {
-        if (typeof args?.base_url === "string") detail.base_url = args.base_url || null;
-        if (typeof args?.api_key === "string") detail.api_key = args.api_key || null;
+        if (typeof args?.baseUrl === "string") detail.base_url = args.baseUrl || null;
+        if (typeof args?.apiKey === "string") detail.api_key = args.apiKey || null;
       }
       return { ...profile } as T;
     }
@@ -179,6 +267,12 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       await new Promise((resolve) => setTimeout(resolve, 500));
       return undefined as T;
     case "set_window_theme":
+      return undefined as T;
+    case "auth_get_status":
+      return { authenticated: false, default_account_id: null, accounts: [] } as T;
+    case "open_url":
+      return undefined as T;
+    case "open_codex_file":
       return undefined as T;
     case "save_settings":
       webSettings = { ...(args?.settings as Settings) };
@@ -194,19 +288,39 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
 
 export const api = {
   getState: () => call<AppState>("get_state"),
+  getCodexStatus: () => call<CodexAppStatus>("get_codex_status"),
   captureProfile: (name: string) => call<ProfileSummary>("capture_profile", { name }),
+  addBuiltinProfile: (kind: string, baseUrl?: string, apiKey?: string) =>
+    call<ProfileSummary>("add_builtin_profile", { kind, baseUrl, apiKey }),
+  getBuiltinCatalog: (kind: string) => call<string | null>("get_builtin_catalog", { kind }),
+  testProfileConnection: (id: string) =>
+    call<ProfileConnectionResult>("test_profile_connection", { id }),
+  exportDatabase: () => call<string>("export_database"),
+  exportDatabaseTo: (path: string) => call<string>("export_database_to", { path }),
+  importDatabase: (path: string) => call<void>("import_database", { path }),
+  listDatabaseBackups: () => call<DatabaseBackupInfo[]>("list_database_backups"),
+  restoreDatabase: (name: string) => call<void>("restore_database", { name }),
+  deleteDatabaseBackup: (name: string) => call<void>("delete_database_backup", { name }),
   renameProfile: (id: string, name: string) => call<void>("rename_profile", { id, name }),
   setProfileIcon: (id: string, icon: string | null) => call<void>("set_profile_icon", { id, icon }),
   getProfile: (id: string) => call<ProfileDetail>("get_profile", { id }),
   updateProfile: (id: string, name: string, baseUrl?: string, apiKey?: string) =>
-    call<ProfileSummary>("update_profile", { id, name, base_url: baseUrl, api_key: apiKey }),
+    call<ProfileSummary>("update_profile", { id, name, baseUrl, apiKey }),
   deleteProfile: (id: string) => call<void>("delete_profile", { id }),
   applyProfile: (id: string) => call<void>("apply_profile", { id }),
   restartCodex: () => call<void>("restart_codex"),
   setWindowTheme: (dark: boolean) => call<void>("set_window_theme", { dark }),
+  authStartLogin: () => call<DeviceCodeResponse>("auth_start_login"),
+  authPollForAccount: (deviceCode: string) =>
+    call<ManagedAccount | null>("auth_poll_for_account", { deviceCode }),
+  authGetStatus: () => call<AuthStatus>("auth_get_status"),
+  authRemoveAccount: (accountId: string) =>
+    call<void>("auth_remove_account", { accountId }),
+  openUrl: (url: string) => call<void>("open_url", { url }),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<Settings>("save_settings", { settings }),
   openPath: (path: string) => call<void>("open_path", { path }),
+  openCodexFile: (relative: string) => call<void>("open_codex_file", { relative }),
   onRestartProgress: async (handler: RestartProgressHandler) => {
     if (!isTauri) return () => undefined;
     const { listen } = await import("@tauri-apps/api/event");

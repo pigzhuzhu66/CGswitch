@@ -28,6 +28,7 @@ const modalVisible = ref(false);
 const modalMode = ref<"capture" | "rename">("capture");
 const profileName = ref("");
 const editingProfile = ref<ProfileSummary | null>(null);
+const creatingProfile = ref(false);
 const modalProfile = ref<ProfileSummary | null>(null);
 
 let unlisten: (() => void) | null = null;
@@ -116,11 +117,13 @@ async function applyProfile(profile: ProfileSummary) {
 }
 
 async function removeProfile(profile: ProfileSummary) {
-  dialog.warning({
+  dialog.error({
     title: "删除配置档案",
-    content: `确定删除“${profile.name}”吗？此操作不会修改当前 config.toml。`,
+    content: `确定删除“${profile.name}”吗？删除后不可恢复。`,
     positiveText: "删除",
     negativeText: "取消",
+    class: "delete-profile-dialog",
+    positiveButtonProps: { type: "error" },
     onPositiveClick: async () => {
       try {
         await api.deleteProfile(profile.id);
@@ -169,62 +172,87 @@ onBeforeUnmount(() => {
     @back="editingProfile = null"
     @changed="emit('refresh')"
   />
+  <ProfileEdit
+    v-else-if="creatingProfile"
+    :profile="null"
+    create
+    @back="creatingProfile = false"
+    @changed="emit('refresh')"
+  />
   <section v-else class="mx-auto w-full max-w-none">
     <header class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="apple-title">配置档案</h1>
-        <p class="muted mt-2 text-sm">保存常用配置，在需要时切换并重启 Codex。</p>
       </div>
       <div class="flex gap-2">
-        <n-button @click="emit('refresh')">刷新</n-button>
-        <n-button type="primary" :disabled="busy" @click="openCapture">捕获当前配置</n-button>
+        <button
+          type="button"
+          class="grid h-8 w-8 place-items-center rounded-lg text-[#007aff] transition-colors hover:bg-[#007aff]/10"
+          title="刷新"
+          aria-label="刷新"
+          @click="emit('refresh')"
+        >
+          <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+        </button>
+        <n-button secondary :disabled="busy" @click="openCapture">捕获当前配置</n-button>
+        <n-button type="primary" :disabled="busy" @click="creatingProfile = true">添加档案</n-button>
         <n-button secondary :disabled="busy" :loading="restartStage !== 'idle' && restartStage !== 'success' && restartStage !== 'error'" @click="restart(false)">重启 Codex</n-button>
       </div>
     </header>
 
-    <div class="apple-group mt-7 flex flex-wrap items-center justify-between gap-5 px-5 py-4">
-      <div class="flex min-w-0 items-center gap-3">
-        <ProfileIconTile :name="activeProfile?.name ?? '未匹配'" :icon="activeProfile?.icon ?? null" />
-        <div class="min-w-0">
-          <div class="muted text-sm">当前使用</div>
-          <div class="mt-1 truncate text-lg font-semibold tracking-tight">
-            {{ activeProfile?.name ?? "未匹配" }}
+    <div class="apple-group mt-7 px-5 py-4">
+      <div class="flex flex-wrap items-center justify-between gap-5">
+        <div class="flex min-w-0 items-center gap-3">
+          <ProfileIconTile :name="activeProfile?.name ?? '未匹配'" :icon="activeProfile?.icon ?? null" />
+          <div class="min-w-0">
+            <div class="field-label">当前使用</div>
+            <div class="mt-1 truncate text-lg font-semibold tracking-tight">
+              {{ activeProfile?.name ?? "未匹配" }}
+            </div>
           </div>
         </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        <div class="flex items-center gap-2">
-          <span class="h-2 w-2 rounded-full" :class="state.codex.running ? 'bg-[#34c759]' : 'bg-zinc-400'" />
-          Codex {{ state.codex.running ? "运行中" : "未运行" }}
-        </div>
-        <span v-if="state.settings.auto_restart" class="ml-1 border-l border-[var(--panel-border)] pl-3" title="应用配置后自动重启已开启" aria-label="应用配置后自动重启已开启">
-          <span class="flex h-5 w-9 items-center rounded-full bg-[#007aff] p-[2px]" aria-hidden="true">
-            <span class="ml-auto grid h-4 w-4 place-items-center rounded-full bg-white text-[#007aff]">
-              <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
-                <path d="m7 12 3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors" :class="state.codex.running ? 'bg-[#34c759]/10 text-[#248a3d] dark:text-[#6ee7a0]' : 'bg-zinc-500/10 text-zinc-500'">
+            <span class="relative flex h-2 w-2">
+              <span v-if="state.codex.running" class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#34c759] opacity-60" />
+              <span class="relative inline-flex h-2 w-2 rounded-full" :class="state.codex.running ? 'bg-[#34c759]' : 'bg-zinc-400'" />
+            </span>
+            Codex {{ state.codex.running ? "运行中" : "未运行" }}
+          </span>
+          <span v-if="state.settings.auto_restart" class="ml-1 border-l border-[var(--panel-border)] pl-3" title="应用配置后自动重启已开启" aria-label="应用配置后自动重启已开启">
+            <span class="flex h-5 w-9 items-center rounded-full bg-[#007aff] p-[2px]" aria-hidden="true">
+              <span class="ml-auto grid h-4 w-4 place-items-center rounded-full bg-white text-[#007aff]">
+                <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                  <path d="m7 12 3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
             </span>
           </span>
-        </span>
+        </div>
       </div>
-    </div>
 
-    <div v-if="restartStage !== 'idle'" class="apple-group mt-4 p-4">
-      <div class="flex items-center justify-between gap-3">
-        <div class="font-semibold">重启进度</div>
-        <n-tag size="small" :type="restartStage === 'error' ? 'error' : restartStage === 'success' ? 'success' : 'default'">
-          {{ stageText }}
-        </n-tag>
-      </div>
-      <n-progress class="mt-3" type="line" :percentage="progress" :status="restartStage === 'error' ? 'error' : restartStage === 'success' ? 'success' : 'default'" :show-indicator="false" />
-      <p v-if="restartMessage" class="muted mt-3 text-sm">{{ restartMessage }}</p>
+      <transition name="apple-reveal">
+        <div v-if="restartStage !== 'idle'" class="mt-4 border-t border-[var(--panel-border)] pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <div class="font-semibold">重启进度</div>
+            <n-tag size="small" :type="restartStage === 'error' ? 'error' : restartStage === 'success' ? 'success' : 'default'">
+              {{ stageText }}
+            </n-tag>
+          </div>
+          <n-progress class="mt-3" type="line" :percentage="progress" :status="restartStage === 'error' ? 'error' : restartStage === 'success' ? 'success' : 'default'" :show-indicator="false" />
+          <p v-if="restartMessage" class="muted mt-3 text-sm">{{ restartMessage }}</p>
+        </div>
+      </transition>
     </div>
 
     <div class="mt-8">
       <div class="flex items-center justify-between">
-        <h2 class="text-[15px] font-semibold tracking-tight">我的档案</h2>
+        <h2 class="apple-title">我的档案</h2>
       </div>
-      <n-empty v-if="state.profiles.length === 0" description="还没有配置档案。先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。" class="apple-group mt-3 py-14" />
+      <n-empty v-if="state.profiles.length === 0" description="还没有配置档案。可以添加内置官方档案，或先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。" class="apple-group mt-3 py-14" />
       <template v-else>
         <div class="apple-group mt-3 divide-y divide-[var(--panel-border)]">
           <ProfileCard

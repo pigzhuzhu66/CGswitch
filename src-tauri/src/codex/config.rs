@@ -50,6 +50,7 @@ pub fn capture_from_document(document: &DocumentMut) -> AppResult<ProfilePayload
         model_values,
         provider_id,
         provider_body,
+        builtin: None,
     })
 }
 
@@ -114,6 +115,24 @@ pub fn matches_profile(document: &DocumentMut, payload: &ProfilePayload) -> AppR
     Ok(normalize_provider(&current.provider_body)? == normalize_provider(&payload.provider_body)?)
 }
 
+/// 宽松匹配：档案的模型键必须是 live 配置的子集且值一致，
+/// 允许 live 配置在使用过程中累计额外的模型键（如 model_catalog_json）。
+pub fn subset_match(document: &DocumentMut, payload: &ProfilePayload) -> AppResult<bool> {
+    let current = capture_from_document(document)?;
+    if current.provider_id != payload.provider_id {
+        return Ok(false);
+    }
+    for (key, raw) in &payload.model_values {
+        let Some(live_raw) = current.model_values.get(key) else {
+            return Ok(false);
+        };
+        if parse_value(live_raw)?.to_string() != parse_value(raw)?.to_string() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 fn is_model_key(key: &str) -> bool {
     key == "model" || (key.starts_with("model_") && key != "model_providers")
 }
@@ -153,6 +172,39 @@ pub fn update_provider_body(
         set_table_value(&mut document, "experimental_bearer_token", value);
     }
     Ok(document.to_string())
+}
+
+/// 在已解析的 live 配置文档中就地更新 provider 表的 base_url / 密钥字段。
+pub fn update_provider_in_document(
+    document: &mut DocumentMut,
+    provider_id: &str,
+    base_url: Option<&str>,
+    api_key: Option<&str>,
+) -> AppResult<()> {
+    let providers = document
+        .as_table_mut()
+        .entry("model_providers")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| app_err!("model_providers 不是 TOML table"))?;
+    let provider = providers
+        .entry(provider_id)
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| app_err!("model_providers.{provider_id} 不是 TOML table"))?;
+
+    let set = |table: &mut Table, key: &str, value: Option<&str>| {
+        if let Some(value) = value {
+            if value.trim().is_empty() {
+                table.remove(key);
+            } else {
+                table.insert(key, Item::Value(Value::from(value.trim().to_string())));
+            }
+        }
+    };
+    set(provider, "base_url", base_url);
+    set(provider, "experimental_bearer_token", api_key);
+    Ok(())
 }
 
 fn set_table_value(document: &mut DocumentMut, key: &str, value: &str) {

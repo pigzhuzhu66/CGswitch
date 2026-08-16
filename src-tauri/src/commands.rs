@@ -1,8 +1,11 @@
 use tauri::{AppHandle, State};
 
-use crate::error::AppResult;
-use crate::models::{AppState, ProfileDetail, ProfileSummary, Settings};
-use crate::services::AppContext;
+use crate::auth::codex_oauth::{
+    AuthStatus, CodexOAuthError, CodexOAuthState, DeviceCodeResponse, ManagedAccount,
+};
+use crate::error::{app_err, AppResult};
+use crate::models::{AppState, CodexAppStatus, ProfileDetail, ProfileSummary, Settings};
+use crate::services::{AppContext, DatabaseBackupInfo, ProfileConnectionResult};
 
 #[tauri::command]
 pub fn get_state(state: State<'_, AppContext>) -> AppResult<AppState> {
@@ -10,8 +13,69 @@ pub fn get_state(state: State<'_, AppContext>) -> AppResult<AppState> {
 }
 
 #[tauri::command]
+pub fn get_codex_status(state: State<'_, AppContext>) -> AppResult<CodexAppStatus> {
+    state.codex_status()
+}
+
+#[tauri::command]
 pub fn capture_profile(name: String, state: State<'_, AppContext>) -> AppResult<ProfileSummary> {
     state.capture_profile(&name)
+}
+
+#[tauri::command]
+pub fn add_builtin_profile(
+    kind: String,
+    base_url: Option<String>,
+    api_key: Option<String>,
+    state: State<'_, AppContext>,
+) -> AppResult<ProfileSummary> {
+    state.add_builtin_profile(&kind, base_url.as_deref(), api_key.as_deref())
+}
+
+#[tauri::command]
+pub fn get_builtin_catalog(
+    kind: String,
+    state: State<'_, AppContext>,
+) -> AppResult<Option<String>> {
+    state.get_builtin_catalog(&kind)
+}
+
+#[tauri::command]
+pub async fn test_profile_connection(
+    id: String,
+    state: State<'_, AppContext>,
+) -> AppResult<ProfileConnectionResult> {
+    state.test_profile_connection(&id).await
+}
+
+#[tauri::command]
+pub fn export_database(state: State<'_, AppContext>) -> AppResult<String> {
+    Ok(state.export_database()?.display().to_string())
+}
+
+#[tauri::command]
+pub fn export_database_to(path: String, state: State<'_, AppContext>) -> AppResult<String> {
+    Ok(state.export_database_to(&path)?.display().to_string())
+}
+
+#[tauri::command]
+pub fn import_database(path: String, state: State<'_, AppContext>) -> AppResult<()> {
+    state.import_database(&path)
+}
+
+#[tauri::command]
+pub fn list_database_backups(state: State<'_, AppContext>) -> AppResult<Vec<DatabaseBackupInfo>> {
+    state.list_database_backups()
+}
+
+#[tauri::command]
+pub fn restore_database(name: String, state: State<'_, AppContext>) -> AppResult<()> {
+    state.restore_database(&name)
+}
+
+#[tauri::command]
+pub fn delete_database_backup(name: String, state: State<'_, AppContext>) -> AppResult<()> {
+    state.delete_database_backup(&name)
 }
 
 #[tauri::command]
@@ -101,16 +165,110 @@ pub fn set_window_theme(dark: bool, app: AppHandle) -> AppResult<()> {
 }
 
 #[tauri::command]
+pub async fn auth_start_login(
+    state: State<'_, CodexOAuthState>,
+) -> Result<DeviceCodeResponse, String> {
+    state
+        .0
+        .read()
+        .await
+        .start_device_flow()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn auth_poll_for_account(
+    device_code: String,
+    state: State<'_, CodexOAuthState>,
+) -> Result<Option<ManagedAccount>, String> {
+    match state.0.write().await.poll_for_token(&device_code).await {
+        Ok(account) => Ok(account),
+        Err(CodexOAuthError::AuthorizationPending) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn auth_get_status(state: State<'_, CodexOAuthState>) -> Result<AuthStatus, String> {
+    Ok(state.0.read().await.get_status().await)
+}
+
+#[tauri::command]
+pub async fn auth_remove_account(
+    account_id: String,
+    state: State<'_, CodexOAuthState>,
+) -> Result<(), String> {
+    state
+        .0
+        .write()
+        .await
+        .remove_account(&account_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn open_url(url: String) -> AppResult<()> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err(app_err!("仅支持打开 http(s) 链接"));
+    }
+    #[cfg(windows)]
+    {
+        use windows::core::HSTRING;
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+        let url_wide = HSTRING::from(&url);
+        let operation = HSTRING::from("open");
+        let result =
+            unsafe { ShellExecuteW(None, &operation, &url_wide, None, None, SW_SHOWNORMAL) };
+        if result.0 as usize <= 32 {
+            return Err(app_err!("无法打开系统浏览器"));
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = std::process::Command::new("open").arg(&url).spawn();
+        let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_settings(state: State<'_, AppContext>) -> AppResult<Settings> {
     state.settings()
 }
 
 #[tauri::command]
-pub fn save_settings(settings: Settings, state: State<'_, AppContext>) -> AppResult<Settings> {
-    state.save_settings(&settings)
+pub fn save_settings(
+    app: AppHandle,
+    settings: Settings,
+    state: State<'_, AppContext>,
+) -> AppResult<Settings> {
+    let saved = state.save_settings(&settings)?;
+    sync_autostart(&app, &saved)?;
+    Ok(saved)
+}
+
+fn sync_autostart(app: &AppHandle, settings: &Settings) -> AppResult<()> {
+    use tauri_plugin_autostart::ManagerExt;
+    if settings.autostart_enabled {
+        app.autolaunch()
+            .enable()
+            .map_err(|error| app_err!("同步开机自启设置失败: {error}"))
+    } else {
+        let _ = app.autolaunch().disable();
+        Ok(())
+    }
 }
 
 #[tauri::command]
 pub fn open_path(path: String, state: State<'_, AppContext>) -> AppResult<()> {
     state.open_path(&path)
+}
+
+#[tauri::command]
+pub fn open_codex_file(relative: String, state: State<'_, AppContext>) -> AppResult<()> {
+    state.open_codex_file(&relative)
 }
