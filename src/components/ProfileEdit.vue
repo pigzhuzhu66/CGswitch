@@ -229,7 +229,7 @@ async function save() {
   <section v-else class="mx-auto flex min-h-[calc(100vh-3.5rem)] w-full max-w-none flex-col" @keydown.ctrl.enter="save">
     <button
       type="button"
-      class="-ml-2 flex w-fit items-center gap-1.5 rounded-lg px-2 py-1 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/8"
+      class="apple-page-header apple-back-button"
       aria-label="返回"
       @click="emit('back')"
     >
@@ -300,8 +300,8 @@ async function save() {
         <n-input v-model:value="apiKey" type="password" show-password-on="click" placeholder="请输入 API 密钥" />
       </div>
       <div v-if="!creating" class="mt-4">
-        <div class="field-label mb-1.5">管理后台网址</div>
-        <n-input v-model:value="adminUrl" placeholder="https://console.example.com（可选，档案卡片显示跳转按钮）" />
+        <div class="field-label mb-1.5">官网地址</div>
+        <n-input v-model:value="adminUrl" placeholder="https://console.example.com（可选）" />
       </div>
     </div>
 

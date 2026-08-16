@@ -226,7 +226,9 @@ async function openPath(item: PathInfo) {
 
 <template>
   <section class="mx-auto w-full max-w-none">
-    <h1 class="apple-title">设置</h1>
+    <div class="apple-page-header">
+      <h1 class="apple-title">设置</h1>
+    </div>
 
     <SegmentedControl
       v-model="section"

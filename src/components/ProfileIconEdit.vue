@@ -17,7 +17,7 @@ const selected = ref<string | null>(props.icon);
   <section class="mx-auto w-full max-w-none">
     <button
       type="button"
-      class="-ml-2 flex items-center gap-1.5 rounded-lg px-2 py-1 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/8"
+      class="apple-page-header apple-back-button"
       aria-label="返回"
       @click="emit('back')"
     >

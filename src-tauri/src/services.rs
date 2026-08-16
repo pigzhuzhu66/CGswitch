@@ -449,6 +449,36 @@ impl AppContext {
             .set_profile_icon(id, icon.as_deref(), &now_ms().to_string())
     }
 
+    /// 完整复制档案（配置、图标等），新档案名加“副本”后缀，同名时追加序号。
+    pub fn duplicate_profile(&self, id: &str) -> AppResult<ProfileSummary> {
+        let stored = self.database.profile(id)?;
+        let profiles = self.database.profiles()?;
+        let base: String = stored.name.trim().chars().take(47).collect();
+        let mut candidate = format!("{base} 副本");
+        let mut counter = 2;
+        while profiles
+            .iter()
+            .any(|profile| profile.name.eq_ignore_ascii_case(&candidate))
+        {
+            candidate = format!("{base} 副本 {counter}");
+            counter += 1;
+        }
+        let timestamp = now_ms().to_string();
+        let summary = self
+            .database
+            .insert_profile(&candidate, &stored.payload, &timestamp)?;
+        self.database
+            .set_profile_icon(&summary.id, stored.icon.as_deref(), &timestamp)?;
+        self.database.record_event(
+            Some(&summary.id),
+            "duplicate",
+            "success",
+            Some("profile duplicated"),
+            &timestamp,
+        )?;
+        Ok(summary)
+    }
+
     pub fn get_profile(&self, id: &str) -> AppResult<ProfileDetail> {
         let stored = self.database.profile(id)?;
         let payload = &stored.payload;
@@ -2001,5 +2031,49 @@ base_url = "https://api.example"
             .unwrap();
         let detail = context.get_profile(&profile.id).unwrap();
         assert_eq!(detail.admin_url, None);
+    }
+
+    #[test]
+    fn duplicate_profile_copies_payload_with_suffix() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(home.path()).unwrap();
+        paths.ensure().unwrap();
+        std::fs::create_dir_all(&paths.codex_home).unwrap();
+        std::fs::write(
+            paths.codex_config(),
+            r#"
+model = "glm-5.3"
+model_provider = "ZAI"
+model_reasoning_effort = "high"
+
+[model_providers.ZAI]
+name = "ZAI"
+base_url = "https://api.example"
+"#,
+        )
+        .unwrap();
+        let context = AppContext::new(paths).unwrap();
+        let profile = context.capture_profile("GLM").unwrap();
+        context
+            .update_profile(
+                &profile.id,
+                "GLM",
+                None,
+                None,
+                Some("https://console.example.com"),
+            )
+            .unwrap();
+        context.set_profile_icon(&profile.id, Some("zhipu")).unwrap();
+
+        let dup = context.duplicate_profile(&profile.id).unwrap();
+        assert_eq!(dup.name, "GLM 副本");
+        assert_eq!(dup.admin_url.as_deref(), Some("https://console.example.com"));
+        assert_eq!(dup.icon.as_deref(), Some("zhipu"));
+        let original = context.database.profile(&profile.id).unwrap();
+        let copied = context.database.profile(&dup.id).unwrap();
+        assert_eq!(copied.payload, original.payload);
+
+        let dup2 = context.duplicate_profile(&profile.id).unwrap();
+        assert_eq!(dup2.name, "GLM 副本 2");
     }
 }

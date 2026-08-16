@@ -254,6 +254,21 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       if (profile) profile.icon = (args?.icon as string | null) ?? null;
       return undefined as T;
     }
+    case "duplicate_profile": {
+      const profile = webProfiles.find((item) => item.id === args?.id);
+      if (!profile) throw new Error("配置档案不存在");
+      const now = new Date().toISOString();
+      const copy: ProfileSummary = {
+        ...profile,
+        id: `profile-${Date.now()}`,
+        name: `${profile.name} 副本`,
+        created_at: now,
+        updated_at: now,
+      };
+      webProfiles.unshift(copy);
+      if (webDetails[profile.id]) webDetails[copy.id] = { ...webDetails[profile.id] };
+      return copy as T;
+    }
     case "get_profile":
       return webProfileDetail(String(args?.id)) as T;
     case "update_profile": {
@@ -322,6 +337,7 @@ export const api = {
   deleteDatabaseBackup: (name: string) => call<void>("delete_database_backup", { name }),
   renameProfile: (id: string, name: string) => call<void>("rename_profile", { id, name }),
   setProfileIcon: (id: string, icon: string | null) => call<void>("set_profile_icon", { id, icon }),
+  duplicateProfile: (id: string) => call<ProfileSummary>("duplicate_profile", { id }),
   getProfile: (id: string) => call<ProfileDetail>("get_profile", { id }),
   updateProfile: (id: string, name: string, baseUrl?: string, apiKey?: string, adminUrl?: string) =>
     call<ProfileSummary>("update_profile", { id, name, baseUrl, apiKey, adminUrl }),

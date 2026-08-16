@@ -149,18 +149,23 @@ onBeforeUnmount(() => {
         <n-layout class="h-full! rounded-none! bg-transparent!">
           <div class="flex h-screen">
             <aside class="apple-sidebar relative h-full shrink-0" :class="isSidebarCollapsed ? ['w-[60px]', 'apple-sidebar--collapsed'] : 'w-[160px]'">
-              <div class="apple-sidebar-brand mx-3 mt-3 flex items-center gap-3">
-                <img src="/logo.png" alt="SwitchGPT" class="h-9 w-9 shrink-0" />
-                <div class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">
+              <div
+                class="apple-sidebar-brand relative mx-2 mt-3 flex w-[calc(100%-1rem)] cursor-pointer select-none items-center justify-center rounded-[10px] transition-colors hover:bg-black/5 dark:hover:bg-white/8"
+                role="button"
+                tabindex="0"
+                @click="toggleSidebar"
+                @keyup.enter="toggleSidebar"
+                @mouseenter="sidebarFlyoutArmed = true"
+              >
+                <svg v-if="isSidebarCollapsed" class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                  <rect x="4.5" y="5.5" width="15" height="13" rx="3" />
+                  <path d="M12 5.5v13" stroke-linecap="round" />
+                </svg>
+                <div v-else class="apple-sidebar-label">
                   <div class="text-sm font-bold">SwitchGPT</div>
-                  <div class="app-version" :aria-label="`版本 ${version.trim()}`">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                      <path d="M4.5 5.5h8.3l6.7 6.7-6.7 6.7H4.5z" stroke-linejoin="round" />
-                      <circle cx="8.5" cy="9.5" r="1" fill="currentColor" stroke="none" />
-                    </svg>
-                    <span>v{{ version.trim() }}</span>
-                  </div>
+                  <div class="app-version mt-1.5" :aria-label="`版本 ${version.trim()}`">v{{ version.trim() }}</div>
                 </div>
+                <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">展开侧边栏</span>
               </div>
 
               <nav class="relative mx-2 mt-6 space-y-1">
@@ -173,26 +178,16 @@ onBeforeUnmount(() => {
                   <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">配置档案</span>
                   <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">配置档案</span>
                 </button>
-                <button ref="settingsNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'settings' ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="设置" @click="view = 'settings'" @mouseenter="sidebarFlyoutArmed = true">
-                  <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                    <path d="M5.5 7.5h13M5.5 12h13M5.5 16.5h13" stroke-linecap="round" />
-                    <circle cx="9" cy="7.5" r="1.5" fill="var(--panel-bg)" />
-                    <circle cx="15" cy="12" r="1.5" fill="var(--panel-bg)" />
-                    <circle cx="11" cy="16.5" r="1.5" fill="var(--panel-bg)" />
-                  </svg>
-                  <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">设置</span>
-                  <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">设置</span>
-                </button>
               </nav>
 
               <div class="absolute inset-x-2 bottom-4">
-                <button type="button" class="apple-sidebar-nav-button flex h-9 w-full items-center rounded-[10px] text-sm font-medium hover:bg-black/5 dark:hover:bg-white/8" :aria-label="isSidebarCollapsed ? '展开侧边栏' : '收缩侧边栏'" @click="toggleSidebar" @mouseenter="sidebarFlyoutArmed = true">
-                  <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                    <rect x="4.5" y="5.5" width="15" height="13" rx="3" />
-                    <path d="M12 5.5v13" stroke-linecap="round" />
+                <button ref="settingsNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'settings' ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="设置" @click="view = 'settings'" @mouseenter="sidebarFlyoutArmed = true">
+                  <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
-                  <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">收缩侧边栏</span>
-                  <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">展开侧边栏</span>
+                  <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">设置</span>
+                  <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">设置</span>
                 </button>
               </div>
             </aside>

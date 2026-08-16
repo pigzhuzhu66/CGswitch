@@ -45,6 +45,7 @@ pub fn run() {
             commands::delete_database_backup,
             commands::rename_profile,
             commands::set_profile_icon,
+            commands::duplicate_profile,
             commands::get_profile,
             commands::update_profile,
             commands::update_profile_config,

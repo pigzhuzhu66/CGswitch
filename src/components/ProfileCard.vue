@@ -16,6 +16,7 @@ const emit = defineEmits<{
   rename: [];
   remove: [];
   edit: [];
+  duplicate: [];
 }>();
 
 const message = useMessage();
@@ -96,8 +97,8 @@ async function testConnection() {
             v-if="profile.admin_url"
             type="button"
             class="grid h-4 w-4 place-items-center rounded-full text-[#007aff] transition-colors hover:bg-[#007aff]/10"
-            title="打开管理后台"
-            aria-label="打开管理后台"
+            title="打开官网"
+            aria-label="打开官网"
             @click="openAdmin"
           >
             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -109,6 +110,18 @@ async function testConnection() {
     </div>
     <div class="flex shrink-0 items-center gap-2" @dblclick.stop>
       <n-button type="primary" size="small" :disabled="busy || active" @click="emit('apply')">应用</n-button>
+      <button
+        type="button"
+        class="grid h-8 w-8 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-[#007aff]/10 hover:text-[#007aff] dark:text-zinc-500"
+        title="复制档案"
+        aria-label="复制档案"
+        @click="emit('duplicate')"
+      >
+        <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="12" height="12" rx="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      </button>
       <button
         type="button"
         class="grid h-8 w-8 place-items-center rounded-lg transition-colors hover:bg-[#007aff]/10 disabled:pointer-events-none disabled:opacity-40"

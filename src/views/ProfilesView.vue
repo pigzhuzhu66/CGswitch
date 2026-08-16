@@ -136,6 +136,20 @@ async function removeProfile(profile: ProfileSummary) {
   });
 }
 
+async function duplicateProfile(profile: ProfileSummary) {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    const copy = await api.duplicateProfile(profile.id);
+    message.success(`已复制为「${copy.name}」`);
+    emit("refresh");
+  } catch (error) {
+    message.error(String(error));
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function restart(force = false) {
   if (busy.value && !force) return;
   busy.value = true;
@@ -181,7 +195,7 @@ onBeforeUnmount(() => {
   />
   <section v-else class="mx-auto w-full max-w-none">
     <header class="flex flex-wrap items-end justify-between gap-4">
-      <div>
+      <div class="apple-page-header">
         <h1 class="apple-title">配置档案</h1>
       </div>
       <div class="flex gap-2">
@@ -249,7 +263,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="mt-8">
-      <div class="flex items-center justify-between">
+      <div class="apple-page-header">
         <h2 class="apple-title">我的档案</h2>
       </div>
       <n-empty v-if="state.profiles.length === 0" description="还没有配置档案。可以添加内置官方档案，或先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。" class="apple-group mt-3 py-14" />
@@ -265,6 +279,7 @@ onBeforeUnmount(() => {
             @rename="openRename(profile)"
             @edit="editingProfile = profile"
             @remove="removeProfile(profile)"
+            @duplicate="duplicateProfile(profile)"
           />
         </div>
       </template>

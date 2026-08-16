@@ -93,6 +93,11 @@ pub fn set_profile_icon(
 }
 
 #[tauri::command]
+pub fn duplicate_profile(id: String, state: State<'_, AppContext>) -> AppResult<ProfileSummary> {
+    state.duplicate_profile(&id)
+}
+
+#[tauri::command]
 pub fn get_profile(id: String, state: State<'_, AppContext>) -> AppResult<ProfileDetail> {
     state.get_profile(&id)
 }
