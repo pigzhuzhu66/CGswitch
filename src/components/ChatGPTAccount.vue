@@ -63,6 +63,17 @@ function openVerification() {
   if (login.value) void api.openUrl(login.value.verification_uri);
 }
 
+async function copyUserCode() {
+  const code = login.value?.user_code;
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code);
+    message.success("授权码已复制");
+  } catch {
+    message.error("复制失败，请手动选择复制");
+  }
+}
+
 function cancelLogin() {
   login.value = null;
   polling.value = false;
@@ -101,8 +112,20 @@ onMounted(refreshStatus);
 
     <div v-else-if="login" class="space-y-4">
       <p class="muted text-sm">在浏览器打开下面的地址，输入验证码完成授权：</p>
-      <div class="rounded-xl bg-black/4 p-4 text-center dark:bg-white/6">
+      <div class="flex items-center justify-center gap-2 rounded-xl bg-black/4 p-4 dark:bg-white/6">
         <div class="mono text-2xl font-bold tracking-[0.3em]">{{ login.user_code }}</div>
+        <button
+          type="button"
+          class="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#007aff] transition-colors hover:bg-[#007aff]/10"
+          title="复制授权码"
+          aria-label="复制授权码"
+          @click="copyUserCode"
+        >
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="12" height="12" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        </button>
         <button
           type="button"
           class="mono mt-2 block w-full break-all text-[#007aff] hover:underline"

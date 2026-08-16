@@ -12,7 +12,7 @@ pub mod services;
 use std::sync::Arc;
 
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
 
 use crate::services::AppContext;
@@ -78,7 +78,22 @@ pub fn run() {
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().expect("缺少应用图标").clone())
                 .menu(&menu)
-                .show_menu_on_left_click(true)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    // 左键单击托盘图标：直接显示主窗口；右键才弹出菜单
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
