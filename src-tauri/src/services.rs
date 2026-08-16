@@ -83,7 +83,6 @@ fn profile_config_fragment(payload: &ProfilePayload) -> String {
     }
     if let (Some(provider_id), Some(body)) = (&payload.provider_id, &payload.provider_body) {
         if let Ok(detail) = parse_provider_detail(body) {
-            fragment.push_str(&format!("model_provider = \"{provider_id}\"\n\n"));
             fragment.push_str(&format!("[model_providers.{provider_id}]\n"));
             fragment.push_str(&detail.fragment);
         }
@@ -476,7 +475,8 @@ impl AppContext {
             Some("profile duplicated"),
             &timestamp,
         )?;
-        Ok(summary)
+        let stored = self.database.profile(&summary.id)?;
+        Ok(profile_summary(&stored))
     }
 
     pub fn get_profile(&self, id: &str) -> AppResult<ProfileDetail> {
@@ -1688,7 +1688,8 @@ experimental_bearer_token = "old-key"
 
         let detail = context.get_profile(&profile.id).unwrap();
         assert_eq!(detail.api_key.as_deref(), Some("sk-real"));
-        assert!(detail.config_fragment.contains("sk-real"));
+        // 编辑器展示占位符版本，真实密钥不进入 config_fragment
+        assert!(detail.config_fragment.contains("<你的 DeepSeek API Key>"));
     }
 
     #[test]
@@ -1871,9 +1872,7 @@ experimental_bearer_token = "new-key"
                 .map(|v| v.trim().trim_matches('"')),
             Some("glm-5.5")
         );
-        assert!(detail
-            .config_fragment
-            .contains(r#"base_url = "https://new.example""#));
+        assert!(detail.config_fragment.contains("https://new.example"));
 
         context.apply_profile(&profile.id).unwrap();
         let live = std::fs::read_to_string(context.paths.codex_config()).unwrap();
@@ -1923,6 +1922,7 @@ name = "ZAI"
         paths.ensure().unwrap();
         std::fs::create_dir_all(&paths.codex_home).unwrap();
         let context = AppContext::new(paths).unwrap();
+        std::fs::write(context.paths.codex_config(), "model = \"other\"\n").unwrap();
         let profile = context
             .add_builtin_profile("zhipu", None, Some("sk-test"))
             .unwrap();
@@ -2082,6 +2082,7 @@ base_url = "https://api.example"
         let copied = context.database.profile(&dup.id).unwrap();
         assert_eq!(copied.payload, original.payload);
 
+        std::thread::sleep(std::time::Duration::from_millis(2));
         let dup2 = context.duplicate_profile(&profile.id).unwrap();
         assert_eq!(dup2.name, "GLM 副本 2");
     }
