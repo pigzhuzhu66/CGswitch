@@ -22,13 +22,45 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - id: version
         run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
-      - name: 创建预发布（已存在则跳过，支持重跑）
+      - name: 生成更新日志并创建预发布（已存在则跳过，支持重跑）
         run: |
           TAG="v$VERSION"
-          if ! gh release view "$TAG"; then
-            gh release create "$TAG" --prerelease --generate-notes --target "$GITHUB_SHA"
+          # 取最近一个已发布版本（排除当前要发的 tag），用于生成对比日志
+          PREV="$(gh release list --limit 30 --json tagName -q '.[].tagName' | grep -v "^${TAG}$" | head -1 || true)"
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          if [ -n "$PREV" ]; then
+            RANGE="$PREV..HEAD"
+            TITLE="## 更新日志 · 自 \`$PREV\` 以来"
+          else
+            RANGE="HEAD"
+            TITLE="## 更新日志 · 首个发行版本"
+          fi
+          {
+            echo "# SwitchGPT v$VERSION"
+            echo
+            echo "$TITLE"
+            echo
+            echo "### ✨ 新增"
+            git log --oneline --no-merges --grep='^✨' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            echo
+            echo "### 🐛 修复"
+            git log --oneline --no-merges --grep='^🐛' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            echo
+            echo "### 🎨 界面与样式"
+            git log --oneline --no-merges --grep='^🎨' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            echo
+            echo "### 👷 CI 与工具"
+            git log --oneline --no-merges -E --grep='^(👷|🔧)' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            echo
+            echo "### 📝 文档"
+            git log --oneline --no-merges --grep='^📝' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+          } > "$NOTES"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --prerelease --notes-file "$NOTES" --target "$GITHUB_SHA"
           fi
         env:
           VERSION: ${{ steps.version.outputs.version }}
