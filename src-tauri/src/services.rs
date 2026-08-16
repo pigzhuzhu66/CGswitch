@@ -1864,7 +1864,10 @@ experimental_bearer_token = "new-key"
             .unwrap();
         assert_eq!(detail.raw_config, None);
         assert_eq!(
-            detail.model_values.get("model").map(|v| v.trim().trim_matches('"')),
+            detail
+                .model_values
+                .get("model")
+                .map(|v| v.trim().trim_matches('"')),
             Some("glm-5.5")
         );
         assert!(detail
@@ -2063,11 +2066,16 @@ base_url = "https://api.example"
                 Some("https://console.example.com"),
             )
             .unwrap();
-        context.set_profile_icon(&profile.id, Some("zhipu")).unwrap();
+        context
+            .set_profile_icon(&profile.id, Some("zhipu"))
+            .unwrap();
 
         let dup = context.duplicate_profile(&profile.id).unwrap();
         assert_eq!(dup.name, "GLM 副本");
-        assert_eq!(dup.admin_url.as_deref(), Some("https://console.example.com"));
+        assert_eq!(
+            dup.admin_url.as_deref(),
+            Some("https://console.example.com")
+        );
         assert_eq!(dup.icon.as_deref(), Some("zhipu"));
         let original = context.database.profile(&profile.id).unwrap();
         let copied = context.database.profile(&dup.id).unwrap();
