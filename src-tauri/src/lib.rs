@@ -47,6 +47,7 @@ pub fn run() {
             commands::set_profile_icon,
             commands::get_profile,
             commands::update_profile,
+            commands::update_profile_config,
             commands::delete_profile,
             commands::apply_profile,
             commands::restart_codex,
@@ -59,7 +60,6 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::open_path,
-            commands::open_codex_file,
         ])
         .setup(|app| {
             use tauri_plugin_autostart::ManagerExt;

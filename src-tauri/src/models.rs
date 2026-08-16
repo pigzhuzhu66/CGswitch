@@ -12,6 +12,15 @@ pub struct ProfilePayload {
     /// 内置官方档案类型（deepseek/minimax/zhipu/chatgpt）；普通捕获的档案为 None。
     #[serde(default)]
     pub builtin: Option<String>,
+    /// 档案自己保存的完整 config 原文（内置档案可全量编辑；普通档案无该字段）。
+    #[serde(default)]
+    pub raw_config: Option<String>,
+    /// 档案自己保存的 models.json 原文（编辑后随档案应用写入 ~/.codex）。
+    #[serde(default)]
+    pub raw_catalog: Option<String>,
+    /// 模型提供方的管理后台网址（卡片显示跳转按钮）。
+    #[serde(default)]
+    pub admin_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -23,6 +32,7 @@ pub struct ProfileSummary {
     pub reasoning_effort: Option<String>,
     /// 档案是否已配置有效 API 密钥（占位符视为未配置）
     pub has_key: bool,
+    pub admin_url: Option<String>,
     pub icon: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -38,8 +48,11 @@ pub struct ProfileDetail {
     pub api_key: Option<String>,
     pub model_values: std::collections::BTreeMap<String, String>,
     pub config_fragment: String,
+    pub raw_config: Option<String>,
     pub auth_content: Option<String>,
     pub catalog_content: Option<String>,
+    pub raw_catalog: Option<String>,
+    pub admin_url: Option<String>,
     pub updated_at: String,
 }
 

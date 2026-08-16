@@ -83,7 +83,8 @@ fn profile_config_fragment(payload: &ProfilePayload) -> String {
     }
     if let (Some(provider_id), Some(body)) = (&payload.provider_id, &payload.provider_body) {
         if let Ok(detail) = parse_provider_detail(body) {
-            fragment.push_str(&format!("\n[model_providers.{provider_id}]\n"));
+            fragment.push_str(&format!("model_provider = \"{provider_id}\"\n\n"));
+            fragment.push_str(&format!("[model_providers.{provider_id}]\n"));
             fragment.push_str(&detail.fragment);
         }
     }
@@ -132,7 +133,10 @@ impl AppContext {
                     // 激活中的档案：标签读取当前配置文件状态；其余档案读取数据库最新字段
                     if Some(&stored.id) == active_profile_id.as_ref() {
                         if let Some(live) = &live_payload {
-                            stored.payload = live.clone();
+                            let mut live = live.clone();
+                            // 管理后台网址属于档案元数据，不在 live 配置里，覆盖时保留
+                            live.admin_url = stored.payload.admin_url.clone();
+                            stored.payload = live;
                         }
                     }
                     profile_summary(&stored)
@@ -460,22 +464,25 @@ impl AppContext {
         let (config_fragment, catalog_content) = match payload.builtin.as_deref() {
             Some(kind) => {
                 let template = builtin::template(kind)?;
-                let api_key = payload.provider_body.as_deref().and_then(provider_api_key);
-                let rendered = template.render_config(api_key.as_deref())?;
-                let fragment = String::from_utf8_lossy(&rendered).into_owned();
-                let catalog = template
-                    .catalog
-                    .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned());
+                // 编辑器始终显示占位符密钥版本；应用时才替换为档案里保存的真实密钥
+                let fragment = String::from_utf8_lossy(&template.render_config(None)?).into_owned();
+                let catalog = payload.raw_catalog.clone().or_else(|| {
+                    template
+                        .catalog
+                        .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
+                });
                 (fragment, catalog)
             }
             None => (
                 profile_config_fragment(payload),
-                payload
-                    .model_values
-                    .get("model_catalog_json")
-                    .map(|raw| raw.trim().trim_matches('"'))
-                    .map(|path| self.paths.codex_home.join(path))
-                    .and_then(|file| read_optional_text(&file)),
+                payload.raw_catalog.clone().or_else(|| {
+                    payload
+                        .model_values
+                        .get("model_catalog_json")
+                        .map(|raw| raw.trim().trim_matches('"'))
+                        .map(|path| self.paths.codex_home.join(path))
+                        .and_then(|file| read_optional_text(&file))
+                }),
             ),
         };
         Ok(ProfileDetail {
@@ -487,10 +494,66 @@ impl AppContext {
             api_key,
             model_values: payload.model_values.clone(),
             config_fragment,
+            raw_config: payload.raw_config.clone(),
             auth_content: read_optional_text(&self.paths.codex_home.join("auth.json")),
             catalog_content,
+            raw_catalog: payload.raw_catalog.clone(),
+            admin_url: payload.admin_url.clone(),
             updated_at: stored.updated_at.clone(),
         })
+    }
+
+    /// 保存档案自身的完整配置原文：内置档案存 raw_config（应用时整文件回填）；
+    /// 普通档案解析回结构化字段（继续走合并回填）。models.json 统一存 raw_catalog。
+    pub fn update_profile_config(
+        &self,
+        id: &str,
+        config_text: &str,
+        catalog_text: Option<&str>,
+    ) -> AppResult<ProfileDetail> {
+        let stored = self.database.profile(id)?;
+        let mut payload = stored.payload;
+
+        let document = codex_config::parse_document(config_text)?;
+        if let Some(provider_id) = payload.provider_id.as_deref() {
+            let provider_ok = document
+                .as_table()
+                .get("model_provider")
+                .and_then(toml_edit::Item::as_str)
+                .is_some_and(|current| current == provider_id)
+                && document
+                    .as_table()
+                    .get("model_providers")
+                    .and_then(toml_edit::Item::as_table)
+                    .and_then(|providers| providers.get(provider_id))
+                    .is_some();
+            if !provider_ok {
+                return Err(app_err!(
+                    "编辑后的配置缺少或改名了 model_providers.{provider_id}，已取消保存"
+                ));
+            }
+        }
+        if let Some(text) = catalog_text {
+            serde_json::from_str::<serde_json::Value>(text)
+                .map_err(|error| app_err!("models.json 不是有效 JSON: {error}"))?;
+        }
+
+        if payload.builtin.is_some() {
+            payload.raw_config = Some(config_text.to_string());
+            if catalog_text.is_some() {
+                payload.raw_catalog = catalog_text.map(str::to_string);
+            }
+        } else {
+            let parsed = codex_config::capture_from_document(&document)?;
+            payload.model_values = parsed.model_values;
+            payload.provider_body = parsed.provider_body;
+            if catalog_text.is_some() {
+                payload.raw_catalog = catalog_text.map(str::to_string);
+            }
+        }
+        self.database
+            .update_profile(id, &stored.name, &payload, &now_ms().to_string())?;
+        self.get_profile(id)
     }
 
     pub fn update_profile(
@@ -499,6 +562,7 @@ impl AppContext {
         name: &str,
         base_url: Option<&str>,
         api_key: Option<&str>,
+        admin_url: Option<&str>,
     ) -> AppResult<ProfileSummary> {
         let name = validated_name(name)?;
         let profiles = self.database.profiles()?;
@@ -510,6 +574,13 @@ impl AppContext {
         }
         let stored = self.database.profile(id)?;
         let mut payload = stored.payload;
+        let admin_url = admin_url.map(str::trim).filter(|value| !value.is_empty());
+        if let Some(url) = admin_url {
+            if !(url.starts_with("https://") || url.starts_with("http://")) {
+                return Err(app_err!("管理后台网址必须以 http:// 或 https:// 开头"));
+            }
+        }
+        payload.admin_url = admin_url.map(str::to_string);
         if payload.provider_id.is_some() {
             let body = payload
                 .provider_body
@@ -578,40 +649,6 @@ impl AppContext {
         Ok(())
     }
 
-    pub fn open_codex_file(&self, relative: &str) -> AppResult<()> {
-        let reference = relative.trim().trim_matches('"');
-        if reference.is_empty() {
-            return Err(app_err!("未指定要打开的文件"));
-        }
-        let raw = Path::new(reference);
-        let path = if raw.is_absolute() {
-            raw.to_path_buf()
-        } else if let Some(rest) = reference.strip_prefix("~/") {
-            // 模板里的 ~/.codex/... 是相对用户主目录的完整路径
-            self.paths
-                .codex_home
-                .parent()
-                .unwrap_or(&self.paths.codex_home)
-                .join(rest)
-        } else {
-            self.paths.codex_home.join(raw)
-        };
-        let canonical = path
-            .canonicalize()
-            .map_err(|_| app_err!("文件不存在：{}", path.display()))?;
-        if !raw.is_absolute() {
-            let root = self
-                .paths
-                .codex_home
-                .canonicalize()
-                .map_err(|_| app_err!("无法定位 Codex 目录"))?;
-            if !canonical.starts_with(&root) {
-                return Err(app_err!("只能打开 Codex 目录内的文件"));
-            }
-        }
-        open_in_editor(&canonical)
-    }
-
     pub fn apply_profile(&self, id: &str) -> AppResult<()> {
         let _guard = self
             .operation
@@ -635,6 +672,7 @@ impl AppContext {
 
         backup_file(&config_path, &self.paths.config_backup, "config")?;
         atomic_write(&config_path, updated.as_bytes())?;
+        self.write_raw_catalog(&payload)?;
         self.database.record_event(
             Some(id),
             "apply",
@@ -660,7 +698,10 @@ impl AppContext {
             .ok_or_else(|| app_err!("档案缺少内置类型"))?;
         let template = builtin::template(kind)?;
         let api_key = payload.provider_body.as_deref().and_then(provider_api_key);
-        let rendered = template.render_config(api_key.as_deref())?;
+        let rendered = match &payload.raw_config {
+            Some(raw) => template.substitute_key(raw.as_bytes().to_vec(), api_key.as_deref())?,
+            None => template.render_config(api_key.as_deref())?,
+        };
 
         let config_path = self.paths.codex_config();
         backup_file(&config_path, &self.paths.config_backup, "config")?;
@@ -673,7 +714,10 @@ impl AppContext {
                 .and_then(|name| name.to_str())
                 .unwrap_or("codex-file");
             backup_file(&destination, &self.paths.codex_files_backup, stem)?;
-            atomic_write(&destination, bytes)?;
+            match &payload.raw_catalog {
+                Some(raw) => atomic_write(&destination, raw.as_bytes())?,
+                None => atomic_write(&destination, bytes)?,
+            }
         }
 
         self.database.record_event(
@@ -683,6 +727,32 @@ impl AppContext {
             Some("built-in configuration applied"),
             &now_ms().to_string(),
         )?;
+        Ok(())
+    }
+
+    /// 把档案自己编辑保存的 models.json 原文写入 model_catalog_json 指向的位置。
+    fn write_raw_catalog(&self, payload: &ProfilePayload) -> AppResult<()> {
+        let Some(raw) = payload.raw_catalog.as_deref() else {
+            return Ok(());
+        };
+        let Some(raw_path) = payload.model_values.get("model_catalog_json") else {
+            return Ok(());
+        };
+        let path = raw_path.trim().trim_matches('"');
+        if path.is_empty() {
+            return Ok(());
+        }
+        let destination = self.paths.codex_home.join(path);
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| app_err!("无法创建目录 {}: {error}", parent.display()))?;
+        }
+        let stem = Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("catalog");
+        backup_file(&destination, &self.paths.codex_files_backup, stem)?;
+        atomic_write(&destination, raw.as_bytes())?;
         Ok(())
     }
 
@@ -703,9 +773,11 @@ impl AppContext {
         if profile.payload.builtin.is_some() {
             return Ok(());
         }
-        let Ok(live) = codex_config::capture_from_document(document) else {
+        let Ok(mut live) = codex_config::capture_from_document(document) else {
             return Ok(());
         };
+        // 档案自己编辑保存的 models.json 内容不属于 live 捕获，回写时保留
+        live.raw_catalog = profile.payload.raw_catalog.clone();
         if live == profile.payload {
             return Ok(());
         }
@@ -984,35 +1056,6 @@ fn open_in_file_explorer(path: &Path) -> AppResult<()> {
     }
 }
 
-fn open_in_editor(path: &Path) -> AppResult<()> {
-    #[cfg(windows)]
-    {
-        std::process::Command::new("explorer.exe")
-            .arg(path)
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| app_err!("无法打开文件：{error}"))
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(path)
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| app_err!("无法打开文件：{error}"))
-    }
-
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(path)
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| app_err!("无法打开文件：{error}"))
-    }
-}
-
 fn read_optional_text(path: &Path) -> Option<String> {
     std::fs::read_to_string(path)
         .ok()
@@ -1238,6 +1281,7 @@ experimental_bearer_token = "old-key"
                 "ZAI",
                 Some("https://new.example"),
                 Some("new-key"),
+                None,
             )
             .unwrap();
 
@@ -1275,7 +1319,7 @@ experimental_bearer_token = "old-key"
         let second = context.capture_profile("Second").unwrap();
 
         let error = context
-            .update_profile(&second.id, "first", None, None)
+            .update_profile(&second.id, "first", None, None, None)
             .unwrap_err();
         assert!(error.0.contains("已存在同名配置档案"));
     }
@@ -1733,6 +1777,7 @@ experimental_bearer_token = "old-key"
                 "name = \"deepseek\"\nbase_url = \"https://api.deepseek.com/\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<你的 DeepSeek API Key>\""
                     .into(),
             ),
+            ..Default::default()
         };
         let summary = context
             .database
@@ -1749,5 +1794,212 @@ experimental_bearer_token = "old-key"
             .find(|item| item.id == summary.id)
             .unwrap();
         assert!(!stored_summary.has_key);
+    }
+
+    #[test]
+    fn update_profile_config_saves_captured_fragment_as_structured() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(home.path()).unwrap();
+        paths.ensure().unwrap();
+        std::fs::create_dir_all(&paths.codex_home).unwrap();
+        std::fs::write(
+            paths.codex_config(),
+            r#"
+model = "glm-5.3"
+model_provider = "ZAI"
+model_reasoning_effort = "high"
+
+[model_providers.ZAI]
+name = "ZAI"
+base_url = "https://old.example"
+experimental_bearer_token = "secret"
+"#,
+        )
+        .unwrap();
+        let context = AppContext::new(paths).unwrap();
+        let profile = context.capture_profile("GLM").unwrap();
+
+        let edited = r#"
+model = "glm-5.5"
+model_provider = "ZAI"
+model_reasoning_effort = "medium"
+
+[model_providers.ZAI]
+name = "ZAI"
+base_url = "https://new.example"
+experimental_bearer_token = "new-key"
+"#;
+        let detail = context
+            .update_profile_config(&profile.id, edited, None)
+            .unwrap();
+        assert_eq!(detail.raw_config, None);
+        assert_eq!(
+            detail.model_values.get("model").map(|v| v.trim().trim_matches('"')),
+            Some("glm-5.5")
+        );
+        assert!(detail
+            .config_fragment
+            .contains(r#"base_url = "https://new.example""#));
+
+        context.apply_profile(&profile.id).unwrap();
+        let live = std::fs::read_to_string(context.paths.codex_config()).unwrap();
+        assert!(live.contains("glm-5.5"));
+        assert!(live.contains("https://new.example"));
+    }
+
+    #[test]
+    fn update_profile_config_rejects_missing_or_renamed_provider() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(home.path()).unwrap();
+        paths.ensure().unwrap();
+        std::fs::create_dir_all(&paths.codex_home).unwrap();
+        std::fs::write(
+            paths.codex_config(),
+            r#"
+model = "glm-5.3"
+model_provider = "ZAI"
+
+[model_providers.ZAI]
+name = "ZAI"
+"#,
+        )
+        .unwrap();
+        let context = AppContext::new(paths).unwrap();
+        let profile = context.capture_profile("GLM").unwrap();
+
+        let missing = context
+            .update_profile_config(&profile.id, "model = \"glm-5.3\"\n", None)
+            .unwrap_err();
+        assert!(missing.0.contains("model_providers.ZAI"));
+
+        let renamed = context
+            .update_profile_config(
+                &profile.id,
+                "model = \"glm-5.3\"\nmodel_provider = \"OTHER\"\n\n[model_providers.OTHER]\nname = \"OTHER\"\n",
+                None,
+            )
+            .unwrap_err();
+        assert!(renamed.0.contains("model_providers.ZAI"));
+    }
+
+    #[test]
+    fn update_profile_config_builtin_raw_applies_with_key_and_catalog() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(home.path()).unwrap();
+        paths.ensure().unwrap();
+        std::fs::create_dir_all(&paths.codex_home).unwrap();
+        let context = AppContext::new(paths).unwrap();
+        let profile = context
+            .add_builtin_profile("zhipu", None, Some("sk-test"))
+            .unwrap();
+
+        let edited = r#"
+model = "glm-5.3"
+model_provider = "ZAI"
+model_reasoning_effort = "max"
+model_catalog_json = "~/.codex/models.json"
+
+[model_providers.ZAI]
+name = "ZAI"
+base_url = "https://open.bigmodel.cn/api/v1"
+experimental_bearer_token = "<Your API Key>"
+extra = "edited"
+"#;
+        let catalog = r#"{"models":[{"id":"glm-5.3","name":"GLM 5.3"}]}"#;
+        let detail = context
+            .update_profile_config(&profile.id, edited, Some(catalog))
+            .unwrap();
+        assert_eq!(detail.raw_config.as_deref(), Some(edited));
+
+        context.apply_profile(&profile.id).unwrap();
+        let live = std::fs::read_to_string(context.paths.codex_config()).unwrap();
+        assert!(live.contains("extra = \"edited\""));
+        assert!(live.contains(r#"experimental_bearer_token = "sk-test""#));
+        assert_eq!(
+            std::fs::read_to_string(context.paths.codex_home.join("models.json")).unwrap(),
+            catalog
+        );
+    }
+
+    #[test]
+    fn autosync_preserves_profile_edited_catalog() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(home.path()).unwrap();
+        paths.ensure().unwrap();
+        std::fs::create_dir_all(&paths.codex_home).unwrap();
+        let context = AppContext::new(paths).unwrap();
+        let write = |text: &str| std::fs::write(context.paths.codex_config(), text).unwrap();
+
+        write(
+            r#"
+model = "glm-5.3"
+model_provider = "ZAI"
+model_catalog_json = "zai.json"
+
+[model_providers.ZAI]
+name = "ZAI"
+base_url = "https://api.example"
+"#,
+        );
+        let profile_a = context.capture_profile("A").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        write(
+            r#"
+model = "other-model"
+model_provider = "ZAI"
+model_catalog_json = "zai.json"
+
+[model_providers.ZAI]
+name = "ZAI"
+base_url = "https://api.example"
+"#,
+        );
+        let profile_b = context.capture_profile("B").unwrap();
+
+        let detail_a = context.get_profile(&profile_a.id).unwrap();
+        let catalog = r#"{"models":[{"id":"edited"}]}"#;
+        context
+            .update_profile_config(&profile_a.id, &detail_a.config_fragment, Some(catalog))
+            .unwrap();
+
+        context.apply_profile(&profile_b.id).unwrap();
+        let stored_a = context.database.profile(&profile_a.id).unwrap();
+        assert_eq!(stored_a.payload.raw_catalog.as_deref(), Some(catalog));
+    }
+
+    #[test]
+    fn update_profile_saves_and_clears_admin_url() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(home.path()).unwrap();
+        paths.ensure().unwrap();
+        std::fs::create_dir_all(&paths.codex_home).unwrap();
+        std::fs::write(paths.codex_config(), "model = \"glm-5.3\"\n").unwrap();
+        let context = AppContext::new(paths).unwrap();
+        let profile = context.capture_profile("GLM").unwrap();
+
+        let summary = context
+            .update_profile(
+                &profile.id,
+                "GLM",
+                None,
+                None,
+                Some("https://console.example.com"),
+            )
+            .unwrap();
+        assert_eq!(
+            summary.admin_url.as_deref(),
+            Some("https://console.example.com")
+        );
+
+        let invalid = context
+            .update_profile(&profile.id, "GLM", None, None, Some("console.example.com"))
+            .unwrap_err();
+        assert!(invalid.0.contains("http"));
+
+        context
+            .update_profile(&profile.id, "GLM", None, None, Some(""))
+            .unwrap();
+        let detail = context.get_profile(&profile.id).unwrap();
+        assert_eq!(detail.admin_url, None);
     }
 }

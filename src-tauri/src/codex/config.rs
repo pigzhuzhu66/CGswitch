@@ -51,6 +51,7 @@ pub fn capture_from_document(document: &DocumentMut) -> AppResult<ProfilePayload
         provider_id,
         provider_body,
         builtin: None,
+        ..Default::default()
     })
 }
 

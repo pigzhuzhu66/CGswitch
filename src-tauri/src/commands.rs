@@ -103,9 +103,26 @@ pub fn update_profile(
     name: String,
     base_url: Option<String>,
     api_key: Option<String>,
+    admin_url: Option<String>,
     state: State<'_, AppContext>,
 ) -> AppResult<ProfileSummary> {
-    state.update_profile(&id, &name, base_url.as_deref(), api_key.as_deref())
+    state.update_profile(
+        &id,
+        &name,
+        base_url.as_deref(),
+        api_key.as_deref(),
+        admin_url.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub fn update_profile_config(
+    id: String,
+    config_text: String,
+    catalog_text: Option<String>,
+    state: State<'_, AppContext>,
+) -> AppResult<ProfileDetail> {
+    state.update_profile_config(&id, &config_text, catalog_text.as_deref())
 }
 
 #[tauri::command]
@@ -266,9 +283,4 @@ fn sync_autostart(app: &AppHandle, settings: &Settings) -> AppResult<()> {
 #[tauri::command]
 pub fn open_path(path: String, state: State<'_, AppContext>) -> AppResult<()> {
     state.open_path(&path)
-}
-
-#[tauri::command]
-pub fn open_codex_file(relative: String, state: State<'_, AppContext>) -> AppResult<()> {
-    state.open_codex_file(&relative)
 }

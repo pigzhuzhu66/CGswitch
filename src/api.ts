@@ -26,6 +26,7 @@ const webProfiles: ProfileSummary[] = [
     provider: "ZAI",
     reasoning_effort: "high",
     has_key: true,
+    admin_url: "https://open.bigmodel.cn/console",
     icon: "zhipu",
     created_at: "2026-08-15 10:00:00",
     updated_at: "2026-08-15 10:00:00",
@@ -37,6 +38,7 @@ const webProfiles: ProfileSummary[] = [
     provider: "ZAI",
     reasoning_effort: "low",
     has_key: false,
+    admin_url: null,
     icon: null,
     created_at: "2026-08-15 10:01:00",
     updated_at: "2026-08-15 10:01:00",
@@ -48,6 +50,7 @@ const webProfiles: ProfileSummary[] = [
     provider: null,
     reasoning_effort: "medium",
     has_key: false,
+    admin_url: null,
     icon: "openai-chatgpt",
     created_at: "2026-08-15 10:02:00",
     updated_at: "2026-08-15 10:02:00",
@@ -67,6 +70,8 @@ interface WebDetail {
   api_key: string | null;
   model_values: Record<string, string>;
   config_fragment: string;
+  raw_config?: string | null;
+  raw_catalog?: string | null;
 }
 
 const webDetails: Record<string, WebDetail> = {
@@ -116,12 +121,15 @@ function webProfileDetail(id: string): ProfileDetail {
     api_key: detail?.api_key ?? null,
     model_values: detail?.model_values ?? {},
     config_fragment: detail?.config_fragment ?? "",
+    raw_config: detail?.raw_config ?? null,
     auth_content: detail?.api_key
       ? '{\n  "OPENAI_API_KEY": "sk-demo-real-value"\n}'
       : null,
     catalog_content: detail?.model_values.model_catalog_json
       ? '{\n  "models": [\n    { "id": "glm-5.3", "name": "GLM 5.3" }\n  ]\n}'
       : null,
+    raw_catalog: detail?.raw_catalog ?? null,
+    admin_url: profile.admin_url,
     updated_at: profile.updated_at,
   };
 }
@@ -169,6 +177,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         provider: "ZAI",
         reasoning_effort: "high",
         has_key: true,
+        admin_url: null,
         icon: null,
         created_at: now,
         updated_at: now,
@@ -192,6 +201,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         provider: preset.provider,
         reasoning_effort: preset.model_values.model_reasoning_effort?.replace(/^"|"$/g, "") ?? null,
         has_key: Boolean(preset.provider),
+        admin_url: null,
         icon: preset.icon,
         created_at: now,
         updated_at: now,
@@ -255,7 +265,18 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         if (typeof args?.baseUrl === "string") detail.base_url = args.baseUrl || null;
         if (typeof args?.apiKey === "string") detail.api_key = args.apiKey || null;
       }
+      if (typeof args?.adminUrl === "string") profile.admin_url = args.adminUrl || null;
       return { ...profile } as T;
+    }
+    case "update_profile_config": {
+      const profile = webProfiles.find((item) => item.id === args?.id);
+      if (!profile) throw new Error("配置档案不存在");
+      const detail = webDetails[profile.id];
+      if (detail) {
+        if (typeof args?.configText === "string") detail.raw_config = args.configText;
+        if (typeof args?.catalogText === "string") detail.raw_catalog = args.catalogText;
+      }
+      return webProfileDetail(profile.id) as T;
     }
     case "delete_profile": {
       const index = webProfiles.findIndex((item) => item.id === args?.id);
@@ -271,8 +292,6 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
     case "auth_get_status":
       return { authenticated: false, default_account_id: null, accounts: [] } as T;
     case "open_url":
-      return undefined as T;
-    case "open_codex_file":
       return undefined as T;
     case "save_settings":
       webSettings = { ...(args?.settings as Settings) };
@@ -304,8 +323,10 @@ export const api = {
   renameProfile: (id: string, name: string) => call<void>("rename_profile", { id, name }),
   setProfileIcon: (id: string, icon: string | null) => call<void>("set_profile_icon", { id, icon }),
   getProfile: (id: string) => call<ProfileDetail>("get_profile", { id }),
-  updateProfile: (id: string, name: string, baseUrl?: string, apiKey?: string) =>
-    call<ProfileSummary>("update_profile", { id, name, baseUrl, apiKey }),
+  updateProfile: (id: string, name: string, baseUrl?: string, apiKey?: string, adminUrl?: string) =>
+    call<ProfileSummary>("update_profile", { id, name, baseUrl, apiKey, adminUrl }),
+  updateProfileConfig: (id: string, configText: string, catalogText: string | null) =>
+    call<ProfileDetail>("update_profile_config", { id, configText, catalogText }),
   deleteProfile: (id: string) => call<void>("delete_profile", { id }),
   applyProfile: (id: string) => call<void>("apply_profile", { id }),
   restartCodex: () => call<void>("restart_codex"),
@@ -320,7 +341,6 @@ export const api = {
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<Settings>("save_settings", { settings }),
   openPath: (path: string) => call<void>("open_path", { path }),
-  openCodexFile: (relative: string) => call<void>("open_codex_file", { relative }),
   onRestartProgress: async (handler: RestartProgressHandler) => {
     if (!isTauri) return () => undefined;
     const { listen } = await import("@tauri-apps/api/event");

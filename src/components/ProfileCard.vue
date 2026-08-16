@@ -41,6 +41,16 @@ const connectionTitle = computed(() => {
   return "测试连通性";
 });
 
+async function openAdmin() {
+  const url = props.profile.admin_url;
+  if (!url) return;
+  try {
+    await api.openUrl(url);
+  } catch (error) {
+    message.error(String(error));
+  }
+}
+
 async function testConnection() {
   if (testing.value || !props.profile.provider) return;
   if (!props.profile.has_key) {
@@ -75,13 +85,25 @@ async function testConnection() {
       <ProfileIconTile :name="profile.name" :icon="profile.icon" />
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
-          <h3 class="cursor-pointer truncate text-[15px] font-semibold tracking-tight transition-colors hover:text-[#007aff]" title="点击重命名" @click="emit('rename')">{{ profile.name }}</h3>
+          <h3 class="cursor-pointer truncate text-base font-semibold tracking-tight transition-colors hover:text-[#007aff]" title="点击重命名" @click="emit('rename')">{{ profile.name }}</h3>
           <n-tag v-if="active" type="success" size="small">当前生效</n-tag>
         </div>
-        <div class="muted mt-1 flex flex-wrap gap-1 text-[11px]">
-          <span class="rounded-full border border-current/15 bg-black/4 px-2 py-0.5 dark:bg-white/8">{{ profile.model ?? "未设置" }}</span>
-          <span class="rounded-full border border-current/15 bg-black/4 px-2 py-0.5 dark:bg-white/8">{{ profile.provider ?? "官方" }}</span>
-          <span class="rounded-full border border-current/15 bg-black/4 px-2 py-0.5 dark:bg-white/8">{{ profile.reasoning_effort ?? "默认" }}</span>
+        <div class="muted mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+          <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.model ?? "未设置" }}</span>
+          <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.provider ?? "官方" }}</span>
+          <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.reasoning_effort ?? "默认" }}</span>
+          <button
+            v-if="profile.admin_url"
+            type="button"
+            class="grid h-4 w-4 place-items-center rounded-full text-[#007aff] transition-colors hover:bg-[#007aff]/10"
+            title="打开管理后台"
+            aria-label="打开管理后台"
+            @click="openAdmin"
+          >
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>

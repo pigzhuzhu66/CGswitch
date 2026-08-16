@@ -430,6 +430,7 @@ fn summary(
         provider: payload.provider_id.clone(),
         reasoning_effort: display_text(payload.model_values.get("model_reasoning_effort")),
         has_key: payload_has_key(payload),
+        admin_url: payload.admin_url.clone(),
         icon: icon.map(str::to_string),
         created_at: created_at.into(),
         updated_at: updated_at.into(),

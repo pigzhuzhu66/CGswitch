@@ -5,6 +5,7 @@ export interface ProfileSummary {
   provider: string | null;
   reasoning_effort: string | null;
   has_key: boolean;
+  admin_url: string | null;
   icon: string | null;
   created_at: string;
   updated_at: string;
@@ -19,8 +20,13 @@ export interface ProfileDetail {
   api_key: string | null;
   model_values: Record<string, string>;
   config_fragment: string;
+  /** 档案自己保存的完整 config 原文（内置档案可全量编辑；普通档案为片段）。 */
+  raw_config: string | null;
   auth_content: string | null;
   catalog_content: string | null;
+  /** 档案自己保存的 models.json 原文。 */
+  raw_catalog: string | null;
+  admin_url: string | null;
   updated_at: string;
 }
 

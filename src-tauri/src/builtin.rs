@@ -67,20 +67,28 @@ pub const BUILTINS: [BuiltinTemplate; 4] = [
 ];
 
 impl BuiltinTemplate {
+    /// 在已渲染/已编辑的 config 文本中替换密钥占位符（未填或占位符不存在则原样返回）。
+    pub fn substitute_key(&self, bytes: Vec<u8>, api_key: Option<&str>) -> AppResult<Vec<u8>> {
+        let Some(key) = api_key.filter(|key| !key.trim().is_empty()) else {
+            return Ok(bytes);
+        };
+        let Some(placeholder) = self.placeholder else {
+            return Ok(bytes);
+        };
+        let start = find_subslice(&bytes, placeholder)
+            .ok_or_else(|| app_err!("{} 模板缺少密钥占位符", self.name))?;
+        let mut bytes = bytes;
+        bytes.splice(
+            start..start + placeholder.len(),
+            key.as_bytes().iter().copied(),
+        );
+        Ok(bytes)
+    }
+
     /// 渲染生产 config 原文：仅替换密钥占位符（未填则保留），
     /// minimax 额外在 model_context_window 之后插入 model_catalog_json 行，其余字节不动。
     pub fn render_config(&self, api_key: Option<&str>) -> AppResult<Vec<u8>> {
-        let mut bytes = self.config.to_vec();
-        if let Some(key) = api_key.filter(|key| !key.trim().is_empty()) {
-            if let Some(placeholder) = self.placeholder {
-                let start = find_subslice(&bytes, placeholder)
-                    .ok_or_else(|| app_err!("{} 模板缺少密钥占位符", self.name))?;
-                bytes.splice(
-                    start..start + placeholder.len(),
-                    key.as_bytes().iter().copied(),
-                );
-            }
-        }
+        let mut bytes = self.substitute_key(self.config.to_vec(), api_key)?;
         if self.insert_catalog_line {
             let needle = b"model_context_window = 1000000\n";
             let start = find_subslice(&bytes, needle)

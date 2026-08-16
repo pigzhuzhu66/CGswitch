@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
 import { NButton, NInput, useMessage } from "naive-ui";
 import ProfileIconEdit from "./ProfileIconEdit.vue";
 import ProfileIconTile from "./ProfileIconTile.vue";
 import { api } from "../api";
 import { builtinPresets } from "../presets";
 import type { ProfileDetail, ProfileSummary } from "../types";
+
+// CodeMirror 编辑器按需加载：只在打开编辑弹窗时拉取，不影响应用启动
+const ConfigTextEditor = defineAsyncComponent(() => import("./ConfigTextEditor.vue"));
 
 const props = defineProps<{
   profile: ProfileSummary | null;
@@ -25,10 +28,13 @@ const pickingIcon = ref(false);
 const name = ref(props.profile?.name ?? "");
 const baseUrl = ref("");
 const apiKey = ref("");
+const adminUrl = ref("");
 const selectedIcon = ref<string | null>(props.profile?.icon ?? null);
 const activeTab = ref<"config" | "auth" | "models">("config");
 const presetKind = ref("");
 const createCatalog = ref("");
+const configText = ref("");
+const catalogText = ref("");
 
 const creating = computed(() => props.create === true);
 const selectedPreset = computed(
@@ -133,7 +139,10 @@ onMounted(async () => {
     name.value = detail.value.name;
     baseUrl.value = detail.value.base_url ?? "";
     apiKey.value = detail.value.api_key ?? "";
+    adminUrl.value = detail.value.admin_url ?? "";
     selectedIcon.value = detail.value.icon;
+    configText.value = detail.value.raw_config ?? detail.value.config_fragment;
+    catalogText.value = detail.value.raw_catalog ?? detail.value.catalog_content ?? "";
   } catch (error) {
     loadError.value = String(error);
   }
@@ -189,6 +198,12 @@ async function save() {
         name.value,
         hasProvider ? baseUrl.value : undefined,
         hasProvider ? apiKey.value : undefined,
+        adminUrl.value.trim() || undefined,
+      );
+      await api.updateProfileConfig(
+        props.profile.id,
+        configText.value,
+        detail.value?.model_values.model_catalog_json ? catalogText.value || null : null,
       );
       message.success("配置档案已更新");
     }
@@ -201,23 +216,6 @@ async function save() {
   }
 }
 
-async function openActiveFile() {
-  const relative =
-    activeTab.value === "config"
-      ? "config.toml"
-      : activeTab.value === "auth"
-        ? "auth.json"
-        : catalogPath.value;
-  if (!relative) {
-    message.warning("没有可打开的文件");
-    return;
-  }
-  try {
-    await api.openCodexFile(relative);
-  } catch (error) {
-    message.error(String(error));
-  }
-}
 </script>
 
 <template>
@@ -301,6 +299,10 @@ async function openActiveFile() {
         <div class="field-label mb-1.5">密钥</div>
         <n-input v-model:value="apiKey" type="password" show-password-on="click" placeholder="请输入 API 密钥" />
       </div>
+      <div v-if="!creating" class="mt-4">
+        <div class="field-label mb-1.5">管理后台网址</div>
+        <n-input v-model:value="adminUrl" placeholder="https://console.example.com（可选，档案卡片显示跳转按钮）" />
+      </div>
     </div>
 
     <div class="apple-group mt-4 flex min-h-[180px] flex-1 flex-col p-5 sm:p-6">
@@ -322,11 +324,18 @@ async function openActiveFile() {
             {{ tab.label }}
           </button>
         </div>
-        <n-button v-if="!creating" size="small" secondary title="用默认编辑器打开当前选中的文件" @click="openActiveFile">打开</n-button>
       </div>
 
       <div class="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden pr-1">
-        <pre v-if="activeTab === 'config'" class="mono min-h-0 flex-1 overflow-auto rounded-xl bg-black/4 p-3 text-xs leading-relaxed dark:bg-white/6">{{ liveConfigFragment || (creating ? "选择供应商后显示配置预览" : "") }}</pre>
+        <div v-if="activeTab === 'config'" class="min-h-0 flex-1">
+          <ConfigTextEditor
+            v-if="!creating"
+            v-model="configText"
+            language="toml"
+            placeholder="编辑 config.toml 内容，保存后仅写入档案；应用时才生效。"
+          />
+          <pre v-else class="mono min-h-0 flex-1 overflow-auto rounded-xl bg-black/4 p-3 text-xs leading-relaxed dark:bg-white/6">{{ liveConfigFragment || "选择供应商后显示配置预览" }}</pre>
+        </div>
         <div v-else-if="activeTab === 'auth'" class="flex h-full min-h-0 flex-col text-sm">
           <pre v-if="detail?.auth_content" class="mono min-h-0 flex-1 overflow-auto rounded-xl bg-black/4 p-3 text-xs leading-relaxed dark:bg-white/6">{{ detail.auth_content }}</pre>
           <p v-else class="muted mt-2 text-xs">认证文件（~/.codex/auth.json）不存在或无法读取。</p>
@@ -336,8 +345,16 @@ async function openActiveFile() {
             <span class="field-label">模型目录</span>
             <span class="mono">{{ catalogPath }}</span>
           </div>
-          <pre v-if="creating ? createCatalog : detail?.catalog_content" class="mono mt-2 min-h-0 flex-1 overflow-auto rounded-xl bg-black/4 p-3 text-xs leading-relaxed dark:bg-white/6">{{ creating ? createCatalog : detail?.catalog_content }}</pre>
-          <p v-else class="muted mt-2 text-xs">模型目录文件不存在或无法读取，文件内容未显示。</p>
+          <ConfigTextEditor
+            v-if="!creating"
+            v-model="catalogText"
+            language="json"
+            placeholder="模型目录文件不存在或无法读取；保存后内容将随档案生效。"
+          />
+          <template v-else>
+            <pre v-if="createCatalog" class="mono mt-2 min-h-0 flex-1 overflow-auto rounded-xl bg-black/4 p-3 text-xs leading-relaxed dark:bg-white/6">{{ createCatalog }}</pre>
+            <p v-else class="muted mt-2 text-xs">模型目录文件不存在或无法读取，文件内容未显示。</p>
+          </template>
         </div>
       </div>
     </div>
