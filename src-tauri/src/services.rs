@@ -1674,6 +1674,7 @@ experimental_bearer_token = "old-key"
                 "DeepSeek 官方",
                 Some("https://api.deepseek.com/"),
                 Some("sk-real"),
+                None,
             )
             .unwrap();
 
