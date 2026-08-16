@@ -26,6 +26,8 @@ export interface ProfileDetail {
   catalog_content: string | null;
   /** 档案自己保存的 models.json 原文。 */
   raw_catalog: string | null;
+  /** 档案自己保存的 auth.json 原文。 */
+  raw_auth: string | null;
   admin_url: string | null;
   updated_at: string;
 }

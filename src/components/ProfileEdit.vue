@@ -35,11 +35,18 @@ const presetKind = ref("");
 const createCatalog = ref("");
 const configText = ref("");
 const catalogText = ref("");
+const authText = ref("");
+const configInitial = ref("");
+const catalogInitial = ref("");
+const authInitial = ref("");
 
 const creating = computed(() => props.create === true);
 const selectedPreset = computed(
   () => builtinPresets.find((preset) => preset.kind === presetKind.value) ?? null,
 );
+const configDirty = computed(() => configText.value !== configInitial.value);
+const catalogDirty = computed(() => catalogText.value !== catalogInitial.value);
+const authDirty = computed(() => authText.value !== authInitial.value);
 const showProviderFields = computed(() =>
   creating.value
     ? Boolean(selectedPreset.value?.base_url)
@@ -143,6 +150,10 @@ onMounted(async () => {
     selectedIcon.value = detail.value.icon;
     configText.value = detail.value.raw_config ?? detail.value.config_fragment;
     catalogText.value = detail.value.raw_catalog ?? detail.value.catalog_content ?? "";
+    authText.value = detail.value.raw_auth ?? detail.value.auth_content ?? "";
+    configInitial.value = configText.value;
+    catalogInitial.value = catalogText.value;
+    authInitial.value = authText.value;
   } catch (error) {
     loadError.value = String(error);
   }
@@ -204,6 +215,7 @@ async function save() {
         props.profile.id,
         configText.value,
         detail.value?.model_values.model_catalog_json ? catalogText.value || null : null,
+        authText.value || null,
       );
       message.success("配置档案已更新");
     }
@@ -322,6 +334,11 @@ async function save() {
               <path d="M15 3v4h4" />
             </svg>
             {{ tab.label }}
+            <span
+              v-if="(tab.id === 'config' && configDirty) || (tab.id === 'models' && catalogDirty) || (tab.id === 'auth' && authDirty)"
+              class="h-1.5 w-1.5 rounded-full bg-[#007aff]"
+              aria-label="有未保存的改动"
+            />
           </button>
         </div>
       </div>
@@ -336,9 +353,12 @@ async function save() {
           />
           <pre v-else class="mono min-h-0 flex-1 overflow-auto rounded-xl bg-black/4 p-3 text-xs leading-relaxed dark:bg-white/6">{{ liveConfigFragment || "选择供应商后显示配置预览" }}</pre>
         </div>
-        <div v-else-if="activeTab === 'auth'" class="flex h-full min-h-0 flex-col text-sm">
-          <pre v-if="detail?.auth_content" class="mono min-h-0 flex-1 overflow-auto rounded-xl bg-black/4 p-3 text-xs leading-relaxed dark:bg-white/6">{{ detail.auth_content }}</pre>
-          <p v-else class="muted mt-2 text-xs">认证文件（~/.codex/auth.json）不存在或无法读取。</p>
+        <div v-else-if="activeTab === 'auth'" class="min-h-0 flex-1">
+          <ConfigTextEditor
+            v-model="authText"
+            language="json"
+            placeholder="认证文件（~/.codex/auth.json）不存在或无法读取；保存后内容将随档案生效。"
+          />
         </div>
         <div v-else class="flex h-full min-h-0 flex-col text-sm">
           <div class="flex justify-between gap-4 py-2">

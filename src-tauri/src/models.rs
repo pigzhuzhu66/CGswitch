@@ -18,6 +18,9 @@ pub struct ProfilePayload {
     /// 档案自己保存的 models.json 原文（编辑后随档案应用写入 ~/.codex）。
     #[serde(default)]
     pub raw_catalog: Option<String>,
+    /// 档案自己保存的 auth.json 原文（编辑后随档案应用写入 ~/.codex/auth.json）。
+    #[serde(default)]
+    pub raw_auth: Option<String>,
     /// 模型提供方的管理后台网址（卡片显示跳转按钮）。
     #[serde(default)]
     pub admin_url: Option<String>,
@@ -52,6 +55,7 @@ pub struct ProfileDetail {
     pub auth_content: Option<String>,
     pub catalog_content: Option<String>,
     pub raw_catalog: Option<String>,
+    pub raw_auth: Option<String>,
     pub admin_url: Option<String>,
     pub updated_at: String,
 }

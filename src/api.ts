@@ -72,6 +72,7 @@ interface WebDetail {
   config_fragment: string;
   raw_config?: string | null;
   raw_catalog?: string | null;
+  raw_auth?: string | null;
 }
 
 const webDetails: Record<string, WebDetail> = {
@@ -129,6 +130,7 @@ function webProfileDetail(id: string): ProfileDetail {
       ? '{\n  "models": [\n    { "id": "glm-5.3", "name": "GLM 5.3" }\n  ]\n}'
       : null,
     raw_catalog: detail?.raw_catalog ?? null,
+    raw_auth: detail?.raw_auth ?? null,
     admin_url: profile.admin_url,
     updated_at: profile.updated_at,
   };
@@ -290,6 +292,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       if (detail) {
         if (typeof args?.configText === "string") detail.raw_config = args.configText;
         if (typeof args?.catalogText === "string") detail.raw_catalog = args.catalogText;
+        if (typeof args?.authText === "string") detail.raw_auth = args.authText;
       }
       return webProfileDetail(profile.id) as T;
     }
@@ -341,8 +344,12 @@ export const api = {
   getProfile: (id: string) => call<ProfileDetail>("get_profile", { id }),
   updateProfile: (id: string, name: string, baseUrl?: string, apiKey?: string, adminUrl?: string) =>
     call<ProfileSummary>("update_profile", { id, name, baseUrl, apiKey, adminUrl }),
-  updateProfileConfig: (id: string, configText: string, catalogText: string | null) =>
-    call<ProfileDetail>("update_profile_config", { id, configText, catalogText }),
+  updateProfileConfig: (
+    id: string,
+    configText: string,
+    catalogText: string | null,
+    authText: string | null,
+  ) => call<ProfileDetail>("update_profile_config", { id, configText, catalogText, authText }),
   deleteProfile: (id: string) => call<void>("delete_profile", { id }),
   applyProfile: (id: string) => call<void>("apply_profile", { id }),
   restartCodex: () => call<void>("restart_codex"),

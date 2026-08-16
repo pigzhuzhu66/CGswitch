@@ -179,7 +179,11 @@ impl AppContext {
         {
             return Err(app_err!("已存在同名配置档案"));
         }
-        let payload = codex_config::read_profile(&self.paths.codex_config())?;
+        let mut payload = codex_config::read_profile(&self.paths.codex_config())?;
+        // 保存完整配置原文，编辑页按完整文件展示/编辑
+        payload.raw_config = std::fs::read_to_string(self.paths.codex_config())
+            .ok()
+            .map(|text| text.trim_end().to_string());
         let timestamp = now_ms().to_string();
         let summary = self.database.insert_profile(&name, &payload, &timestamp)?;
         self.database.record_event(
@@ -504,13 +508,16 @@ impl AppContext {
                 (fragment, catalog)
             }
             None => (
-                profile_config_fragment(payload),
+                payload.raw_config.clone().unwrap_or_else(|| {
+                    // 旧档案没有完整快照时，兜底显示当前 live 完整配置，避免只显示片段
+                    read_optional_text(&self.paths.codex_config())
+                        .unwrap_or_else(|| profile_config_fragment(payload))
+                }),
                 payload.raw_catalog.clone().or_else(|| {
                     payload
                         .model_values
                         .get("model_catalog_json")
-                        .map(|raw| raw.trim().trim_matches('"'))
-                        .map(|path| self.paths.codex_home.join(path))
+                        .and_then(|raw| self.resolve_codex_path(raw))
                         .and_then(|file| read_optional_text(&file))
                 }),
             ),
@@ -525,9 +532,13 @@ impl AppContext {
             model_values: payload.model_values.clone(),
             config_fragment,
             raw_config: payload.raw_config.clone(),
-            auth_content: read_optional_text(&self.paths.codex_home.join("auth.json")),
+            auth_content: payload
+                .raw_auth
+                .clone()
+                .or_else(|| read_optional_text(&self.paths.codex_home.join("auth.json"))),
             catalog_content,
             raw_catalog: payload.raw_catalog.clone(),
+            raw_auth: payload.raw_auth.clone(),
             admin_url: payload.admin_url.clone(),
             updated_at: stored.updated_at.clone(),
         })
@@ -540,6 +551,7 @@ impl AppContext {
         id: &str,
         config_text: &str,
         catalog_text: Option<&str>,
+        auth_text: Option<&str>,
     ) -> AppResult<ProfileDetail> {
         let stored = self.database.profile(id)?;
         let mut payload = stored.payload;
@@ -567,18 +579,29 @@ impl AppContext {
             serde_json::from_str::<serde_json::Value>(text)
                 .map_err(|error| app_err!("models.json 不是有效 JSON: {error}"))?;
         }
+        if let Some(text) = auth_text {
+            serde_json::from_str::<serde_json::Value>(text)
+                .map_err(|error| app_err!("auth.json 不是有效 JSON: {error}"))?;
+        }
 
         if payload.builtin.is_some() {
             payload.raw_config = Some(config_text.to_string());
             if catalog_text.is_some() {
                 payload.raw_catalog = catalog_text.map(str::to_string);
             }
+            if auth_text.is_some() {
+                payload.raw_auth = auth_text.map(str::to_string);
+            }
         } else {
             let parsed = codex_config::capture_from_document(&document)?;
             payload.model_values = parsed.model_values;
             payload.provider_body = parsed.provider_body;
+            payload.raw_config = Some(config_text.to_string());
             if catalog_text.is_some() {
                 payload.raw_catalog = catalog_text.map(str::to_string);
+            }
+            if auth_text.is_some() {
+                payload.raw_auth = auth_text.map(str::to_string);
             }
         }
         self.database
@@ -697,12 +720,29 @@ impl AppContext {
             return self.apply_builtin_profile(id, &payload, "apply");
         }
 
+        // 完整快照档案：直接回填完整原文（含 MCP、插件、注释等全部内容）
+        if let Some(raw) = &payload.raw_config {
+            backup_file(&config_path, &self.paths.config_backup, "config")?;
+            atomic_write(&config_path, raw.as_bytes())?;
+            self.write_raw_catalog(&payload)?;
+            self.write_raw_auth(&payload)?;
+            self.database.record_event(
+                Some(id),
+                "apply",
+                "success",
+                Some("configuration applied"),
+                &now_ms().to_string(),
+            )?;
+            return Ok(());
+        }
+
         codex_config::apply_to_document(&mut document, &payload)?;
         let updated = document.to_string();
 
         backup_file(&config_path, &self.paths.config_backup, "config")?;
         atomic_write(&config_path, updated.as_bytes())?;
         self.write_raw_catalog(&payload)?;
+        self.write_raw_auth(&payload)?;
         self.database.record_event(
             Some(id),
             "apply",
@@ -757,6 +797,7 @@ impl AppContext {
             Some("built-in configuration applied"),
             &now_ms().to_string(),
         )?;
+        self.write_raw_auth(payload)?;
         Ok(())
     }
 
@@ -768,22 +809,53 @@ impl AppContext {
         let Some(raw_path) = payload.model_values.get("model_catalog_json") else {
             return Ok(());
         };
-        let path = raw_path.trim().trim_matches('"');
-        if path.is_empty() {
+        let Some(destination) = self.resolve_codex_path(raw_path) else {
             return Ok(());
-        }
-        let destination = self.paths.codex_home.join(path);
+        };
         if let Some(parent) = destination.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|error| app_err!("无法创建目录 {}: {error}", parent.display()))?;
         }
-        let stem = Path::new(path)
+        let stem = destination
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("catalog");
         backup_file(&destination, &self.paths.codex_files_backup, stem)?;
         atomic_write(&destination, raw.as_bytes())?;
         Ok(())
+    }
+
+    /// 把档案自己编辑保存的 auth.json 原文写入 ~/.codex/auth.json。
+    fn write_raw_auth(&self, payload: &ProfilePayload) -> AppResult<()> {
+        let Some(raw) = payload.raw_auth.as_deref() else {
+            return Ok(());
+        };
+        let destination = self.paths.codex_home.join("auth.json");
+        backup_file(&destination, &self.paths.codex_files_backup, "auth")?;
+        atomic_write(&destination, raw.as_bytes())?;
+        Ok(())
+    }
+
+    /// 解析 model_catalog_json 指向的路径：支持绝对路径、~/ 开头、以及相对 ~/.codex 的路径。
+    fn resolve_codex_path(&self, raw: &str) -> Option<PathBuf> {
+        let path = raw.trim().trim_matches('"');
+        if path.is_empty() {
+            return None;
+        }
+        let raw_path = Path::new(path);
+        if let Some(rest) = path.strip_prefix("~/") {
+            Some(
+                self.paths
+                    .codex_home
+                    .parent()
+                    .unwrap_or(&self.paths.codex_home)
+                    .join(rest),
+            )
+        } else if raw_path.is_absolute() {
+            Some(raw_path.to_path_buf())
+        } else {
+            Some(self.paths.codex_home.join(raw_path))
+        }
     }
 
     fn autosync_active_profile(
@@ -808,6 +880,9 @@ impl AppContext {
         };
         // 档案自己编辑保存的 models.json 内容不属于 live 捕获，回写时保留
         live.raw_catalog = profile.payload.raw_catalog.clone();
+        live.raw_auth = profile.payload.raw_auth.clone();
+        // 快照跟随当前 live 完整文本，保证档案是完整状态
+        live.raw_config = Some(document.to_string());
         if live == profile.payload {
             return Ok(());
         }
@@ -1862,9 +1937,9 @@ base_url = "https://new.example"
 experimental_bearer_token = "new-key"
 "#;
         let detail = context
-            .update_profile_config(&profile.id, edited, None)
+            .update_profile_config(&profile.id, edited, None, None)
             .unwrap();
-        assert_eq!(detail.raw_config, None);
+        assert_eq!(detail.raw_config.as_deref(), Some(edited));
         assert_eq!(
             detail
                 .model_values
@@ -1901,7 +1976,7 @@ name = "ZAI"
         let profile = context.capture_profile("GLM").unwrap();
 
         let missing = context
-            .update_profile_config(&profile.id, "model = \"glm-5.3\"\n", None)
+            .update_profile_config(&profile.id, "model = \"glm-5.3\"\n", None, None)
             .unwrap_err();
         assert!(missing.0.contains("model_providers.ZAI"));
 
@@ -1909,6 +1984,7 @@ name = "ZAI"
             .update_profile_config(
                 &profile.id,
                 "model = \"glm-5.3\"\nmodel_provider = \"OTHER\"\n\n[model_providers.OTHER]\nname = \"OTHER\"\n",
+                None,
                 None,
             )
             .unwrap_err();
@@ -1941,7 +2017,7 @@ extra = "edited"
 "#;
         let catalog = r#"{"models":[{"id":"glm-5.3","name":"GLM 5.3"}]}"#;
         let detail = context
-            .update_profile_config(&profile.id, edited, Some(catalog))
+            .update_profile_config(&profile.id, edited, Some(catalog), None)
             .unwrap();
         assert_eq!(detail.raw_config.as_deref(), Some(edited));
 
@@ -1993,7 +2069,7 @@ base_url = "https://api.example"
         let detail_a = context.get_profile(&profile_a.id).unwrap();
         let catalog = r#"{"models":[{"id":"edited"}]}"#;
         context
-            .update_profile_config(&profile_a.id, &detail_a.config_fragment, Some(catalog))
+            .update_profile_config(&profile_a.id, &detail_a.config_fragment, Some(catalog), None)
             .unwrap();
 
         context.apply_profile(&profile_b.id).unwrap();
