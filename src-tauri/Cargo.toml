@@ -1,6 +1,6 @@
 [package]
 name = "switchgpt"
-version = "0.2.1"
+version = "0.2.2"
 description = "A lightweight Codex model profile switcher"
 authors = ["zeno528"]
 license = "MIT"
@@ -46,3 +46,6 @@ windows = { version = "0.62.2", features = [
   "Win32_UI_Shell",
   "Win32_UI_Shell_Common",
 ] }
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = "2.4.3"
