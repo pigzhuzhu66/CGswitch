@@ -34,16 +34,10 @@ jobs:
           NOTES="$RUNNER_TEMP/release-notes.md"
           if [ -n "$PREV" ]; then
             RANGE="$PREV..HEAD"
-            TITLE="## 更新日志 · 自 \`$PREV\` 以来"
           else
             RANGE="HEAD"
-            TITLE="## 更新日志 · 首个发行版本"
           fi
           {
-            echo "# SwitchGPT v$VERSION"
-            echo
-            echo "$TITLE"
-            echo
             echo "### ✨ 新增"
             git log --oneline --no-merges --grep='^✨' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
             echo
