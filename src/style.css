@@ -70,17 +70,14 @@ body {
 }
 
 .app-version {
+  align-items: center;
   color: var(--text-secondary);
   display: inline-flex;
   font-size: 10px;
   line-height: 1;
   padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(60, 60, 67, 0.08);
-}
-
-:root.dark .app-version {
-  background: rgba(235, 235, 245, 0.12);
+  background: var(--selection-bg);
 }
 
 .mono {
@@ -165,7 +162,6 @@ main {
 .apple-sidebar {
   background: var(--sidebar-bg);
   transition: width 360ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: width;
 }
 
 /* 与侧边栏同款动画曲线（360ms cubic-bezier(0.22,1,0.36,1)），
@@ -188,7 +184,7 @@ main {
   overflow: hidden;
   opacity: 1;
   transition:
-    max-width 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 320ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 140ms ease-out;
   white-space: nowrap;
 }
@@ -223,8 +219,8 @@ main {
   gap: 0.75rem;
   padding-inline: 0.75rem;
   transition:
-    gap 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 240ms cubic-bezier(0.22, 1, 0.36, 1),
     background-color 150ms ease-out,
     color 150ms ease-out;
 }
