@@ -98,3 +98,7 @@ V1 安装包未签名。macOS Gatekeeper 拦截时，请确认安装包来源，
 ## 维护供应商图标
 
 新增供应商：把 `<id>.svg` 放入 `src/assets/providers/`，图标会自动出现在档案编辑页的候选列表中；中文名称在 `src/icons.ts` 的 `LABELS` 里配置（缺省显示文件名）。
+
+## 感谢
+
+感谢使用 SwitchGPT，如果它对你的 Codex 配置管理有帮助，欢迎反馈与建议。
