@@ -38,9 +38,9 @@ pub fn app_paths() -> AppResult<AppPaths> {
 }
 
 pub fn from_home(home: &Path) -> AppResult<AppPaths> {
-    let root = home.join(".switchgpt");
+    let root = home.join(".cgswitch");
     Ok(AppPaths {
-        database: root.join("switchgpt.db"),
+        database: root.join("cgswitch.db"),
         config_backup: root.join("backups").join("config"),
         database_backup: root.join("backups").join("database"),
         codex_files_backup: root.join("backups").join("codex-files"),
@@ -68,11 +68,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn paths_use_switchgpt_and_codex_directories() {
+    fn paths_use_cgswitch_and_codex_directories() {
         let home = Path::new("/home/user");
         let paths = from_home(home).unwrap();
-        assert_eq!(paths.root, home.join(".switchgpt"));
-        assert_eq!(paths.database, home.join(".switchgpt").join("switchgpt.db"));
+        assert_eq!(paths.root, home.join(".cgswitch"));
+        assert_eq!(paths.database, home.join(".cgswitch").join("cgswitch.db"));
         assert_eq!(
             paths.codex_config(),
             home.join(".codex").join("config.toml")

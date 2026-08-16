@@ -1,6 +1,6 @@
 ---
 name: local-windows-build
-description: 快速本地编译 SwitchGPT 的 Windows 安装包（NSIS exe / MSI），构建完成后打开产物目录并列出安装包路径，供用户直接安装测试，不用等 GitHub Actions 发行工作流。当用户说"本地编译"、"本地构建"、"打个本地包"、"本地出个安装包"、"构建本地测试版"时使用。
+description: 快速本地编译 CGSwitch 的 Windows 安装包（NSIS exe / MSI），构建完成后打开产物目录并列出安装包路径，供用户直接安装测试，不用等 GitHub Actions 发行工作流。当用户说"本地编译"、"本地构建"、"打个本地包"、"本地出个安装包"、"构建本地测试版"时使用。
 ---
 
 # 本地快速编译 Windows 版
@@ -38,9 +38,9 @@ Invoke-Item "src-tauri/target/release/bundle/nsis"
 
 | 产物 | 路径 | 说明 |
 |:---|:---|:---|
-| NSIS 安装包（推荐） | `src-tauri\target\release\bundle\nsis\SwitchGPT_<版本>_x64-setup.exe` | 标准安装体验 |
-| MSI 安装包 | `src-tauri\target\release\bundle\msi\SwitchGPT_<版本>_x64_en-US.msi` | 备选 |
-| 绿色版 | `src-tauri\target\release\switchgpt.exe` | 免安装直接运行 |
+| NSIS 安装包（推荐） | `src-tauri\target\release\bundle\nsis\CGSwitch_<版本>_x64-setup.exe` | 标准安装体验 |
+| MSI 安装包 | `src-tauri\target\release\bundle\msi\CGSwitch_<版本>_x64_en-US.msi` | 备选 |
+| 绿色版 | `src-tauri\target\release\cgswitch.exe` | 免安装直接运行 |
 
 版本号取自根目录 `VERSION` 文件。提醒用户：要测新版本号就先改 `VERSION` 再跑本 skill。
 

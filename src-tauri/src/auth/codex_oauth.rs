@@ -29,7 +29,7 @@ const DEVICE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
 const TOKEN_REFRESH_BUFFER_MS: i64 = 60_000;
 const DEVICE_CODE_DEFAULT_EXPIRES_IN: u64 = 900;
 const POLLING_SAFETY_MARGIN_SECS: u64 = 3;
-const CODEX_USER_AGENT: &str = "switchgpt-codex-oauth";
+const CODEX_USER_AGENT: &str = "cgswitch-codex-oauth";
 
 #[derive(Debug, thiserror::Error)]
 pub enum CodexOAuthError {

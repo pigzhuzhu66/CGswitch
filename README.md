@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/logo.png" width="120" alt="SwitchGPT" />
+  <img src="public/logo.png" width="120" alt="CGSwitch" />
 </p>
 
-<h1 align="center">SwitchGPT</h1>
+<h1 align="center">CGSwitch</h1>
 
 <p align="center">轻量的 Windows / macOS 桌面工具，捕获、编辑并切换 OpenAI Codex 的模型配置档案。</p>
 
@@ -31,8 +31,8 @@
 ## 数据位置
 
 ```text
-~/.switchgpt/
-├── switchgpt.db
+~/.cgswitch/
+├── cgswitch.db
 ├── backups/
 │   ├── config/
 │   ├── database/
@@ -40,10 +40,10 @@
 └── logs/
 ```
 
-- Windows：`C:\Users\<user>\.switchgpt`
-- macOS：`/Users/<user>/.switchgpt`
+- Windows：`C:\Users\<user>\.cgswitch`
+- macOS：`/Users/<user>/.cgswitch`
 
-数据库保存档案、设置和切换事件。provider token 只保留在本机，不要把 `.switchgpt/`、日志或数据库提交到 Git。
+数据库保存档案、设置和切换事件。provider token 只保留在本机，不要把 `.cgswitch/`、日志或数据库提交到 Git。
 
 ## 开发
 
@@ -102,4 +102,4 @@ V1 安装包未签名。macOS Gatekeeper 拦截时，请确认安装包来源，
 
 ## 感谢
 
-项目目前处于测试阶段，欢迎[反馈问题与建议](https://github.com/zeno528/SwitchGPT/issues)。
+项目目前处于测试阶段，欢迎[反馈问题与建议](https://github.com/zeno528/CGSwitch/issues)。

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SwitchGPT",
+  "productName": "CGSwitch",
   "version": "0.2.2",
-  "identifier": "com.zeno528.switchgpt",
+  "identifier": "com.zeno528.cgswitch",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SwitchGPT",
+        "title": "CGSwitch",
         "width": 1080,
         "height": 720,
         "minWidth": 900,

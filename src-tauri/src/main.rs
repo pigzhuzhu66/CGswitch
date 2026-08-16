@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    switchgpt_lib::run()
+    cgswitch_lib::run()
 }

@@ -58,11 +58,11 @@ const webProfiles: ProfileSummary[] = [
 ];
 
 const webPaths = [
-  { label: "数据库", path: "C:\\Users\\<user>\\.switchgpt\\switchgpt.db" },
+  { label: "数据库", path: "C:\\Users\\<user>\\.cgswitch\\cgswitch.db" },
   { label: "Codex 配置", path: "C:\\Users\\<user>\\.codex\\config.toml" },
-  { label: "配置备份", path: "C:\\Users\\<user>\\.switchgpt\\backups\\config" },
-  { label: "数据库备份", path: "C:\\Users\\<user>\\.switchgpt\\backups\\database" },
-  { label: "日志", path: "C:\\Users\\<user>\\.switchgpt\\logs" },
+  { label: "配置备份", path: "C:\\Users\\<user>\\.cgswitch\\backups\\config" },
+  { label: "数据库备份", path: "C:\\Users\\<user>\\.cgswitch\\backups\\database" },
+  { label: "日志", path: "C:\\Users\\<user>\\.cgswitch\\logs" },
 ];
 
 interface WebDetail {
@@ -230,9 +230,9 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       return { ok: true, latency_ms: 87, status: 200, error: null } as T;
     }
     case "export_database": {
-      const name = `switchgpt-export-${Date.now()}.db`;
+      const name = `cgswitch-export-${Date.now()}.db`;
       webBackups.unshift({ name, size_bytes: 20480 });
-      return `C:\\Users\\<user>\\.switchgpt\\backups\\database\\${name}` as T;
+      return `C:\\Users\\<user>\\.cgswitch\\backups\\database\\${name}` as T;
     }
     case "export_database_to":
       return String(args?.path ?? "") as T;

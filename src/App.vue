@@ -163,9 +163,9 @@ onBeforeUnmount(() => {
                 @click="toggleSidebar"
                 @keyup.enter="toggleSidebar"
               >
-                <img src="/logo.png" alt="SwitchGPT" class="h-9 w-9 shrink-0" />
+                <img src="/logo.png" alt="CGSwitch" class="h-9 w-9 shrink-0" />
                 <div class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">
-                  <div class="text-sm font-bold">SwitchGPT</div>
+                  <div class="text-sm font-bold">CGSwitch</div>
                   <div class="app-version" :aria-label="`版本 ${version.trim()}`">
                     <span>v{{ version.trim() }}</span>
                   </div>

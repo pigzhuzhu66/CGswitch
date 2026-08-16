@@ -53,7 +53,7 @@ async function exportBackupToFile() {
     if (isTauri) {
       const picked = await saveDialog({
         title: "导出数据库备份",
-        defaultPath: `switchgpt-export-${Date.now()}.db`,
+        defaultPath: `cgswitch-export-${Date.now()}.db`,
         filters: [{ name: "SQLite 数据库", extensions: ["db"] }],
       });
       target = typeof picked === "string" ? picked : null;
@@ -280,7 +280,7 @@ async function openPath(item: PathInfo) {
             </svg>
             <div>
               <div class="text-sm font-semibold">开机自启</div>
-              <div class="muted mt-0.5 text-xs">登录系统后自动启动 SwitchGPT</div>
+              <div class="muted mt-0.5 text-xs">登录系统后自动启动 CGSwitch</div>
             </div>
           </div>
           <n-switch

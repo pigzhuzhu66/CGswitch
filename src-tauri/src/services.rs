@@ -326,10 +326,10 @@ impl AppContext {
         let directory = &self.paths.database_backup;
         std::fs::create_dir_all(directory)
             .map_err(|error| app_err!("无法创建备份目录: {error}"))?;
-        let name = format!("switchgpt-export-{}.db", now_ms());
+        let name = format!("cgswitch-export-{}.db", now_ms());
         let target = directory.join(&name);
         self.database.export_database(&target)?;
-        prune_backups(directory, "switchgpt-export-", ".db", 20);
+        prune_backups(directory, "cgswitch-export-", ".db", 20);
         self.database.record_event(
             None,
             "export",
@@ -389,7 +389,7 @@ impl AppContext {
         if let Ok(entries) = std::fs::read_dir(directory) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().into_owned();
-                if !(name.starts_with("switchgpt-export-") && name.ends_with(".db")) {
+                if !(name.starts_with("cgswitch-export-") && name.ends_with(".db")) {
                     continue;
                 }
                 let size_bytes = entry.metadata().map(|metadata| metadata.len()).unwrap_or(0);
@@ -420,7 +420,7 @@ impl AppContext {
     }
 
     fn database_backup_path(&self, name: &str) -> AppResult<PathBuf> {
-        let valid = name.starts_with("switchgpt-export-")
+        let valid = name.starts_with("cgswitch-export-")
             && name.ends_with(".db")
             && Path::new(name).file_name().and_then(|file| file.to_str()) == Some(name);
         if !valid {
@@ -1631,7 +1631,7 @@ experimental_bearer_token = "old-key"
         assert!(context.restore_database("../evil.db").is_err());
         assert!(context.delete_database_backup("..\\evil.db").is_err());
         assert!(context
-            .restore_database("switchgpt-export-nothere.db")
+            .restore_database("cgswitch-export-nothere.db")
             .is_err());
     }
 

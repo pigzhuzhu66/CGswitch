@@ -1,5 +1,5 @@
 {
-  "name": "switchgpt",
+  "name": "cgswitch",
   "packageManager": "pnpm@11.9.0",
   "private": true,
   "version": "0.2.2",

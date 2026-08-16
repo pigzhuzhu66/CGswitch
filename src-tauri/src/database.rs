@@ -69,7 +69,7 @@ impl Database {
         // 仅在确有 pending 迁移时快照（普通重启不备份），迁移备份保留最近 5 份
         if old_version > 0 && pending > 0 {
             let backup = paths.database_backup.join(format!(
-                "switchgpt-v{old_version}-{}.db",
+                "cgswitch-v{old_version}-{}.db",
                 crate::paths::now_ms()
             ));
             if let Err(error) = connection.execute(
@@ -79,7 +79,7 @@ impl Database {
                 // 迁移本身是事务性的，备份失败不阻塞启动，仅告警
                 eprintln!("迁移前数据库备份失败: {error}");
             } else {
-                crate::fsutil::prune_backups(&paths.database_backup, "switchgpt-v", ".db", 5);
+                crate::fsutil::prune_backups(&paths.database_backup, "cgswitch-v", ".db", 5);
             }
         }
 
@@ -313,9 +313,9 @@ impl Database {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|error| app_err!("备份文件不是有效的 SwitchGPT 数据库: {error}"))?;
+            .map_err(|error| app_err!("备份文件不是有效的 CGSwitch 数据库: {error}"))?;
         if has_profiles == 0 {
-            return Err(app_err!("备份文件不是有效的 SwitchGPT 数据库"));
+            return Err(app_err!("备份文件不是有效的 CGSwitch 数据库"));
         }
 
         let mut connection = self.lock()?;
@@ -361,7 +361,7 @@ impl Database {
     fn lock(&self) -> AppResult<std::sync::MutexGuard<'_, Connection>> {
         self.connection
             .lock()
-            .map_err(|_| app_err!("数据库连接锁已损坏，请重启 SwitchGPT"))
+            .map_err(|_| app_err!("数据库连接锁已损坏，请重启 CGSwitch"))
     }
 }
 
@@ -553,7 +553,7 @@ mod tests {
             .unwrap();
         drop(conn);
         for i in 0..6 {
-            std::fs::write(paths.database_backup.join(format!("switchgpt-v1-{i}.db")), b"x")
+            std::fs::write(paths.database_backup.join(format!("cgswitch-v1-{i}.db")), b"x")
                 .unwrap();
         }
 

@@ -20,7 +20,7 @@ use crate::services::AppContext;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let paths = paths::app_paths().expect("无法定位用户数据目录");
-    let context = AppContext::new(paths.clone()).expect("无法初始化 SwitchGPT 数据库");
+    let context = AppContext::new(paths.clone()).expect("无法初始化 CGSwitch 数据库");
     let oauth_state = auth::CodexOAuthState(Arc::new(tokio::sync::RwLock::new(
         auth::codex_oauth::CodexOAuthManager::new(paths.root.join("codex_oauth_auth.json")),
     )));
@@ -83,7 +83,7 @@ pub fn run() {
             }
 
             let show_item = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "退出 SwitchGPT", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出 CGSwitch", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().expect("缺少应用图标").clone())
@@ -139,7 +139,7 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running SwitchGPT");
+        .expect("error while running CGSwitch");
 }
 
 #[cfg(test)]
