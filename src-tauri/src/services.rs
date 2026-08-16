@@ -7,7 +7,7 @@ use crate::builtin;
 use crate::codex::{config as codex_config, process as codex_process};
 use crate::database::{profile_summary, Database, StoredProfile};
 use crate::error::{app_err, AppResult};
-use crate::fsutil::{atomic_write, backup_file};
+use crate::fsutil::{atomic_write, backup_file, prune_backups};
 use crate::models::{
     AppState, CodexAppStatus, PathInfo, ProfileDetail, ProfilePayload, ProfileSummary, Settings,
 };
@@ -329,7 +329,7 @@ impl AppContext {
         let name = format!("switchgpt-export-{}.db", now_ms());
         let target = directory.join(&name);
         self.database.export_database(&target)?;
-        prune_database_backups(directory, 20);
+        prune_backups(directory, "switchgpt-export-", ".db", 20);
         self.database.record_event(
             None,
             "export",
@@ -1077,26 +1077,6 @@ fn validated_icon(icon: Option<&str>) -> AppResult<Option<String>> {
             Ok(value.to_string())
         })
         .transpose()
-}
-
-fn prune_database_backups(directory: &Path, keep: usize) {
-    let Ok(entries) = std::fs::read_dir(directory) else {
-        return;
-    };
-    let mut backups: Vec<PathBuf> = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("switchgpt-export-") && name.ends_with(".db"))
-        })
-        .collect();
-    backups.sort();
-    while backups.len() > keep {
-        let oldest = backups.remove(0);
-        let _ = std::fs::remove_file(oldest);
-    }
 }
 
 fn emit(app: &AppHandle, stage: &str, message: Option<&str>) {

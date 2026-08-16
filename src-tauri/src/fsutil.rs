@@ -67,11 +67,11 @@ pub fn backup_file(source: &Path, directory: &Path, stem: &str) -> AppResult<Opt
     let target = directory.join(format!("{stem}-{}.bak", now_ms()));
     fs::copy(source, &target)
         .map_err(|error| err(format!("无法备份 {}: {error}", source.display())))?;
-    prune_backups(directory, stem, 20);
+    prune_backups(directory, stem, ".bak", 20);
     Ok(Some(target))
 }
 
-fn prune_backups(directory: &Path, stem: &str, keep: usize) {
+pub fn prune_backups(directory: &Path, prefix: &str, extension: &str, keep: usize) {
     let Ok(entries) = fs::read_dir(directory) else {
         return;
     };
@@ -81,7 +81,7 @@ fn prune_backups(directory: &Path, stem: &str, keep: usize) {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with(stem) && name.ends_with(".bak"))
+                .is_some_and(|name| name.starts_with(prefix) && name.ends_with(extension))
         })
         .collect();
     backups.sort();

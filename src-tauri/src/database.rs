@@ -63,17 +63,24 @@ impl Database {
         let old_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(|error| app_err!("无法读取数据库版本: {error}"))?;
-        if old_version > 0 {
+        let pending = migrations()
+            .pending_migrations(&connection)
+            .map_err(|error| app_err!("无法检查数据库迁移: {error}"))?;
+        // 仅在确有 pending 迁移时快照（普通重启不备份），迁移备份保留最近 5 份
+        if old_version > 0 && pending > 0 {
             let backup = paths.database_backup.join(format!(
                 "switchgpt-v{old_version}-{}.db",
                 crate::paths::now_ms()
             ));
-            connection
-                .execute(
-                    "VACUUM INTO ?1",
-                    params![backup.to_string_lossy().to_string()],
-                )
-                .map_err(|error| app_err!("迁移前备份数据库失败: {error}"))?;
+            if let Err(error) = connection.execute(
+                "VACUUM INTO ?1",
+                params![backup.to_string_lossy().to_string()],
+            ) {
+                // 迁移本身是事务性的，备份失败不阻塞启动，仅告警
+                eprintln!("迁移前数据库备份失败: {error}");
+            } else {
+                crate::fsutil::prune_backups(&paths.database_backup, "switchgpt-v", ".db", 5);
+            }
         }
 
         migrations()
@@ -532,4 +539,32 @@ mod tests {
 
         assert!(db.set_profile_icon("missing", Some("zhipu"), "4").is_err());
     }
+
+    #[test]
+    fn migration_backup_only_when_pending_and_pruned() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(dir.path()).unwrap();
+        paths.ensure().unwrap();
+
+        // 构造一个 v1 数据库，并预置 6 份旧迁移备份
+        let mut conn = Connection::open(&paths.database).unwrap();
+        Migrations::new(vec![M::up(SCHEMA_V1)])
+            .to_latest(&mut conn)
+            .unwrap();
+        drop(conn);
+        for i in 0..6 {
+            std::fs::write(paths.database_backup.join(format!("switchgpt-v1-{i}.db")), b"x")
+                .unwrap();
+        }
+
+        // 首次打开：v1 -> v2 有 pending 迁移，生成 1 份新备份并裁剪到 5 份
+        Database::open(&paths).unwrap();
+        let count = std::fs::read_dir(&paths.database_backup).unwrap().count();
+        assert_eq!(count, 5);
+
+        // 再次打开：已到最新版本，不再生成备份
+        Database::open(&paths).unwrap();
+        assert_eq!(std::fs::read_dir(&paths.database_backup).unwrap().count(), 5);
+    }
+
 }
