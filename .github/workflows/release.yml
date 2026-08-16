@@ -37,21 +37,23 @@ jobs:
           else
             RANGE="HEAD"
           fi
+          # 条目只保留提交信息正文，去掉 gitmoji 图标；图标仅用于分组大标题
+          fmt() { sed -E 's/^[0-9a-f]{7,} //' | sed -E 's/^[^[:alnum:]]+[[:space:]]*//' | sed 's/^/- /'; }
           {
             echo "### ✨ 新增"
-            git log --oneline --no-merges --grep='^✨' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            git log --oneline --no-merges --grep='^✨' "$RANGE" | fmt
             echo
             echo "### 🐛 修复"
-            git log --oneline --no-merges --grep='^🐛' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            git log --oneline --no-merges --grep='^🐛' "$RANGE" | fmt
             echo
             echo "### 🎨 界面与样式"
-            git log --oneline --no-merges --grep='^🎨' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            git log --oneline --no-merges --grep='^🎨' "$RANGE" | fmt
             echo
             echo "### 👷 CI 与工具"
-            git log --oneline --no-merges -E --grep='^(👷|🔧)' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            git log --oneline --no-merges -E --grep='^(👷|🔧)' "$RANGE" | fmt
             echo
             echo "### 📝 文档"
-            git log --oneline --no-merges --grep='^📝' "$RANGE" | sed 's/^[0-9a-f]\{7,\} //' | sed 's/^/- /'
+            git log --oneline --no-merges --grep='^📝' "$RANGE" | fmt
           } > "$NOTES"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --prerelease --notes-file "$NOTES" --target "$GITHUB_SHA"
