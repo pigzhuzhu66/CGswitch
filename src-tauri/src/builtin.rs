@@ -4,6 +4,7 @@ pub const KIND_DEEPSEEK: &str = "deepseek";
 pub const KIND_MINIMAX: &str = "minimax";
 pub const KIND_ZHIPU: &str = "zhipu";
 pub const KIND_CHATGPT: &str = "chatgpt";
+pub const KIND_OPENCODE: &str = "opencode";
 
 pub const DEEPSEEK_CONFIG: &[u8] = include_bytes!("../assets/builtin/deepseek.toml");
 pub const DEEPSEEK_MODELS: &[u8] = include_bytes!("../assets/builtin/deepseek-models.json");
@@ -12,6 +13,7 @@ pub const MINIMAX_CATALOG: &[u8] = include_bytes!("../assets/builtin/minimax-cat
 pub const ZHIPU_CONFIG: &[u8] = include_bytes!("../assets/builtin/zhipu.toml");
 pub const ZHIPU_MODELS: &[u8] = include_bytes!("../assets/builtin/zhipu-models.json");
 pub const CHATGPT_CONFIG: &[u8] = include_bytes!("../assets/builtin/chatgpt.toml");
+pub const OPENCODE_CONFIG: &[u8] = include_bytes!("../assets/builtin/opencode.toml");
 
 pub struct BuiltinTemplate {
     pub kind: &'static str,
@@ -27,10 +29,10 @@ pub struct BuiltinTemplate {
     pub insert_catalog_line: bool,
 }
 
-pub const BUILTINS: [BuiltinTemplate; 4] = [
+pub const BUILTINS: [BuiltinTemplate; 5] = [
     BuiltinTemplate {
         kind: KIND_DEEPSEEK,
-        name: "DeepSeek 官方",
+        name: "DeepSeek",
         icon: "deepseek",
         config: DEEPSEEK_CONFIG,
         placeholder: Some("<你的 DeepSeek API Key>".as_bytes()),
@@ -39,7 +41,7 @@ pub const BUILTINS: [BuiltinTemplate; 4] = [
     },
     BuiltinTemplate {
         kind: KIND_MINIMAX,
-        name: "MiniMax 官方",
+        name: "MiniMax",
         icon: "minimax",
         config: MINIMAX_CONFIG,
         placeholder: Some("<MINIMAX_API_KEY>".as_bytes()),
@@ -48,7 +50,7 @@ pub const BUILTINS: [BuiltinTemplate; 4] = [
     },
     BuiltinTemplate {
         kind: KIND_ZHIPU,
-        name: "智谱官方",
+        name: "智谱",
         icon: "zhipu",
         config: ZHIPU_CONFIG,
         placeholder: Some("<Your API Key>".as_bytes()),
@@ -57,11 +59,21 @@ pub const BUILTINS: [BuiltinTemplate; 4] = [
     },
     BuiltinTemplate {
         kind: KIND_CHATGPT,
-        name: "ChatGPT 官方",
+        name: "ChatGPT",
         icon: "openai-chatgpt",
         config: CHATGPT_CONFIG,
         placeholder: None,
         catalog: None,
+        insert_catalog_line: false,
+    },
+    // OpenAI Code 没有官方 models.json 模板，但保留空文件入口供用户自行填写模型目录
+    BuiltinTemplate {
+        kind: KIND_OPENCODE,
+        name: "OpenCode",
+        icon: "opencode",
+        config: OPENCODE_CONFIG,
+        placeholder: Some("<你的 OpenCode API Key>".as_bytes()),
+        catalog: Some(("models.json", b"")),
         insert_catalog_line: false,
     },
 ];
@@ -75,8 +87,10 @@ impl BuiltinTemplate {
         let Some(placeholder) = self.placeholder else {
             return Ok(bytes);
         };
-        let start = find_subslice(&bytes, placeholder)
-            .ok_or_else(|| app_err!("{} 模板缺少密钥占位符", self.name))?;
+        let Some(start) = find_subslice(&bytes, placeholder) else {
+            // 编辑结果里已没有占位符（例如用户直接写入了真实密钥）：原样保留，不报错
+            return Ok(bytes);
+        };
         let mut bytes = bytes;
         bytes.splice(
             start..start + placeholder.len(),
@@ -105,7 +119,7 @@ pub fn template(kind: &str) -> AppResult<&'static BuiltinTemplate> {
     BUILTINS
         .iter()
         .find(|item| item.kind == kind)
-        .ok_or_else(|| app_err!("未知的内置档案类型：{kind}"))
+        .ok_or_else(|| app_err!("未知的内置供应商类型：{kind}"))
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -136,6 +150,10 @@ mod tests {
             CHATGPT_CONFIG,
             b"model = \"gpt-5.6\"\nmodel_reasoning_effort = \"medium\"\n"
         );
+        assert_eq!(
+            OPENCODE_CONFIG,
+            b"model = \"deepseek-v4-flash\"\nmodel_provider = \"opencode-go\"\npreferred_auth_method = \"apikey\"\nforced_login_method = \"api\"\nmodel_reasoning_effort = \"high\"\nmodel_catalog_json = \"~/.codex/models.json\"\n\n[model_providers.opencode-go]\nname = \"OpenCode Go\"\nbase_url = \"https://opencode.ai/zen/go/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 OpenCode API Key>\""
+        );
     }
 
     #[test]
@@ -146,6 +164,8 @@ mod tests {
         assert_eq!(count(ZHIPU_MODELS, b"\r\n"), 72);
         assert_eq!(MINIMAX_CATALOG.len(), 953);
         assert_eq!(count(MINIMAX_CATALOG, b"\r\n"), 25);
+        // OpenAI Code 无官方模板：models.json 保留为空入口
+        assert_eq!(template(KIND_OPENCODE).unwrap().catalog.unwrap().1.len(), 0);
     }
 
     #[test]

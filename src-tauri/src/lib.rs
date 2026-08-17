@@ -20,9 +20,10 @@ use crate::services::AppContext;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let paths = paths::app_paths().expect("无法定位用户数据目录");
-    let context = AppContext::new(paths.clone()).expect("无法初始化 CGSwitch 数据库");
+    let database = Arc::new(database::Database::open(&paths).expect("无法初始化 CGSwitch 数据库"));
+    let context = AppContext::new_with_database(paths.clone(), database.clone());
     let oauth_state = auth::CodexOAuthState(Arc::new(tokio::sync::RwLock::new(
-        auth::codex_oauth::CodexOAuthManager::new(paths.root.join("codex_oauth_auth.json")),
+        auth::codex_oauth::CodexOAuthManager::new(database),
     )));
 
     tauri::Builder::default()
@@ -35,16 +36,21 @@ pub fn run() {
             commands::get_codex_status,
             commands::capture_profile,
             commands::add_builtin_profile,
+            commands::add_custom_profile,
             commands::get_builtin_catalog,
             commands::test_profile_connection,
+            commands::get_deepseek_balance,
             commands::export_database,
-            commands::export_database_to,
             commands::import_database,
             commands::list_database_backups,
             commands::restore_database,
             commands::delete_database_backup,
+            commands::rename_database_backup,
             commands::rename_profile,
             commands::set_profile_icon,
+            commands::set_profile_show_balance,
+            commands::set_profile_balance,
+            commands::set_profile_account,
             commands::duplicate_profile,
             commands::get_profile,
             commands::update_profile,
@@ -57,6 +63,8 @@ pub fn run() {
             commands::auth_poll_for_account,
             commands::auth_get_status,
             commands::auth_remove_account,
+            commands::auth_set_default_account,
+            commands::auth_apply_to_codex,
             commands::open_url,
             commands::get_settings,
             commands::save_settings,
@@ -75,7 +83,7 @@ pub fn run() {
                     }
                 }))?;
 
-            let settings = app.state::<AppContext>().settings()?;
+            let settings = app.state::<AppContext>().settings().unwrap_or_default();
             if settings.autostart_enabled {
                 if let Err(error) = app.autolaunch().enable() {
                     eprintln!("同步开机自启设置失败: {error}");

@@ -6,11 +6,22 @@
   --app-bg: #f7f7f8;
   --panel-bg: #ffffff;
   --panel-border: rgba(60, 60, 67, 0.16);
+  --panel-ring: rgba(60, 60, 67, 0.12);
+  --panel-divider: rgba(60, 60, 67, 0.1);
   --text-secondary: rgba(60, 60, 67, 0.68);
-  --sidebar-bg: #eaf0f9;
+  --sidebar-bg: #e8e8e9;
   --selection-bg: rgba(0, 122, 255, 0.12);
   --scrollbar-thumb: color-mix(in srgb, var(--text-secondary) 25%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--text-secondary) 40%, transparent);
+  /* 全局间距参数：页头/标题到首个内容区块，以及相邻卡片/分区之间 */
+  --gap-page: 1.5rem;
+  --gap-section: 1rem;
+  /* 卡片内边距（上下左右统一） */
+  --gap-card: 1.25rem;
+  /* 主内容区左右间距基准（卡片到侧边栏/窗口边缘的视觉间距） */
+  --gap-main: 2rem;
+  /* 右侧滚动条占位宽度，启动时由 JS 实测写入，保证左右视觉间距完全一致 */
+  --scrollbar-size: 0px;
 }
 
 :root.dark {
@@ -18,6 +29,8 @@
   --app-bg: #000000;
   --panel-bg: #1c1c1e;
   --panel-border: rgba(84, 84, 88, 0.65);
+  --panel-ring: rgba(255, 255, 255, 0.12);
+  --panel-divider: rgba(255, 255, 255, 0.1);
   --text-secondary: rgba(235, 235, 245, 0.6);
   --sidebar-bg: #151922;
   --selection-bg: rgba(10, 132, 255, 0.24);
@@ -60,9 +73,10 @@ body {
 }
 
 .panel {
-  border: 1px solid var(--panel-border);
   background: var(--panel-bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    0 0 0 1px var(--panel-ring),
+    0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .muted {
@@ -91,6 +105,13 @@ body {
   font-weight: 500;
 }
 
+/* 卡片内的小节标题（副标题），与表单字段标签 field-label 区分 */
+.field-subtitle {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 /* 名称行：不用输入框外框，改用底部分割线作为输入框，聚焦时高亮 */
 .underline-input.n-input {
   background: transparent;
@@ -105,14 +126,6 @@ body {
 
 .underline-input.n-input:focus-within {
   border-bottom-color: #007aff;
-}
-
-/* Naive UI 表单标签与全局字段标签同级：主色 + 中等字重，
-   并去掉 naive-ui 自带的 color .3s 过渡，避免深浅色切换时标签颜色慢半拍 */
-.n-form-item .n-form-item-label {
-  color: inherit;
-  font-weight: 500;
-  transition: none !important;
 }
 
 /* 删除确认弹窗：标题与操作按钮统一红色语义 */
@@ -154,9 +167,12 @@ body {
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
-/* 窗口主滚动条常驻，避免内容变高时出现/消失导致页面抖动 */
+/* 窗口主滚动条常驻，避免内容变高时出现/消失导致页面抖动；
+   右侧内边距减去滚动条占位，让卡片到窗口边缘的视觉间距与左侧（到侧边栏）完全相等 */
 main {
   scrollbar-gutter: stable;
+  padding-left: var(--gap-main);
+  padding-right: calc(var(--gap-main) - var(--scrollbar-size));
 }
 
 .apple-sidebar {
@@ -164,19 +180,51 @@ main {
   transition: width 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* 与侧边栏同款动画曲线（360ms cubic-bezier(0.22,1,0.36,1)），
-   用于卡片内展开/收起内容的入场出场（如重启进度） */
-.apple-reveal-enter-active,
-.apple-reveal-leave-active {
-  transition:
-    opacity 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+/* 侧边栏应用名 wordmark：Windows 自带几何字体 Bahnschrift + 品牌蓝紫渐变 */
+.apple-wordmark {
+  background: linear-gradient(90deg, #007aff 0%, #5856d6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", -apple-system, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
 }
 
-.apple-reveal-enter-from,
-.apple-reveal-leave-to {
+/* 首页供应商卡片动画：出现复刻侧边栏展开（高度 0→auto + 淡入），
+   消失保持淡出缩小 + 兄弟卡片 FLIP 位移（opacity/transform） */
+.profile-list-move {
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.profile-list-enter-active {
+  transition:
+    height 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 140ms ease-out;
+  overflow: hidden;
+  interpolate-size: allow-keywords;
+}
+
+.profile-list-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+  transition:
+    opacity 160ms ease-out,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.profile-list-enter-from {
+  height: 0;
   opacity: 0;
-  transform: translateY(-6px);
+}
+
+.profile-list-leave-to {
+  opacity: 0;
+  transform: scale(0.97);
 }
 
 .apple-sidebar-label {
@@ -194,10 +242,11 @@ main {
   left: calc(100% + 0.6rem);
   top: 50%;
   z-index: 10;
-  border: 1px solid var(--panel-border);
   border-radius: 8px;
   background: var(--panel-bg);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 0 0 1px var(--panel-ring),
+    0 6px 20px rgba(0, 0, 0, 0.14);
   color: inherit;
   opacity: 0;
   padding: 0.4rem 0.6rem;
@@ -216,7 +265,7 @@ main {
 }
 
 .apple-sidebar-nav-button {
-  gap: 0.75rem;
+  gap: 0.5rem;
   padding-inline: 0.75rem;
   transition:
     gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -232,7 +281,8 @@ main {
 
 .apple-sidebar--collapsed .apple-sidebar-nav-button {
   gap: 0;
-  padding-left: 13px;
+  justify-content: center;
+  padding-left: 0;
   padding-right: 0;
 }
 
@@ -241,6 +291,44 @@ main {
   font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.2;
+}
+
+/* 页面顶部返回栏：全宽出血越过 main 的 px-8、负上边距顶到窗口顶部，
+   设置页 / 编辑供应商 / 选择图标 共用同一布局定义 */
+.apple-page-bar {
+  align-items: center;
+  background: var(--app-bg);
+  display: flex;
+  margin-inline: -2rem;
+  margin-top: -1rem;
+  /* 内容区中心对齐侧边栏 wordmark（实测差 6px），按钮仍在容器内垂直居中 */
+  padding: 0.875rem 2rem 0.125rem;
+}
+
+/* 表单行内小按钮（测试连通 / 获取 API 密钥 等同款样式全局复用） */
+.apple-inline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.5rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.375rem;
+  padding-inline: 0.5rem;
+  font-size: 11px;
+  font-weight: 500;
+  color: #007aff;
+  transition:
+    background-color 150ms ease-out,
+    opacity 150ms ease-out;
+}
+
+.apple-inline-btn:hover {
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.apple-inline-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 /* 编辑类页面的统一返回按钮（ProfileEdit / ProfileIconEdit 共用） */
@@ -271,10 +359,19 @@ main {
 
 .apple-group {
   overflow: hidden;
-  border: 1px solid var(--panel-border);
   border-radius: 18px;
   background: var(--panel-bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    0 0 0 1px var(--panel-ring),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* 暗色下卡片增加纵深：半透明白 hairline 环 + 更强的黑接触阴影，避免贴平背景 */
+:root.dark .panel,
+:root.dark .apple-group {
+  box-shadow:
+    0 0 0 1px var(--panel-ring),
+    0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .startup-skeleton > div {
@@ -339,6 +436,22 @@ button {
   transition: opacity 0.12s cubic-bezier(0, 0, 0.2, 1) !important;
 }
 
+/* 下拉菜单（select）进场：naive-ui 的 select 弹层与弹窗共用同名过渡类
+   （fade-in-scale-up-transition），默认是 scale(0.5) 弹窗式弹出；
+   这里单独覆盖成原生下拉的淡入 + 轻位移，弹窗动画保持不动 */
+.n-base-select-menu.n-select-menu.fade-in-scale-up-transition-enter-active,
+.n-base-select-menu.n-select-menu.fade-in-scale-up-transition-leave-active {
+  transition:
+    opacity 160ms ease-out,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.n-base-select-menu.n-select-menu.fade-in-scale-up-transition-enter-from,
+.n-base-select-menu.n-select-menu.fade-in-scale-up-transition-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 .apple-sidebar-indicator {
   position: absolute;
   left: 0;
@@ -347,5 +460,14 @@ button {
   height: 20px;
   border-radius: 0 3px 3px 0;
   background: #007aff;
-  transition: top 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    top 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 设置页标签栏下划线指示条：与侧边栏指示条同一动画曲线 */
+.settings-tab-indicator {
+  transition:
+    left 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }

@@ -4,8 +4,10 @@ use crate::auth::codex_oauth::{
     AuthStatus, CodexOAuthError, CodexOAuthState, DeviceCodeResponse, ManagedAccount,
 };
 use crate::error::{app_err, AppResult};
-use crate::models::{AppState, CodexAppStatus, ProfileDetail, ProfileSummary, Settings};
-use crate::services::{AppContext, DatabaseBackupInfo, ProfileConnectionResult};
+use crate::models::{
+    AppState, CodexAppStatus, DeepSeekBalanceInfo, ProfileDetail, ProfileSummary, Settings,
+};
+use crate::services::{AppContext, DatabaseBackupInfo, DeepSeekBalance, ProfileConnectionResult};
 
 #[tauri::command]
 pub fn get_state(state: State<'_, AppContext>) -> AppResult<AppState> {
@@ -27,9 +29,17 @@ pub fn add_builtin_profile(
     kind: String,
     base_url: Option<String>,
     api_key: Option<String>,
+    admin_url: Option<String>,
+    account_id: Option<String>,
     state: State<'_, AppContext>,
 ) -> AppResult<ProfileSummary> {
-    state.add_builtin_profile(&kind, base_url.as_deref(), api_key.as_deref())
+    state.add_builtin_profile(
+        &kind,
+        base_url.as_deref(),
+        api_key.as_deref(),
+        admin_url.as_deref(),
+        account_id.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -41,11 +51,47 @@ pub fn get_builtin_catalog(
 }
 
 #[tauri::command]
+// 参数个数受前端 IPC 调用约束（一次性提交 config/catalog/auth 三件套），不宜拆结构体
+#[allow(clippy::too_many_arguments)]
+pub fn add_custom_profile(
+    name: String,
+    config_text: String,
+    base_url: Option<String>,
+    api_key: Option<String>,
+    admin_url: Option<String>,
+    catalog_text: Option<String>,
+    auth_text: Option<String>,
+    state: State<'_, AppContext>,
+) -> AppResult<ProfileSummary> {
+    state.add_custom_profile(
+        &name,
+        &config_text,
+        base_url.as_deref(),
+        api_key.as_deref(),
+        admin_url.as_deref(),
+        catalog_text.as_deref(),
+        auth_text.as_deref(),
+    )
+}
+
+#[tauri::command]
 pub async fn test_profile_connection(
     id: String,
+    base_url: Option<String>,
+    api_key: Option<String>,
     state: State<'_, AppContext>,
 ) -> AppResult<ProfileConnectionResult> {
-    state.test_profile_connection(&id).await
+    state
+        .test_profile_connection(&id, base_url.as_deref(), api_key.as_deref())
+        .await
+}
+
+#[tauri::command]
+pub async fn get_deepseek_balance(
+    id: String,
+    state: State<'_, AppContext>,
+) -> AppResult<DeepSeekBalance> {
+    state.get_deepseek_balance(&id).await
 }
 
 #[tauri::command]
@@ -54,13 +100,15 @@ pub fn export_database(state: State<'_, AppContext>) -> AppResult<String> {
 }
 
 #[tauri::command]
-pub fn export_database_to(path: String, state: State<'_, AppContext>) -> AppResult<String> {
-    Ok(state.export_database_to(&path)?.display().to_string())
-}
-
-#[tauri::command]
-pub fn import_database(path: String, state: State<'_, AppContext>) -> AppResult<()> {
-    state.import_database(&path)
+pub async fn import_database(
+    path: String,
+    state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
+) -> AppResult<()> {
+    state.import_database(&path)?;
+    // 数据库整体替换后，内存中的订阅账号同步重载
+    oauth.0.read().await.reload_from_database()?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -69,13 +117,28 @@ pub fn list_database_backups(state: State<'_, AppContext>) -> AppResult<Vec<Data
 }
 
 #[tauri::command]
-pub fn restore_database(name: String, state: State<'_, AppContext>) -> AppResult<()> {
-    state.restore_database(&name)
+pub async fn restore_database(
+    name: String,
+    state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
+) -> AppResult<()> {
+    state.restore_database(&name)?;
+    oauth.0.read().await.reload_from_database()?;
+    Ok(())
 }
 
 #[tauri::command]
 pub fn delete_database_backup(name: String, state: State<'_, AppContext>) -> AppResult<()> {
     state.delete_database_backup(&name)
+}
+
+#[tauri::command]
+pub fn rename_database_backup(
+    old_name: String,
+    title: String,
+    state: State<'_, AppContext>,
+) -> AppResult<()> {
+    state.rename_database_backup(&old_name, &title)
 }
 
 #[tauri::command]
@@ -90,6 +153,33 @@ pub fn set_profile_icon(
     state: State<'_, AppContext>,
 ) -> AppResult<()> {
     state.set_profile_icon(&id, icon.as_deref())
+}
+
+#[tauri::command]
+pub fn set_profile_show_balance(
+    id: String,
+    enabled: bool,
+    state: State<'_, AppContext>,
+) -> AppResult<()> {
+    state.set_profile_show_balance(&id, enabled)
+}
+
+#[tauri::command]
+pub fn set_profile_balance(
+    id: String,
+    info: DeepSeekBalanceInfo,
+    state: State<'_, AppContext>,
+) -> AppResult<()> {
+    state.set_profile_balance(&id, &info)
+}
+
+#[tauri::command]
+pub fn set_profile_account(
+    id: String,
+    account_id: Option<String>,
+    state: State<'_, AppContext>,
+) -> AppResult<()> {
+    state.set_profile_account(&id, account_id.as_deref())
 }
 
 #[tauri::command]
@@ -142,8 +232,38 @@ pub fn delete_profile(id: String, state: State<'_, AppContext>) -> AppResult<()>
 }
 
 #[tauri::command]
-pub fn apply_profile(id: String, state: State<'_, AppContext>) -> AppResult<()> {
-    state.apply_profile(&id)
+pub async fn apply_profile(
+    id: String,
+    state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
+) -> Result<(), String> {
+    state
+        .apply_profile(&id)
+        .map_err(|error| error.to_string())?;
+    // 订阅供应商：有档案级 auth 覆盖时直接用它，否则优先绑定账号、未绑定用默认账号
+    let is_subscription = state
+        .is_subscription_profile(&id)
+        .map_err(|error| error.to_string())?;
+    let has_auth_override = state
+        .has_auth_override(&id)
+        .map_err(|error| error.to_string())?;
+    if is_subscription && !has_auth_override {
+        let manager = oauth.0.read().await;
+        let account_id = state
+            .bound_account_id(&id)
+            .map_err(|error| error.to_string())?
+            .or(manager.default_account_id().await);
+        if let Some(account_id) = account_id {
+            let content = manager
+                .codex_auth_json(&account_id)
+                .await
+                .map_err(|error| error.to_string())?;
+            state
+                .write_codex_auth_json(&content)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -232,6 +352,32 @@ pub async fn auth_remove_account(
         .write()
         .await
         .remove_account(&account_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn auth_set_default_account(
+    account_id: String,
+    state: State<'_, CodexOAuthState>,
+) -> Result<(), String> {
+    state
+        .0
+        .write()
+        .await
+        .set_default_account(&account_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn auth_apply_to_codex(
+    account_id: String,
+    state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
+) -> Result<(), String> {
+    state
+        .apply_oauth_auth(&oauth, &account_id)
         .await
         .map_err(|error| error.to_string())
 }

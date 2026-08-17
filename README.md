@@ -4,7 +4,7 @@
 
 <h1 align="center">CGSwitch</h1>
 
-<p align="center">轻量的 Windows / macOS 桌面工具，捕获、编辑并切换 OpenAI Codex 的模型配置档案。</p>
+<p align="center">一款管理 Codex / ChatGPT 桌面应用模型配置的 Windows/macOS 工具：一键切换模型，自动检测运行状态、一键重启应用，无需手动操作。</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License" /></a>
@@ -32,18 +32,18 @@
 
 ```text
 ~/.cgswitch/
+├── settings.json
 ├── cgswitch.db
-├── backups/
-│   ├── config/
-│   ├── database/
-│   └── codex-files/
-└── logs/
+└── backups/
+    ├── config/
+    ├── database/
+    └── codex-files/
 ```
 
 - Windows：`C:\Users\<user>\.cgswitch`
 - macOS：`/Users/<user>/.cgswitch`
 
-数据库保存档案、设置和切换事件。provider token 只保留在本机，不要把 `.cgswitch/`、日志或数据库提交到 Git。
+`settings.json` 保存应用设置（可直接编辑），数据库保存档案、账号和切换事件。provider token 只保留在本机，不要把 `.cgswitch/` 或数据库提交到 Git。
 
 ## 开发
 

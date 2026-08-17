@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   NConfigProvider,
   NDialogProvider,
@@ -8,21 +8,27 @@ import {
   darkTheme,
 } from "naive-ui";
 import ProfilesView from "./views/ProfilesView.vue";
-import SettingsView from "./views/SettingsView.vue";
 import { api, isTauri } from "./api";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useWindowActivation } from "./composables/useWindowActivation";
 import { themeOverrides } from "./theme";
 import type { AppState, Settings } from "./types";
-import version from "../VERSION?raw";
+
+// 设置页按需加载：进入设置时才拉取，不拖累启动入口
+const SettingsView = defineAsyncComponent(() => import("./views/SettingsView.vue"));
 
 type View = "profiles" | "settings";
 
 const view = ref<View>("profiles");
 const profilesNavReset = ref(0);
-const sidebarCollapsed = ref(false);
+// 侧边栏折叠状态：默认收缩，选择记忆在 localStorage（WebView2 应用专属存储），重启后还原
+const sidebarCollapsed = ref(localStorage.getItem("cgswitch.sidebar-collapsed") !== "0");
 const sidebarFlyoutArmed = ref(true);
 const profilesNavBtn = ref<HTMLElement | null>(null);
 const settingsNavBtn = ref<HTMLElement | null>(null);
+const sidebarNavRef = ref<HTMLElement | null>(null);
 const indicatorTop = ref(8);
+const indicatorLeft = ref(0);
 const state = ref<AppState | null>(null);
 const loadError = ref("");
 const systemDark = ref(window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -66,19 +72,40 @@ async function syncWindowTitleBarTheme(dark: boolean) {
   await api.setWindowTheme(dark);
 }
 
+const appWindow = isTauri ? getCurrentWindow() : null;
+
+function windowMinimize() {
+  void appWindow?.minimize();
+}
+
+function windowToggleMaximize() {
+  void appWindow?.toggleMaximize();
+}
+
+function windowClose() {
+  void appWindow?.close();
+}
+
 function updateSidebarIndicator() {
   const target = view.value === "profiles" ? profilesNavBtn.value : settingsNavBtn.value;
-  if (target) indicatorTop.value = target.offsetTop + 8;
+  const nav = sidebarNavRef.value;
+  if (target && nav) {
+    indicatorTop.value = target.getBoundingClientRect().top - nav.getBoundingClientRect().top + 8;
+    // 指示条贴着导航按钮左边缘
+    indicatorLeft.value = target.offsetLeft;
+  }
 }
 
 watch(view, updateSidebarIndicator);
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value;
+  localStorage.setItem("cgswitch.sidebar-collapsed", sidebarCollapsed.value ? "1" : "0");
   if (sidebarCollapsed.value) sidebarFlyoutArmed.value = false;
+  window.setTimeout(updateSidebarIndicator, 360);
 }
 
-// 点击侧边栏“配置档案”始终回到首页列表（退出编辑等子视图）
+// 点击侧边栏“供应商配置”始终回到首页列表（退出编辑等子视图）
 function goProfiles() {
   profilesNavReset.value++;
   view.value = "profiles";
@@ -133,19 +160,29 @@ watch(
 onMounted(async () => {
   media.addEventListener("change", mediaListener);
   updateSidebarIndicator();
+  const main = document.querySelector("main");
+  if (main) {
+    document.documentElement.style.setProperty(
+      "--scrollbar-size",
+      `${main.offsetWidth - main.clientWidth}px`,
+    );
+  }
   await refresh();
   syncCodexPolling();
-  document.addEventListener("visibilitychange", syncCodexPolling);
-  window.addEventListener("blur", stopCodexPolling);
-  window.addEventListener("focus", syncCodexPolling);
 });
 
 onBeforeUnmount(() => {
   stopCodexPolling();
-  document.removeEventListener("visibilitychange", syncCodexPolling);
-  window.removeEventListener("blur", stopCodexPolling);
-  window.removeEventListener("focus", syncCodexPolling);
   media.removeEventListener("change", mediaListener);
+});
+
+// 窗口激活（含从托盘唤出）即同步一次 live → 数据库/卡片；失焦/隐藏时暂停 Codex 状态轮询
+useWindowActivation({
+  onActive: () => {
+    void refresh();
+    syncCodexPolling();
+  },
+  onInactive: () => stopCodexPolling(),
 });
 </script>
 
@@ -154,37 +191,66 @@ onBeforeUnmount(() => {
     <n-dialog-provider>
       <n-message-provider>
         <n-layout class="h-full! rounded-none! bg-transparent!">
-          <div class="flex h-screen">
-            <aside class="apple-sidebar relative h-full shrink-0" :class="isSidebarCollapsed ? ['w-[60px]', 'apple-sidebar--collapsed'] : 'w-[160px]'">
+          <div class="flex h-screen flex-col">
+            <div class="flex h-8 shrink-0 items-center bg-[var(--app-bg)]">
+              <div data-tauri-drag-region class="h-full shrink-0 bg-[var(--sidebar-bg)] transition-[width] duration-[360ms] ease-[cubic-bezier(0.22,1,0.36,1)]" :class="isSidebarCollapsed ? 'w-12' : 'w-[144px]'" />
+              <div data-tauri-drag-region class="min-w-0 flex-1 self-stretch" />
+              <div class="flex h-full items-center">
+                <button type="button" class="grid h-8 w-10 place-items-center text-[var(--text-secondary)] transition-colors hover:bg-black/6 dark:hover:bg-white/10" aria-label="最小化" @click="windowMinimize">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                    <path d="M5 12h14" />
+                  </svg>
+                </button>
+                <button type="button" class="grid h-8 w-10 place-items-center text-[var(--text-secondary)] transition-colors hover:bg-black/6 dark:hover:bg-white/10" aria-label="最大化" @click="windowToggleMaximize">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                    <rect x="5.5" y="5.5" width="13" height="13" rx="1" />
+                  </svg>
+                </button>
+                <button type="button" class="grid h-8 w-10 place-items-center text-[var(--text-secondary)] transition-colors hover:bg-[#e81123] hover:text-white" aria-label="关闭" @click="windowClose">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="flex min-h-0 flex-1">
+            <aside class="apple-sidebar relative h-full shrink-0" :class="isSidebarCollapsed ? ['w-12', 'apple-sidebar--collapsed'] : 'w-[144px]'">
               <div
-                class="apple-sidebar-brand mx-3 mt-3 flex items-center gap-3"
+                class="apple-sidebar-brand mt-3 flex h-9 cursor-pointer items-center"
+                :class="isSidebarCollapsed ? 'justify-center' : 'mx-3'"
                 role="button"
                 tabindex="0"
+                aria-label="CGSwitch"
                 @click="toggleSidebar"
                 @keyup.enter="toggleSidebar"
               >
-                <img src="/logo.png" alt="CGSwitch" class="h-9 w-9 shrink-0" />
-                <div class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">
-                  <div class="text-sm font-bold">CGSwitch</div>
-                  <div class="app-version" :aria-label="`版本 ${version.trim()}`">
-                    <span>v{{ version.trim() }}</span>
-                  </div>
-                </div>
+                <span
+                  v-if="isSidebarCollapsed"
+                  class="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[var(--text-secondary)] transition-colors hover:bg-black/5 hover:text-[#007aff] dark:hover:bg-white/8"
+                  aria-hidden="true"
+                >
+                  <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <path d="M9 4v16" />
+                  </svg>
+                </span>
+                <span v-else class="apple-sidebar-label apple-wordmark whitespace-nowrap">CGSwitch</span>
               </div>
 
-              <nav class="relative mx-2 mt-6 space-y-1">
-                <span class="apple-sidebar-indicator" :style="{ top: `${indicatorTop}px` }" aria-hidden="true" />
-                <button ref="profilesNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'profiles' ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="配置档案" @click="goProfiles" @mouseenter="sidebarFlyoutArmed = true">
-                  <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                    <rect x="4.5" y="4.5" width="15" height="15" rx="3" />
-                    <path d="M8.5 9h7M8.5 12h7M8.5 15h4" stroke-linecap="round" />
+              <nav ref="sidebarNavRef" class="relative mx-1.5 mt-6 space-y-1">
+                <span class="apple-sidebar-indicator" :style="{ top: `${indicatorTop}px`, left: `${indicatorLeft}px` }" aria-hidden="true" />
+                <button ref="profilesNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'profiles' ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="供应商配置" @click="goProfiles" @mouseenter="sidebarFlyoutArmed = true">
+                  <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="3" width="20" height="7" rx="2" />
+                    <rect x="2" y="14" width="20" height="7" rx="2" />
+                    <path d="M6 6.5h.01M6 17.5h.01" />
                   </svg>
-                  <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">配置档案</span>
-                  <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">配置档案</span>
+                  <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">供应商配置</span>
+                  <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">供应商配置</span>
                 </button>
               </nav>
 
-              <div class="absolute inset-x-2 bottom-4">
+              <div class="absolute inset-x-1.5 bottom-4">
                 <button ref="settingsNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'settings' ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="设置" @click="view = 'settings'" @mouseenter="sidebarFlyoutArmed = true">
                   <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                     <circle cx="12" cy="12" r="3" />
@@ -196,10 +262,10 @@ onBeforeUnmount(() => {
               </div>
             </aside>
 
-            <main class="min-w-0 flex-1 overflow-auto bg-[var(--app-bg)] px-8 py-7">
+            <main class="min-w-0 flex-1 overflow-auto bg-[var(--app-bg)] pt-4 pb-7">
               <template v-if="state">
                 <ProfilesView v-if="view === 'profiles'" :key="profilesNavReset" :state="state" @refresh="refresh" />
-                <SettingsView v-else :state="state" @preview-theme="previewTheme" @refresh="refresh" @saved="saveSettings" />
+                <SettingsView v-else :state="state" @preview-theme="previewTheme" @refresh="refresh" @saved="saveSettings" @home="goProfiles" />
               </template>
               <div v-else class="startup-skeleton" aria-busy="true">
                 <div class="startup-skeleton__title" />
@@ -210,6 +276,7 @@ onBeforeUnmount(() => {
                 <p v-if="loadError" class="muted mt-4 text-sm">{{ loadError }}</p>
               </div>
             </main>
+            </div>
           </div>
         </n-layout>
       </n-message-provider>
