@@ -313,7 +313,7 @@ async function openPath(item: PathInfo) {
       </button>
     </div>
 
-    <div ref="tabBar" class="relative mt-[var(--gap-page)] flex items-center gap-1 border-b border-[var(--panel-border)]" aria-label="设置分区">
+    <div ref="tabBar" class="relative mt-2 flex items-center gap-1 border-b border-[var(--panel-border)]" aria-label="设置分区">
       <span
         class="settings-tab-indicator absolute -bottom-px h-0.5 rounded-full bg-accent"
         :style="{ left: indicatorLeft, width: indicatorWidth }"

@@ -11,7 +11,7 @@ use crate::database::{profile_summary, Database};
 use crate::error::{app_err, AppResult};
 use crate::fsutil::{atomic_write, backup_file, prune_backups};
 use crate::models::{
-    AppState, CodexAppStatus, DeepSeekBalanceInfo, PathInfo, ProfileDetail, ProfileKind,
+    AppState, CodexAppStatus, PathInfo, ProfileBalanceInfo, ProfileDetail, ProfileKind,
     ProfilePayload, ProfileSummary, Settings,
 };
 use crate::paths::{now_ms, AppPaths};
@@ -31,18 +31,54 @@ pub struct ProfileConnectionResult {
     pub error: Option<String>,
 }
 
-/// DeepSeek 余额查询结果（接口文档：https://api-docs.deepseek.com/zh-cn/api/get-user-balance）
+/// 供应商余额/用量查询结果
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct DeepSeekBalance {
+pub struct ProfileBalance {
     pub is_available: bool,
-    pub balance_infos: Vec<DeepSeekBalanceInfo>,
+    pub balance_infos: Vec<ProfileBalanceInfo>,
     pub latency_ms: Option<u128>,
 }
 
+/// DeepSeek 余额接口响应（接口文档：https://api-docs.deepseek.com/zh-cn/api/get-user-balance）
 #[derive(Debug, serde::Deserialize)]
 struct DeepSeekBalanceResponse {
     is_available: bool,
-    balance_infos: Vec<DeepSeekBalanceInfo>,
+    balance_infos: Vec<ProfileBalanceInfo>,
+}
+
+/// MiniMax Coding Plan 用量接口响应（国内版：api.minimaxi.com/v1/api/openplatform/coding_plan/remains）
+#[derive(Debug, serde::Deserialize)]
+struct MiniMaxRemainsResponse {
+    #[serde(default)]
+    base_resp: MiniMaxBaseResp,
+    #[serde(default)]
+    model_remains: Vec<MiniMaxModelRemains>,
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+struct MiniMaxBaseResp {
+    #[serde(default)]
+    status_code: Option<i64>,
+    #[serde(default)]
+    status_msg: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct MiniMaxModelRemains {
+    #[serde(default)]
+    model_name: String,
+    /// 剩余百分比（0-100），接口语义为“剩余”，卡片显示“用量”时换算成已用。
+    #[serde(default)]
+    current_interval_remaining_percent: Option<f64>,
+    /// 7 天窗口剩余百分比（0-100）。
+    #[serde(default)]
+    current_weekly_remaining_percent: Option<f64>,
+    /// 5 小时窗口重置倒计时（毫秒）。
+    #[serde(default)]
+    remains_time: Option<i64>,
+    /// 7 天窗口重置倒计时（毫秒）。
+    #[serde(default)]
+    weekly_remains_time: Option<i64>,
 }
 
 /// 数据库备份文件信息
@@ -167,6 +203,168 @@ fn connection_error_from_body(value: &serde_json::Value) -> Option<String> {
         }
     }
     None
+}
+
+/// 余额/用量请求公共骨架：统一处理 401/403、错误提取与网络错误；
+/// 各家只提供 URL 和成功响应的解析。
+async fn query_balance_endpoint(
+    client: &reqwest::Client,
+    url: &str,
+    api_key: &str,
+    start: std::time::Instant,
+    label: &str,
+    parse: impl FnOnce(String, Option<u128>) -> AppResult<ProfileBalance>,
+) -> AppResult<ProfileBalance> {
+    let response = client.get(url).bearer_auth(api_key).send().await;
+    match response {
+        Ok(response) => {
+            let status = response.status();
+            let latency_ms = Some(start.elapsed().as_millis());
+            if status.is_success() {
+                let body = response
+                    .text()
+                    .await
+                    .map_err(|error| app_err!("{label}接口响应读取失败: {error}"))?;
+                return parse(body, latency_ms);
+            }
+            if status == reqwest::StatusCode::UNAUTHORIZED
+                || status == reqwest::StatusCode::FORBIDDEN
+            {
+                return Err(app_err!("API 密钥无效或无权查询{label}（HTTP {status}）"));
+            }
+            let message = response
+                .json::<serde_json::Value>()
+                .await
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("error")
+                        .and_then(|error| error.get("message"))
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| format!("接口返回 HTTP {status}"));
+            Err(app_err!("{label}查询失败：{message}"))
+        }
+        Err(error) => {
+            let error_message = reqwest_error_message(&error);
+            Err(app_err!("{label}查询失败：{error_message}"))
+        }
+    }
+}
+
+/// DeepSeek 余额查询：GET {base}/user/balance。
+async fn query_deepseek_balance(
+    client: &reqwest::Client,
+    base: &str,
+    api_key: &str,
+    start: std::time::Instant,
+) -> AppResult<ProfileBalance> {
+    let url = format!("{}/user/balance", base.trim_end_matches('/'));
+    query_balance_endpoint(
+        client,
+        &url,
+        api_key,
+        start,
+        "余额",
+        |body, latency_ms| {
+            let parsed = serde_json::from_str::<DeepSeekBalanceResponse>(&body)
+                .map_err(|error| app_err!("余额接口响应解析失败: {error}"))?;
+            Ok(ProfileBalance {
+                is_available: parsed.is_available,
+                balance_infos: parsed.balance_infos,
+                latency_ms,
+            })
+        },
+    )
+    .await
+}
+
+/// MiniMax Coding Plan 用量查询：GET {base}/api/openplatform/coding_plan/remains。
+/// 接口形态以用户实测可用的 statusline.ps1 为准（国内版 Coding Plan）。
+async fn query_minimax_balance(
+    client: &reqwest::Client,
+    base: &str,
+    api_key: &str,
+    start: std::time::Instant,
+) -> AppResult<ProfileBalance> {
+    let url = format!(
+        "{}/api/openplatform/coding_plan/remains",
+        base.trim_end_matches('/')
+    );
+    query_balance_endpoint(
+        client,
+        &url,
+        api_key,
+        start,
+        "用量",
+        |body, latency_ms| {
+            let parsed = serde_json::from_str::<MiniMaxRemainsResponse>(&body)
+                .map_err(|error| app_err!("用量接口响应解析失败: {error}"))?;
+            let code = parsed.base_resp.status_code.unwrap_or(-1);
+            if code != 0 {
+                let message = parsed.base_resp.status_msg.unwrap_or_default();
+                return Err(app_err!("用量查询失败：{message}"));
+            }
+            let entry = parsed
+                .model_remains
+                .iter()
+                .find(|item| item.model_name == "general")
+                .or_else(|| parsed.model_remains.first())
+                .ok_or_else(|| app_err!("用量查询失败：接口未返回用量数据"))?;
+            let usage_percent = used_percent(entry.current_interval_remaining_percent)
+                .ok_or_else(|| app_err!("用量查询失败：接口未返回用量数据"))?;
+            Ok(ProfileBalance {
+                is_available: true,
+                balance_infos: vec![ProfileBalanceInfo {
+                    currency: String::new(),
+                    total_balance: String::new(),
+                    granted_balance: String::new(),
+                    topped_up_balance: String::new(),
+                    usage_percent: Some(usage_percent),
+                    usage_reset: entry.remains_time.and_then(|ms| format_reset(ms, false)),
+                    weekly_usage_percent: used_percent(entry.current_weekly_remaining_percent),
+                    weekly_reset: entry
+                        .weekly_remains_time
+                        .and_then(|ms| format_reset(ms, true)),
+                }],
+                latency_ms,
+            })
+        },
+    )
+    .await
+}
+
+/// 接口给的是“剩余”百分比，卡片显示“用量”= 100 - 剩余。
+fn used_percent(remaining: Option<f64>) -> Option<u32> {
+    let remaining = remaining?;
+    let used = 100.0 - remaining;
+    Some(used.clamp(0.0, 100.0).round() as u32)
+}
+
+/// 重置倒计时格式：with_days=true 支持 d/h/m（7 天窗口），否则 h/m（5 小时窗口）；不足 1 分钟不显示。
+fn format_reset(ms: i64, with_days: bool) -> Option<String> {
+    if ms <= 60_000 {
+        return None;
+    }
+    let days = if with_days { ms / 86_400_000 } else { 0 };
+    let hours = (ms % 86_400_000) / 3_600_000;
+    let minutes = (ms % 3_600_000) / 60_000;
+    Some(if days > 0 {
+        if hours > 0 {
+            format!("{days}d{hours}h")
+        } else {
+            format!("{days}d")
+        }
+    } else if hours > 0 {
+        if minutes > 0 {
+            format!("{hours}h{minutes}m")
+        } else {
+            format!("{hours}h")
+        }
+    } else {
+        format!("{minutes}m")
+    })
 }
 
 #[derive(Debug)]
@@ -522,12 +720,14 @@ impl AppContext {
         }
     }
 
-    /// 按供应商查询 DeepSeek 余额：使用该供应商自己保存的 API 密钥，以配置为单位查询。
-    pub async fn get_deepseek_balance(&self, id: &str) -> AppResult<DeepSeekBalance> {
+    /// 按供应商查询余额/用量：DeepSeek 查账户余额，MiniMax 查 Token Plan 剩余用量。
+    /// 使用该供应商自己保存的 API 密钥，以配置为单位查询。
+    pub async fn get_profile_balance(&self, id: &str) -> AppResult<ProfileBalance> {
         let stored = self.database.profile(id)?;
         let payload = &stored.payload;
-        if payload.provider_id.as_deref() != Some("deepseek") {
-            return Err(app_err!("该供应商不是 DeepSeek，无法查询余额"));
+        let provider = payload.provider_id.as_deref().unwrap_or_default();
+        if provider != "deepseek" && provider != "minimax" {
+            return Err(app_err!("该供应商不支持余额/用量查询"));
         }
         let body = payload
             .provider_body
@@ -535,56 +735,63 @@ impl AppContext {
             .ok_or_else(|| app_err!("该供应商缺少配置数据"))?;
         let detail = parse_provider_detail(body)?;
         let api_key = stored_provider_api_key(payload)
-            .ok_or_else(|| app_err!("该供应商没有配置 API 密钥，无法查询余额"))?;
+            .ok_or_else(|| app_err!("该供应商没有配置 API 密钥，无法查询余额/用量"))?;
+        let client = http_client()?;
+        let start = std::time::Instant::now();
         let base = detail
             .base_url
             .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or("https://api.deepseek.com");
-        let balance_url = format!("{}/user/balance", base.trim_end_matches('/'));
-        let client = http_client()?;
-
-        let start = std::time::Instant::now();
-        let response = client.get(&balance_url).bearer_auth(&api_key).send().await;
-        match response {
-            Ok(response) => {
-                let status = response.status();
-                let latency_ms = Some(start.elapsed().as_millis());
-                if status.is_success() {
-                    let parsed = response
-                        .json::<DeepSeekBalanceResponse>()
-                        .await
-                        .map_err(|error| app_err!("余额接口响应解析失败: {error}"))?;
-                    Ok(DeepSeekBalance {
-                        is_available: parsed.is_available,
-                        balance_infos: parsed.balance_infos,
-                        latency_ms,
-                    })
-                } else if status == reqwest::StatusCode::UNAUTHORIZED
-                    || status == reqwest::StatusCode::FORBIDDEN
-                {
-                    Err(app_err!("API 密钥无效或无权查询余额（HTTP {status}）"))
-                } else {
-                    let message = response
-                        .json::<serde_json::Value>()
-                        .await
-                        .ok()
-                        .and_then(|value| {
-                            value
-                                .get("error")
-                                .and_then(|error| error.get("message"))
-                                .and_then(serde_json::Value::as_str)
-                                .map(str::to_string)
-                        })
-                        .unwrap_or_else(|| format!("接口返回 HTTP {status}"));
-                    Err(app_err!("余额查询失败：{message}"))
-                }
+            .filter(|value| !value.trim().is_empty());
+        match provider {
+            "deepseek" => {
+                query_deepseek_balance(
+                    &client,
+                    base.unwrap_or("https://api.deepseek.com"),
+                    &api_key,
+                    start,
+                )
+                .await
             }
-            Err(error) => {
-                let error_message = reqwest_error_message(&error);
-                Err(app_err!("余额查询失败：{error_message}"))
+            "minimax" => {
+                query_minimax_balance(
+                    &client,
+                    base.unwrap_or("https://api.minimaxi.com/v1"),
+                    &api_key,
+                    start,
+                )
+                .await
             }
+            _ => unreachable!(),
         }
+    }
+
+    /// 供应商级余额缓存：上次成功查询结果写入 ~/.cgswitch/balance-cache.json，
+    /// 保证卡片首次渲染/切换视图时数字就在，不出现“消失→出现”的闪烁。
+    pub fn set_profile_balance(
+        &self,
+        profile_id: &str,
+        info: &ProfileBalanceInfo,
+    ) -> AppResult<()> {
+        let mut cache = self.load_balance_cache();
+        cache.insert(profile_id.to_string(), info.clone());
+        self.save_balance_cache(&cache)
+    }
+
+    fn balance_cache_path(&self) -> PathBuf {
+        self.paths.root.join("balance-cache.json")
+    }
+
+    fn load_balance_cache(&self) -> BTreeMap<String, ProfileBalanceInfo> {
+        std::fs::read_to_string(self.balance_cache_path())
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    fn save_balance_cache(&self, cache: &BTreeMap<String, ProfileBalanceInfo>) -> AppResult<()> {
+        let text = serde_json::to_string(cache)
+            .map_err(|error| app_err!("余额缓存序列化失败: {error}"))?;
+        atomic_write(&self.balance_cache_path(), text.as_bytes())
     }
 
     pub fn export_database(&self) -> AppResult<PathBuf> {
@@ -752,35 +959,6 @@ impl AppContext {
         self.database
             .update_profile(id, &stored.name, &payload, &now_ms().to_string())
             .map(|_| ())
-    }
-
-    /// 供应商级余额缓存：上次成功查询结果写入 ~/.cgswitch/balance-cache.json，
-    /// 保证卡片首次渲染/切换视图时数字就在，不出现“消失→出现”的闪烁。
-    pub fn set_profile_balance(
-        &self,
-        profile_id: &str,
-        info: &DeepSeekBalanceInfo,
-    ) -> AppResult<()> {
-        let mut cache = self.load_balance_cache();
-        cache.insert(profile_id.to_string(), info.clone());
-        self.save_balance_cache(&cache)
-    }
-
-    fn balance_cache_path(&self) -> PathBuf {
-        self.paths.root.join("balance-cache.json")
-    }
-
-    fn load_balance_cache(&self) -> BTreeMap<String, DeepSeekBalanceInfo> {
-        std::fs::read_to_string(self.balance_cache_path())
-            .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default()
-    }
-
-    fn save_balance_cache(&self, cache: &BTreeMap<String, DeepSeekBalanceInfo>) -> AppResult<()> {
-        let text = serde_json::to_string(cache)
-            .map_err(|error| app_err!("余额缓存序列化失败: {error}"))?;
-        atomic_write(&self.balance_cache_path(), text.as_bytes())
     }
 
     /// 完整复制供应商（配置、关联文件、图标、账号绑定），新供应商名加“副本”后缀，同名时追加序号。
@@ -2041,7 +2219,7 @@ experimental_bearer_token = "old-key"
     }
 
     #[tokio::test]
-    async fn deepseek_balance_rejects_non_deepseek_or_keyless() {
+    async fn balance_rejects_unsupported_or_keyless() {
         let home = tempfile::tempdir().unwrap();
         let paths = crate::paths::from_home(home.path()).unwrap();
         paths.ensure().unwrap();
@@ -2049,19 +2227,80 @@ experimental_bearer_token = "old-key"
         std::fs::write(paths.codex_config(), "model = \"glm-5.3\"\n").unwrap();
         let context = AppContext::new(paths).unwrap();
 
-        // 非 DeepSeek 供应商拒绝
-        let minimax = context
-            .add_builtin_profile("minimax", None, Some("mm-key"), None, None)
+        // 不支持余额/用量查询的供应商拒绝
+        let zhipu = context
+            .add_builtin_profile("zhipu", None, Some("zai-key"), None, None)
             .unwrap();
-        let error = context.get_deepseek_balance(&minimax.id).await.unwrap_err();
-        assert!(error.0.contains("该供应商不是 DeepSeek"));
+        let error = context.get_profile_balance(&zhipu.id).await.unwrap_err();
+        assert!(error.0.contains("该供应商不支持余额/用量查询"));
 
-        // DeepSeek 但只有占位符密钥（未配置真实密钥）拒绝
+        // MiniMax 但只有占位符密钥（未配置真实密钥）拒绝
         let keyless = context
-            .add_builtin_profile("deepseek", None, None, None, None)
+            .add_builtin_profile("minimax", None, None, None, None)
             .unwrap();
-        let error = context.get_deepseek_balance(&keyless.id).await.unwrap_err();
+        let error = context.get_profile_balance(&keyless.id).await.unwrap_err();
         assert!(error.0.contains("没有配置 API 密钥"));
+    }
+
+    #[test]
+    fn minimax_remains_converts_remaining_to_used_percent() {
+        // statusline.ps1 实测形态：general 条目，remaining_percent 是“剩余”
+        let entry = MiniMaxModelRemains {
+            model_name: "general".into(),
+            current_interval_remaining_percent: Some(85.0),
+            current_weekly_remaining_percent: Some(96.0),
+            remains_time: Some(8_580_000),          // 2h23m
+            weekly_remains_time: Some(507_600_000), // 5d21h
+        };
+        assert_eq!(
+            used_percent(entry.current_interval_remaining_percent),
+            Some(15)
+        );
+        assert_eq!(
+            used_percent(entry.current_weekly_remaining_percent),
+            Some(4)
+        );
+        assert_eq!(
+            entry
+                .remains_time
+                .and_then(|ms| format_reset(ms, false))
+                .as_deref(),
+            Some("2h23m")
+        );
+        assert_eq!(
+            entry
+                .weekly_remains_time
+                .and_then(|ms| format_reset(ms, true))
+                .as_deref(),
+            Some("5d21h")
+        );
+
+        // 剩余 100% → 用量 0
+        let entry = MiniMaxModelRemains {
+            model_name: "general".into(),
+            current_interval_remaining_percent: Some(100.0),
+            current_weekly_remaining_percent: Some(100.0),
+            remains_time: Some(60_000),
+            weekly_remains_time: None,
+        };
+        assert_eq!(
+            used_percent(entry.current_interval_remaining_percent),
+            Some(0)
+        );
+        assert_eq!(
+            entry.remains_time.and_then(|ms| format_reset(ms, false)),
+            None
+        );
+
+        // 无百分比数据时返回 None（卡片显示“查询失败”而不是假数字）
+        let empty = MiniMaxModelRemains {
+            model_name: "general".into(),
+            current_interval_remaining_percent: None,
+            current_weekly_remaining_percent: None,
+            remains_time: None,
+            weekly_remains_time: None,
+        };
+        assert_eq!(used_percent(empty.current_interval_remaining_percent), None);
     }
 
     #[test]

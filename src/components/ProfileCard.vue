@@ -5,12 +5,12 @@ import LoadingSpinner from "./LoadingSpinner.vue";
 import ProfileIconTile from "./ProfileIconTile.vue";
 import TrashIcon from "./TrashIcon.vue";
 import { api } from "../api";
-import { balanceQueryProviders } from "../presets";
+import { balanceChipClass, balanceQueryProviders } from "../presets";
 import { useWindowActivation } from "../composables/useWindowActivation";
-import type { DeepSeekBalanceInfo, ProfileSummary } from "../types";
+import type { ProfileBalanceInfo, ProfileSummary } from "../types";
 
 // 模块级缓存：切换视图/窗口时数字立即可见，不等网络
-const balanceInfoCache = new Map<string, DeepSeekBalanceInfo>();
+const balanceInfoCache = new Map<string, ProfileBalanceInfo>();
 
 const props = defineProps<{
   profile: ProfileSummary;
@@ -19,7 +19,7 @@ const props = defineProps<{
   subscriptionAuthed?: boolean;
   subscriptionAccount?: string | null;
   boundAccount?: string | null;
-  balanceCache?: Record<string, DeepSeekBalanceInfo>;
+  balanceCache?: Record<string, ProfileBalanceInfo>;
 }>();
 
 const emit = defineEmits<{
@@ -34,7 +34,7 @@ const message = useMessage();
 const testing = ref(false);
 const connectionState = ref<"unknown" | "ok" | "fail">("unknown");
 // 最近一次成功拿到的余额数字；拿到过就常驻，刷新失败/返回不可用都不清空
-const balanceInfo = ref<DeepSeekBalanceInfo | null>(null);
+const balanceInfo = ref<ProfileBalanceInfo | null>(null);
 const balanceFetching = ref(false);
 const balanceError = ref("");
 
@@ -42,16 +42,12 @@ const balanceError = ref("");
 const supportsBalance = computed(() =>
   balanceQueryProviders.has(props.profile.provider ?? ""),
 );
-const balanceText = computed(() => {
-  if (balanceInfo.value) {
-    const symbol = balanceInfo.value.currency === "USD" ? "$" : "¥";
-    return `余额 ${symbol}${balanceInfo.value.total_balance}`;
-  }
-  // 规矩：像模型/供应商胶囊一样始终有内容；失败文案只在获取失败时显示
-  return balanceError.value ? "查询失败" : "余额 --";
-});
 const balanceTitle = computed(() => {
-  if (!balanceError.value) return "余额，点击刷新";
+  if (!balanceError.value) {
+    return balanceInfo.value?.usage_percent != null
+      ? "用量，点击刷新"
+      : "余额，点击刷新";
+  }
   return balanceInfo.value
     ? `余额刷新失败：${balanceError.value}（显示上次余额，点击重试）`
     : `余额查询失败：${balanceError.value}（点击重试）`;
@@ -68,7 +64,7 @@ async function fetchBalance() {
   }
   balanceFetching.value = true;
   try {
-    const result = await api.getDeepseekBalance(props.profile.id);
+    const result = await api.getProfileBalance(props.profile.id);
     balanceError.value = "";
     const info = result.balance_infos[0];
     if (info) {
@@ -201,15 +197,14 @@ async function testConnection() {
             订阅账号：{{ boundAccount }}
           </n-tag>
         </div>
-        <div class="muted mt-1 flex flex-wrap items-center gap-1 text-[11px]">
-          <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.model ?? "未设置" }}</span>
-          <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.provider ?? "官方" }}</span>
-          <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.reasoning_effort ?? "默认" }}</span>
+        <div class="muted mt-1 flex flex-wrap items-center gap-1">
+          <span class="apple-chip">{{ profile.model ?? "未设置" }}</span>
+          <span v-if="profile.provider" class="apple-chip">{{ profile.provider }}</span>
+          <span class="apple-chip">{{ profile.reasoning_effort ?? "默认" }}</span>
           <button
             v-if="supportsBalance && profile.show_balance"
             type="button"
-            class="flex items-center gap-1 rounded-full border border-current/15 bg-black/4 px-1.5 py-px leading-none dark:bg-white/8"
-            :class="balanceError && !balanceInfo ? 'text-[#ff3b30]/80' : 'text-accent'"
+            class="apple-chip"
             :title="balanceTitle"
             :aria-label="'余额'"
             @click.stop="fetchBalance"
@@ -218,7 +213,25 @@ async function testConnection() {
               <rect x="2" y="6" width="20" height="12" rx="2" />
               <path d="M2 10h20" />
             </svg>
-            {{ balanceText }}
+            <template v-if="balanceInfo?.usage_percent != null">
+              <span>5小时:</span>
+              <span :class="balanceChipClass(balanceInfo.usage_percent, false)">{{ balanceInfo.usage_percent }}%</span>
+              <span v-if="balanceInfo.usage_reset">{{ balanceInfo.usage_reset }}</span>
+              <template v-if="balanceInfo.weekly_usage_percent != null">
+                <span>· 7天:</span>
+                <span :class="balanceChipClass(balanceInfo.weekly_usage_percent, false)">{{ balanceInfo.weekly_usage_percent }}%</span>
+                <span v-if="balanceInfo.weekly_reset">{{ balanceInfo.weekly_reset }}</span>
+              </template>
+            </template>
+            <template v-else-if="balanceInfo">
+              <span>余额:</span>
+              <span class="chip-success">
+                {{ (balanceInfo.currency === "USD" ? "$" : "¥") + balanceInfo.total_balance + "  " + balanceInfo.currency }}
+              </span>
+            </template>
+            <span v-else :class="balanceError ? 'chip-danger' : ''">
+              {{ balanceError ? "查询失败" : "余额 --" }}
+            </span>
           </button>
           <button
             v-if="profile.admin_url"

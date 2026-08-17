@@ -22,7 +22,7 @@
   --scrollbar-thumb: color-mix(in srgb, var(--text-secondary) 25%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--text-secondary) 40%, transparent);
   /* 全局间距参数：页头/标题到首个内容区块，以及相邻卡片/分区之间 */
-  --gap-page: 1.5rem;
+  --gap-page: 1.125rem;
   --gap-section: 1rem;
   /* 卡片内边距（上下左右统一） */
   --gap-card: 1.25rem;
@@ -103,6 +103,41 @@ body {
   padding: 3px 8px;
   border-radius: 999px;
   background: var(--selection-bg);
+}
+
+/* 卡片第二行信息胶囊（模型/供应商/推理档位/余额用量）——全局统一，
+   字号与内边距只在这里改，禁止在组件里单独调某颗胶囊的尺寸 */
+.apple-chip {
+  align-items: center;
+  background: rgb(0 0 0 / 0.04);
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 4px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+:root.dark .apple-chip {
+  background: rgb(255 255 255 / 0.08);
+}
+
+/* 余额/用量胶囊数据变色（全局统一；cc-switch 同款阈值，后续供应商直接复用）。
+   变色数据同时加粗，标签/倒计时保持默认字重 */
+.chip-success {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.chip-warn {
+  color: #ff9500;
+  font-weight: 600;
+}
+
+.chip-danger {
+  color: #ff3b30;
+  font-weight: 600;
 }
 
 .mono {
@@ -310,7 +345,8 @@ body.drag-active * {
   position: absolute;
   left: calc(100% + 0.6rem);
   top: 50%;
-  z-index: 10;
+  /* 高于页面 sticky 标题栏（z-10），悬停浮标不被 main 内容盖住 */
+  z-index: 30;
   border-radius: 8px;
   background: var(--panel-bg);
   box-shadow:

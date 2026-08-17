@@ -5,9 +5,9 @@ use crate::auth::codex_oauth::{
 };
 use crate::error::{app_err, AppResult};
 use crate::models::{
-    AppState, CodexAppStatus, DeepSeekBalanceInfo, ProfileDetail, ProfileSummary, Settings,
+    AppState, CodexAppStatus, ProfileBalanceInfo, ProfileDetail, ProfileSummary, Settings,
 };
-use crate::services::{AppContext, DatabaseBackupInfo, DeepSeekBalance, ProfileConnectionResult};
+use crate::services::{AppContext, DatabaseBackupInfo, ProfileBalance, ProfileConnectionResult};
 
 #[tauri::command]
 pub fn get_state(state: State<'_, AppContext>) -> AppResult<AppState> {
@@ -87,11 +87,11 @@ pub async fn test_profile_connection(
 }
 
 #[tauri::command]
-pub async fn get_deepseek_balance(
+pub async fn get_profile_balance(
     id: String,
     state: State<'_, AppContext>,
-) -> AppResult<DeepSeekBalance> {
-    state.get_deepseek_balance(&id).await
+) -> AppResult<ProfileBalance> {
+    state.get_profile_balance(&id).await
 }
 
 #[tauri::command]
@@ -167,7 +167,7 @@ pub fn set_profile_show_balance(
 #[tauri::command]
 pub fn set_profile_balance(
     id: String,
-    info: DeepSeekBalanceInfo,
+    info: ProfileBalanceInfo,
     state: State<'_, AppContext>,
 ) -> AppResult<()> {
     state.set_profile_balance(&id, &info)

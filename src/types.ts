@@ -46,16 +46,24 @@ export interface ProfileConnectionResult {
   error: string | null;
 }
 
-export interface DeepSeekBalanceInfo {
+export interface ProfileBalanceInfo {
   currency: string;
   total_balance: string;
   granted_balance: string;
   topped_up_balance: string;
+  /** 用量型供应商（如 MiniMax Token Plan）的剩余百分比；余额型供应商为 null。 */
+  usage_percent: number | null;
+  /** 5 小时窗口重置倒计时（如 "2h23m"）。 */
+  usage_reset: string | null;
+  /** 7 天窗口已用百分比；仅用量型供应商返回。 */
+  weekly_usage_percent: number | null;
+  /** 7 天窗口重置倒计时（如 "5d21h"）。 */
+  weekly_reset: string | null;
 }
 
-export interface DeepSeekBalance {
+export interface ProfileBalance {
   is_available: boolean;
-  balance_infos: DeepSeekBalanceInfo[];
+  balance_infos: ProfileBalanceInfo[];
   latency_ms: number | null;
 }
 
@@ -111,8 +119,8 @@ export interface AppState {
   codex: CodexAppStatus;
   settings: Settings;
   paths: PathInfo[];
-  /** 供应商级余额缓存（上次成功查询结果），保证卡片静默显示不闪烁。 */
-  balance_cache: Record<string, DeepSeekBalanceInfo>;
+  /** 供应商级余额/用量缓存（上次成功查询结果），保证卡片静默显示不闪烁。 */
+  balance_cache: Record<string, ProfileBalanceInfo>;
 }
 
 export type RestartStage = "idle" | "stopping" | "waiting" | "launching" | "success" | "error";

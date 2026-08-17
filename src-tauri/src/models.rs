@@ -77,11 +77,23 @@ pub struct ProfileSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeepSeekBalanceInfo {
+pub struct ProfileBalanceInfo {
     pub currency: String,
     pub total_balance: String,
     pub granted_balance: String,
     pub topped_up_balance: String,
+    /// 用量型供应商（如 MiniMax Token Plan）的剩余百分比；余额型供应商为 None。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_percent: Option<u32>,
+    /// 5 小时窗口重置倒计时（如 "2h23m"）；余额型供应商为 None。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_reset: Option<String>,
+    /// 7 天窗口已用百分比；仅用量型供应商返回。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weekly_usage_percent: Option<u32>,
+    /// 7 天窗口重置倒计时（如 "5d21h"）；仅用量型供应商返回。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weekly_reset: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -157,5 +169,5 @@ pub struct AppState {
     pub settings: Settings,
     pub paths: Vec<PathInfo>,
     /// 供应商级余额缓存（上次成功查询结果），保证卡片静默显示、切换不闪烁。
-    pub balance_cache: std::collections::BTreeMap<String, DeepSeekBalanceInfo>,
+    pub balance_cache: std::collections::BTreeMap<String, ProfileBalanceInfo>,
 }

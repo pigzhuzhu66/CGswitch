@@ -6,10 +6,10 @@ import type {
   AuthStatus,
   CodexAppStatus,
   DatabaseBackupInfo,
-  DeepSeekBalance,
-  DeepSeekBalanceInfo,
   DeviceCodeResponse,
   ManagedAccount,
+  ProfileBalance,
+  ProfileBalanceInfo,
   ProfileDetail,
   ProfileConnectionResult,
   ProfileSummary,
@@ -184,7 +184,7 @@ let webSettings: Settings = {
 let webBackups: DatabaseBackupInfo[] = [];
 // 与后端一致：激活状态只由“应用/捕获”显式建立，添加供应商不激活
 let webActiveProfileId: string | null = null;
-const webBalanceCache: Record<string, DeepSeekBalanceInfo> = {};
+const webBalanceCache: Record<string, ProfileBalanceInfo> = {};
 
 function webState(): AppState {
   return {
@@ -349,13 +349,31 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         } as T;
       }
     }
-    case "get_deepseek_balance": {
+    case "get_profile_balance": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
       if (!balanceQueryProviders.has(profile.provider ?? "")) {
         throw new Error("该供应商不支持余额查询");
       }
       await new Promise((resolve) => setTimeout(resolve, 400));
+      if (profile.provider === "minimax") {
+        return {
+          is_available: true,
+          balance_infos: [
+            {
+              currency: "",
+              total_balance: "",
+              granted_balance: "",
+              topped_up_balance: "",
+              usage_percent: 15,
+              usage_reset: "2h23m",
+              weekly_usage_percent: 4,
+              weekly_reset: "5d21h",
+            },
+          ],
+          latency_ms: 210,
+        } as T;
+      }
       return {
         is_available: true,
         balance_infos: [
@@ -364,6 +382,10 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
             total_balance: "110.00",
             granted_balance: "10.00",
             topped_up_balance: "100.00",
+            usage_percent: null,
+            usage_reset: null,
+            weekly_usage_percent: null,
+            weekly_reset: null,
           },
         ],
         latency_ms: 210,
@@ -412,7 +434,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
     }
     case "set_profile_balance": {
       if (typeof args?.id === "string" && args?.info) {
-        webBalanceCache[args.id] = args.info as DeepSeekBalanceInfo;
+        webBalanceCache[args.id] = args.info as ProfileBalanceInfo;
       }
       return undefined as T;
     }
@@ -534,8 +556,8 @@ export const api = {
   getBuiltinCatalog: (kind: string) => call<string | null>("get_builtin_catalog", { kind }),
   testProfileConnection: (id: string, baseUrl?: string, apiKey?: string) =>
     call<ProfileConnectionResult>("test_profile_connection", { id, baseUrl, apiKey }),
-  getDeepseekBalance: (id: string) =>
-    call<DeepSeekBalance>("get_deepseek_balance", { id }),
+  getProfileBalance: (id: string) =>
+    call<ProfileBalance>("get_profile_balance", { id }),
   exportDatabase: () => call<string>("export_database"),
   importDatabase: (path: string) => call<void>("import_database", { path }),
   listDatabaseBackups: () => call<DatabaseBackupInfo[]>("list_database_backups"),
@@ -547,7 +569,7 @@ export const api = {
   setProfileIcon: (id: string, icon: string | null) => call<void>("set_profile_icon", { id, icon }),
   setProfileShowBalance: (id: string, enabled: boolean) =>
     call<void>("set_profile_show_balance", { id, enabled }),
-  setProfileBalance: (id: string, info: DeepSeekBalanceInfo) =>
+  setProfileBalance: (id: string, info: ProfileBalanceInfo) =>
     call<void>("set_profile_balance", { id, info }),
   setProfileAccount: (id: string, accountId: string | null) =>
     call<void>("set_profile_account", { id, accountId }),

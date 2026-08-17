@@ -691,8 +691,8 @@ async function save() {
       </div>
       <div v-if="!creating && supportsBalance" class="mt-4 flex items-center justify-between gap-3">
         <div class="min-w-0">
-          <div class="text-sm font-semibold">余额查询</div>
-          <div class="muted mt-0.5 text-xs">窗口激活时自动刷新，点击余额手动刷新</div>
+          <div class="text-sm font-semibold">余额/用量查询</div>
+          <div class="muted mt-0.5 text-xs">窗口激活时自动刷新，点击数字手动刷新</div>
         </div>
         <n-switch v-model:value="showBalance" :disabled="savingBalance" @update:value="toggleBalance" />
       </div>
