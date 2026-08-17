@@ -1,5 +1,6 @@
 # 手动发行：Actions → Release → Run workflow
 # 版本号取自仓库根目录 VERSION 文件，打 tag 为 v{VERSION}；
+# 三个平台全部构建成功后，才创建标签和发行页并上传产物（避免发行页先建好却没有产物的误导）；
 # 产物以 prerelease（预发布）状态发布，测试通过后手动改为正式版。
 name: Release
 
@@ -14,12 +15,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  create-release:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+          - name: macos-arm64
+            os: macos-latest
+            rust-target: aarch64-apple-darwin
+          - name: macos-x64
+            os: macos-latest
+            rust-target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v7
+      - run: corepack enable
+        shell: bash
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      # 必须在 src-tauri 下执行：rust-toolchain.toml 固定了工具链，目标要装到该工具链
+      - run: rustup target add ${{ matrix.rust-target }}
+        shell: bash
+        working-directory: src-tauri
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build --target ${{ matrix.rust-target }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bundle-${{ matrix.name }}
+          path: src-tauri/target/${{ matrix.rust-target }}/release/bundle
+          retention-days: 1
+          if-no-files-found: error
+
+  release:
+    # 所有平台构建成功后才会执行：needs 的任一任务失败都会跳过本任务
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,23 +78,33 @@ jobs:
           else
             RANGE="HEAD"
           fi
-          # 条目只保留提交信息正文，去掉 gitmoji 图标；图标仅用于分组大标题
-          fmt() { sed -E 's/^[0-9a-f]{7,} //' | sed -E 's/^[^[:alnum:]]+[[:space:]]*//' | sed 's/^/- /'; }
+          # 清洗：去掉提交哈希、gitmoji、feat/fix 等类型前缀与 scope，只留用户能看懂的描述
+          # LC_ALL=C 按字节处理，避免多字节 emoji 在部分 locale 下剥不干净
+          fmt() {
+            LC_ALL=C sed -E 's/^[0-9a-f]{7,} //' \
+              | LC_ALL=C sed -E 's/^[^[:space:]]+[[:space:]]*//' \
+              | LC_ALL=C sed -E 's/^(feat|fix|chore|refactor|style|docs|perf|test|build|ci|release|ui|security|revert)(\([^)]*\))?:[[:space:]]*//' \
+              | LC_ALL=C sed -E 's/[[:space:]]+$//' \
+              | sed 's/^/- /'
+          }
+          # 只收对用户可见的变更；空分类不输出；重复条目只留一条
+          section() {
+            local pattern="$1" title="$2" entries
+            entries="$(git log --oneline --no-merges -E --grep="$pattern" "$RANGE" \
+              | grep -viE '更新版本号|README|LICENSE|文档|依赖|pnpm check|CI|工作流' \
+              | fmt | awk '!seen[$0]++')"
+            if [ -n "$entries" ]; then
+              printf '### %s\n%s\n\n' "$title" "$entries"
+            fi
+          }
           {
-            echo "### ✨ 新增"
-            git log --oneline --no-merges --grep='^✨' "$RANGE" | fmt
-            echo
-            echo "### 🐛 修复"
-            git log --oneline --no-merges --grep='^🐛' "$RANGE" | fmt
-            echo
-            echo "### 🎨 界面与样式"
-            git log --oneline --no-merges --grep='^🎨' "$RANGE" | fmt
-            echo
-            echo "### 👷 CI 与工具"
-            git log --oneline --no-merges -E --grep='^(👷|🔧)' "$RANGE" | fmt
-            echo
-            echo "### 📝 文档"
-            git log --oneline --no-merges --grep='^📝' "$RANGE" | fmt
+            section '^(✨)' '✨ 新增'
+            section '^(🐛|🚑)' '🐛 修复'
+            section '^(💄|🎨)' '💄 界面与样式'
+            section '^(⚡)' '⚡ 性能优化'
+            section '^(♻️)' '♻️ 重构'
+            section '^(🔥)' '🔥 移除'
+            section '^(🔒)' '🔒 安全'
           } > "$NOTES"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --prerelease --notes-file "$NOTES" --target "$GITHUB_SHA"
@@ -61,46 +112,12 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ github.token }}
-  build:
-    needs: create-release
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: windows-x64
-            os: windows-latest
-            rust-target: x86_64-pc-windows-msvc
-            upload-globs: "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi"
-          - name: macos-arm64
-            os: macos-latest
-            rust-target: aarch64-apple-darwin
-            upload-globs: "src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"
-          - name: macos-x64
-            os: macos-latest
-            rust-target: x86_64-apple-darwin
-            upload-globs: "src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
-    steps:
-      - uses: actions/checkout@v7
-      - run: corepack enable
-        shell: bash
-      - uses: actions/setup-node@v7
+      - uses: actions/download-artifact@v8
         with:
-          node-version: 24
-          cache: pnpm
-      - run: rustup target add ${{ matrix.rust-target }}
-        shell: bash
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm tauri build --target ${{ matrix.rust-target }}
+          path: artifacts
       - name: 上传产物到预发布
-        run: gh release upload "v$VERSION" ${{ matrix.upload-globs }} --clobber
+        run: gh release upload "v$VERSION" $(find artifacts -type f) --clobber
         shell: bash
         env:
-          VERSION: ${{ needs.create-release.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ github.token }}
