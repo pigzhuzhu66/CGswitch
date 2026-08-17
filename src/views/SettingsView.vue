@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from "vue";
+import { h, onMounted, reactive, ref, watch } from "vue";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   NButton,
@@ -14,6 +14,7 @@ import {
 } from "naive-ui";
 import { api, isTauri } from "../api";
 import ChatGPTAccount from "../components/ChatGPTAccount.vue";
+import TrashIcon from "../components/TrashIcon.vue";
 import type { AppState, DatabaseBackupInfo, PathInfo, Settings } from "../types";
 import version from "../../VERSION?raw";
 
@@ -189,6 +190,7 @@ function deleteBackup(backup: DatabaseBackupInfo) {
     content: `确定删除「${backup.name}」吗？删除后不可恢复。`,
     positiveText: "删除",
     negativeText: "取消",
+    icon: () => h(TrashIcon),
     positiveButtonProps: { type: "error" },
     onPositiveClick: async () => {
       try {

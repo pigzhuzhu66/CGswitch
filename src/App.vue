@@ -11,6 +11,7 @@ import ProfilesView from "./views/ProfilesView.vue";
 import { api, isTauri } from "./api";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWindowActivation } from "./composables/useWindowActivation";
+import { useModalEnterConfirm } from "./composables/useModalEnterConfirm";
 import { themeOverrides } from "./theme";
 import type { AppState, Settings } from "./types";
 
@@ -145,14 +146,19 @@ async function previewTheme(theme: Settings["theme"]) {
 
 watch(
   isDark,
-  async (dark) => {
-    try {
-      await syncWindowTitleBarTheme(dark);
-    } catch {
+  (dark) => {
+    // 先同步切 `.dark`/colorScheme，与 naive-ui 主题同帧生效；
+    // 标题栏 IPC 异步进行，不再阻塞（否则两轨不同步会闪一帧）
+    const root = document.documentElement;
+    // 切主题期间冻结全部过渡：侧边栏按钮等 transition-colors 会在主题翻转时
+    // 产生 150ms 颜色渐变（文字/图标尾帧闪烁），冻结后整页同帧切换、无动画
+    root.classList.add("theme-switching");
+    root.classList.toggle("dark", dark);
+    root.style.colorScheme = dark ? "dark" : "light";
+    requestAnimationFrame(() => root.classList.remove("theme-switching"));
+    void syncWindowTitleBarTheme(dark).catch(() => {
       // 标题栏同步失败不阻塞内容切换
-    }
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.style.colorScheme = dark ? "dark" : "light";
+    });
   },
   { immediate: true },
 );
@@ -184,6 +190,9 @@ useWindowActivation({
   },
   onInactive: () => stopCodexPolling(),
 });
+
+// 全局弹窗快捷键：回车 = 确定（n-modal / n-dialog 通用）
+useModalEnterConfirm();
 </script>
 
 <template>
@@ -193,19 +202,21 @@ useWindowActivation({
         <n-layout class="h-full! rounded-none! bg-transparent!">
           <div class="flex h-screen flex-col">
             <div class="flex h-8 shrink-0 items-center bg-[var(--app-bg)]">
-              <div data-tauri-drag-region class="flex h-full shrink-0 items-center overflow-hidden bg-[var(--sidebar-bg)] transition-[width] duration-[360ms] ease-[cubic-bezier(0.22,1,0.36,1)]" :class="isSidebarCollapsed ? 'w-12' : 'w-[144px]'">
+              <div data-tauri-drag-region class="relative flex h-full shrink-0 items-center bg-[var(--sidebar-bg)] transition-[width] duration-[360ms] ease-[cubic-bezier(0.22,1,0.36,1)]" :class="isSidebarCollapsed ? ['w-12', 'apple-sidebar--collapsed'] : 'w-[128px]'">
                 <div
-                  class="apple-sidebar-brand flex h-full w-full cursor-pointer items-center pt-2"
-                  :class="isSidebarCollapsed ? 'justify-center' : 'gap-2 pl-3'"
+                  class="apple-sidebar-brand flex h-full w-fit cursor-pointer items-center pt-2"
                   role="button"
                   tabindex="0"
                   aria-label="CGSwitch"
                   @click="toggleSidebar"
                   @keyup.enter="toggleSidebar"
+                  @mouseenter="sidebarFlyoutArmed = true"
+                  @mouseleave="sidebarFlyoutArmed = false"
                 >
-                  <img src="/logo.png" alt="CGSwitch" class="h-5 w-5 shrink-0 rounded-md" draggable="false" />
-                  <span v-if="!isSidebarCollapsed" class="apple-sidebar-label apple-wordmark whitespace-nowrap">CGSwitch</span>
+                  <img src="/logo.png" alt="CGSwitch" class="h-6 w-6 shrink-0 rounded-md" draggable="false" />
+                  <span class="apple-sidebar-label apple-wordmark whitespace-nowrap">CGSwitch</span>
                 </div>
+                <span v-if="sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">{{ isSidebarCollapsed ? "展开侧边栏" : "收缩侧边栏" }}</span>
               </div>
               <div data-tauri-drag-region class="min-w-0 flex-1 self-stretch" />
               <div class="flex h-full items-center">
@@ -227,7 +238,7 @@ useWindowActivation({
               </div>
             </div>
             <div class="flex min-h-0 flex-1">
-            <aside class="apple-sidebar relative h-full shrink-0" :class="isSidebarCollapsed ? ['w-12', 'apple-sidebar--collapsed'] : 'w-[144px]'">
+            <aside class="apple-sidebar relative h-full shrink-0" :class="isSidebarCollapsed ? ['w-12', 'apple-sidebar--collapsed'] : 'w-[128px]'">
               <nav ref="sidebarNavRef" class="relative mx-1.5 mt-3 space-y-1">
                 <span class="apple-sidebar-indicator" :style="{ top: `${indicatorTop}px`, left: `${indicatorLeft}px` }" aria-hidden="true" />
                 <button ref="profilesNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'profiles' ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="供应商配置" @click="goProfiles" @mouseenter="sidebarFlyoutArmed = true">

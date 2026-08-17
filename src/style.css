@@ -257,16 +257,30 @@ main {
 }
 
 .apple-sidebar--collapsed .apple-sidebar-nav-button:hover .apple-sidebar-flyout,
-.apple-sidebar--collapsed .apple-sidebar-nav-button:focus-visible .apple-sidebar-flyout,
-.apple-sidebar--collapsed .apple-sidebar-brand:hover .apple-sidebar-flyout,
-.apple-sidebar--collapsed .apple-sidebar-brand:focus-visible .apple-sidebar-flyout {
+.apple-sidebar--collapsed .apple-sidebar-nav-button:focus-visible .apple-sidebar-flyout {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* 标题栏品牌按钮浮标：锚定标题栏左侧色块（随侧边栏宽度自适应），
+   展开时浮标在侧边栏右缘外、收缩时在栏外右侧；两种状态悬停都显示动作提示 */
+.apple-sidebar-brand + .apple-sidebar-flyout {
+  /* 标题栏仅 32px，垂直中心下移避免浮标顶部被窗口边缘盖住 */
+  top: calc(50% + 6px);
+  /* 与其他按钮浮标一致：距侧边栏右缘 3.6px（导航按钮 mx-1.5 内缩 6px + 0.6rem 间距） */
+  left: calc(100% + 0.225rem);
+}
+
+.apple-sidebar-brand:hover + .apple-sidebar-flyout,
+.apple-sidebar-brand:focus-visible + .apple-sidebar-flyout {
   opacity: 1;
   transform: translate(0, -50%);
 }
 
 .apple-sidebar-nav-button {
   gap: 0.5rem;
-  padding-inline: 0.75rem;
+  /* 与收缩态一致（9px），展开/收缩图标 x 位置固定不动 */
+  padding-inline: 9px;
   transition:
     gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
     padding 240ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -281,9 +295,28 @@ main {
 
 .apple-sidebar--collapsed .apple-sidebar-nav-button {
   gap: 0;
-  justify-content: center;
-  padding-left: 0;
-  padding-right: 0;
+  /* 36px 按钮内 18px 图标居中：padding 9px 可过渡，避免 justify-content 瞬间切换造成撞边弹回 */
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
+/* 标题栏品牌（logo+名字）：展开/收缩用 gap/padding 过渡保持图标平滑滑行，
+   不与宽度动画脱节（justify-content 不可过渡，瞬间切换会先撞边再弹回） */
+.apple-sidebar-brand {
+  gap: 0.5rem;
+  /* 15px：与下方导航按钮图标对齐（按钮 mx-1.5 + padding 9 = 图标 x 15px），
+     展开/收缩 logo x 位置固定不动 */
+  padding-left: 0.9375rem;
+  transition:
+    gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.apple-sidebar--collapsed .apple-sidebar-brand {
+  gap: 0;
+  /* 48px 栏内 18px logo 居中：padding 15px */
+  padding-left: 0.9375rem;
+  padding-right: 0.9375rem;
 }
 
 .apple-title {
@@ -384,6 +417,77 @@ main {
   border-top: 1px solid var(--panel-divider);
 }
 
+/* 分割线颜色走自己的变量轨：naive-ui 的主题色变量与 0.3s background-color
+   过渡会让切深浅色时分割线晚一拍渐变出现；这里压过主题变量并去掉过渡，
+   实现与 .dark 类同帧翻转 */
+.n-divider {
+  --n-color: var(--panel-divider) !important;
+}
+
+.n-divider .n-divider__line {
+  transition: none !important;
+}
+
+/* 全局弹窗进出场动画：覆盖 naive-ui 默认的 scale(0.5) 缩放淡入，
+   改为轻量高级的 0.95 缩放 + 轻微下落 + 淡入（Apple/Radix 同款缓动），
+   只用 transform/opacity，GPU 合成、无额外开销 */
+.n-modal-container .n-modal.fade-in-scale-up-transition-enter-from {
+  opacity: 0;
+  transform: scale(0.95) translateY(10px);
+}
+
+.n-modal-container .n-modal.fade-in-scale-up-transition-enter-to {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.n-modal-container .n-modal.fade-in-scale-up-transition-enter-active {
+  transition:
+    opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.n-modal-container .n-modal.fade-in-scale-up-transition-leave-from {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.n-modal-container .n-modal.fade-in-scale-up-transition-leave-to {
+  opacity: 0;
+  transform: scale(0.97) translateY(4px);
+}
+
+.n-modal-container .n-modal.fade-in-scale-up-transition-leave-active {
+  transition:
+    opacity 160ms cubic-bezier(0.4, 0, 1, 1),
+    transform 160ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* 遮罩：保持淡入，曲线与内容一致，时长稍短 */
+.n-modal-container .n-modal-mask.fade-in-transition-enter-from,
+.n-modal-container .n-modal-mask.fade-in-transition-leave-to {
+  opacity: 0;
+}
+
+.n-modal-container .n-modal-mask.fade-in-transition-enter-to,
+.n-modal-container .n-modal-mask.fade-in-transition-leave-from {
+  opacity: 1;
+}
+
+.n-modal-container .n-modal-mask.fade-in-transition-enter-active,
+.n-modal-container .n-modal-mask.fade-in-transition-leave-active {
+  transition: opacity 240ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .n-modal-container .n-modal.fade-in-scale-up-transition-enter-active,
+  .n-modal-container .n-modal.fade-in-scale-up-transition-leave-active,
+  .n-modal-container .n-modal-mask.fade-in-transition-enter-active,
+  .n-modal-container .n-modal-mask.fade-in-transition-leave-active {
+    transition: none !important;
+  }
+}
+
 .startup-skeleton > div {
   background: color-mix(in srgb, var(--panel-border) 64%, transparent);
 }
@@ -425,6 +529,21 @@ button {
   transition: transform 100ms ease-out, opacity 150ms ease-out, background-color 150ms ease-out;
 }
 
+/* 移除浏览器在键盘交互后给按钮套的默认焦点环（WICG/focus-visible#190：
+   鼠标点击后按任意键会被判定为键盘导航，从而显示描边）；
+   本项目为鼠标优先的桌面工具，按钮焦点环一律不显示 */
+button:focus-visible {
+  outline: none;
+}
+
+/* 切主题期间冻结全部过渡：侧边栏按钮等 transition-colors 在主题翻转时
+   会产生 150ms 颜色渐变（文字/图标尾帧闪烁），冻结后整页同帧切换、无动画 */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -434,21 +553,9 @@ button {
   }
 }
 
-/* 弹窗出场提速：保留 naive-ui 原版进入动画（250ms 从 scale(0.5) 以点击位置为原点淡入），
-   仅把出场 250ms → 120ms，作用于全部 n-modal 与 useDialog 弹窗 */
-.n-modal.fade-in-scale-up-transition-leave-active {
-  transition:
-    opacity 0.12s cubic-bezier(0.4, 0, 1, 1),
-    transform 0.12s cubic-bezier(0.4, 0, 1, 1);
-}
-
-.n-modal-mask.fade-in-transition-leave-active {
-  transition: opacity 0.12s cubic-bezier(0, 0, 0.2, 1) !important;
-}
-
 /* 下拉菜单（select）进场：naive-ui 的 select 弹层与弹窗共用同名过渡类
    （fade-in-scale-up-transition），默认是 scale(0.5) 弹窗式弹出；
-   这里单独覆盖成原生下拉的淡入 + 轻位移，弹窗动画保持不动 */
+   这里单独覆盖成原生下拉的淡入 + 轻位移，不影响上方全局弹窗动画 */
 .n-base-select-menu.n-select-menu.fade-in-scale-up-transition-enter-active,
 .n-base-select-menu.n-select-menu.fade-in-scale-up-transition-leave-active {
   transition:

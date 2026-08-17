@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, TransitionGroup, watch } from "vue";
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, TransitionGroup, watch } from "vue";
 import {
   NButton,
   NEmpty,
@@ -11,6 +11,7 @@ import {
   useMessage,
 } from "naive-ui";
 import ProfileCard from "../components/ProfileCard.vue";
+import TrashIcon from "../components/TrashIcon.vue";
 import { api } from "../api";
 import type { AppState, ManagedAccount, ProfileSummary, RestartStage } from "../types";
 
@@ -200,6 +201,7 @@ async function removeProfile(profile: ProfileSummary) {
     positiveText: "删除",
     negativeText: "取消",
     class: "delete-profile-dialog",
+    icon: () => h(TrashIcon),
     positiveButtonProps: { type: "error" },
     onPositiveClick: async () => {
       try {
@@ -295,15 +297,6 @@ onBeforeUnmount(() => {
             <span class="relative inline-flex h-2 w-2 rounded-full" :class="state.codex.running ? 'bg-[#34c759]' : 'bg-zinc-400'" />
           </span>
           Codex {{ state.codex.running ? "运行中" : "未运行" }}
-        </span>
-        <span v-if="state.settings.auto_restart" class="ml-1 border-l border-[var(--panel-border)] pl-3" title="应用配置后自动重启已开启" aria-label="应用配置后自动重启已开启">
-          <span class="flex h-5 w-9 items-center rounded-full bg-[#007aff] p-[2px]" aria-hidden="true">
-            <span class="ml-auto grid h-4 w-4 place-items-center rounded-full bg-white text-[#007aff]">
-              <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
-                <path d="m7 12 3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </span>
-          </span>
         </span>
       </div>
       <div class="flex flex-wrap items-center gap-2">
