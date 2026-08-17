@@ -194,7 +194,7 @@ async function testConnection() {
           <span v-if="active" class="inline-flex items-center rounded-full bg-success px-2 py-0.5 text-[11px] font-semibold leading-none text-white">活动</span>
           <n-tag
             v-if="profile.provider === null"
-            :type="subscriptionAuthed ? 'success' : 'warning'"
+            :type="subscriptionAuthed ? 'info' : 'warning'"
             size="small"
             :title="subscriptionAuthed ? (subscriptionAccount ? `当前订阅账号：${subscriptionAccount}` : 'ChatGPT 订阅已登录，Codex 使用订阅额度') : '尚未完成 ChatGPT 订阅登录，请到设置页认证'"
           >
