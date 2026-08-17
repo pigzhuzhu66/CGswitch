@@ -14,7 +14,7 @@ const selected = ref<string | null>(props.icon);
 </script>
 
 <template>
-  <section class="mx-auto flex h-[calc(100vh-2.75rem)] w-full max-w-none flex-col">
+  <section class="mx-auto flex h-[calc(100vh-4.75rem)] w-full max-w-none flex-col">
     <div class="apple-page-bar">
       <button
         type="button"
@@ -29,7 +29,7 @@ const selected = ref<string | null>(props.icon);
       </button>
     </div>
 
-    <div class="-mx-8 flex min-h-0 flex-1 flex-col overflow-auto pl-[var(--gap-main)] pr-[calc(var(--gap-main)-var(--scrollbar-size))] pb-4 [scrollbar-gutter:stable]">
+    <div class="-mx-8 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pl-[var(--gap-main)] pr-[calc(var(--gap-main)-var(--scrollbar-size))] pb-4 [scrollbar-gutter:stable]">
       <div class="apple-group mt-[var(--gap-page)] shrink-0 p-[var(--gap-card)]">
       <div class="grid grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
         <button

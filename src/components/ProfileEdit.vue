@@ -548,7 +548,7 @@ async function save() {
     @back="pickingIcon = false"
     @save="saveIcon"
   />
-  <section v-else class="mx-auto flex h-[calc(100vh-2.75rem)] w-full max-w-none flex-col" @keydown.ctrl.enter="save">
+  <section v-else class="mx-auto flex h-[calc(100vh-4.75rem)] w-full max-w-none flex-col" @keydown.ctrl.enter="save">
     <div class="apple-page-bar">
       <button
         type="button"
@@ -563,10 +563,11 @@ async function save() {
       </button>
     </div>
 
-    <div class="-mx-8 flex min-h-0 flex-1 flex-col overflow-auto pl-[var(--gap-main)] pr-[calc(var(--gap-main)-var(--scrollbar-size))] pb-4 [scrollbar-gutter:stable]">
+    <div class="-mx-8 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pl-[var(--gap-main)] pr-[calc(var(--gap-main)-var(--scrollbar-size))] pb-4 [scrollbar-gutter:stable]">
       <p v-if="loadError" class="muted mt-4 text-sm">{{ loadError }}</p>
 
-      <div v-if="creating" class="apple-group mt-[var(--gap-page)] shrink-0 p-[var(--gap-card)]">
+      <div class="apple-group mt-[var(--gap-page)] shrink-0 p-0">
+        <div v-if="creating" class="apple-panel-section">
       <div class="field-subtitle">选择供应商</div>
       <div class="mt-3 grid gap-2 sm:grid-cols-3 md:grid-cols-6">
         <button
@@ -590,7 +591,7 @@ async function save() {
       </div>
     </div>
 
-      <div class="apple-group shrink-0 p-[var(--gap-card)]" :class="creating ? 'mt-[var(--gap-section)]' : 'mt-[var(--gap-page)]'">
+      <div class="apple-panel-section">
       <div class="flex items-center gap-4">
         <button
           type="button"
@@ -692,7 +693,7 @@ async function save() {
       </div>
     </div>
 
-      <div class="apple-group mt-[var(--gap-section)] flex shrink-0 flex-col p-[var(--gap-card)]">
+      <div class="apple-panel-section flex flex-col">
       <div class="flex items-center justify-between gap-3">
         <div class="flex gap-1">
           <button
@@ -753,6 +754,7 @@ async function save() {
             />
           </div>
         </div>
+      </div>
       </div>
       </div>
     </div>
