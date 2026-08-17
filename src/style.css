@@ -1,8 +1,16 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* 主题色：浅色用品牌蓝/苹果绿，深色参考 linguagram 抬升（深底可读性） */
+@theme {
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+}
+
 :root {
   color-scheme: light;
+  --accent: #007aff;
+  --success: #34c759;
   --app-bg: #f7f7f8;
   --panel-bg: #ffffff;
   --panel-border: rgba(60, 60, 67, 0.16);
@@ -26,14 +34,17 @@
 
 :root.dark {
   color-scheme: dark;
-  --app-bg: #000000;
-  --panel-bg: #1c1c1e;
-  --panel-border: rgba(84, 84, 88, 0.65);
-  --panel-ring: rgba(255, 255, 255, 0.12);
-  --panel-divider: rgba(255, 255, 255, 0.1);
-  --text-secondary: rgba(235, 235, 245, 0.6);
-  --sidebar-bg: #151922;
-  --selection-bg: rgba(10, 132, 255, 0.24);
+  /* linguagram 深色配色：抬升暖灰画布（不纯黑）+ 表面抬一档 + 白底 hairline */
+  --accent: #5e9cff;
+  --success: #3fb950;
+  --app-bg: #1a1a1c;
+  --panel-bg: #24242a;
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --panel-ring: rgba(255, 255, 255, 0.08);
+  --panel-divider: rgba(255, 255, 255, 0.08);
+  --text-secondary: #9c9ca8;
+  --sidebar-bg: #15151a;
+  --selection-bg: rgba(94, 156, 255, 0.18);
   --scrollbar-thumb: color-mix(in srgb, var(--text-secondary) 25%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--text-secondary) 40%, transparent);
 }
@@ -69,7 +80,7 @@ body {
 }
 
 :root.dark body {
-  color: #f5f5f7;
+  color: #ececec;
 }
 
 .panel {
@@ -125,7 +136,7 @@ body {
 }
 
 .underline-input.n-input:focus-within {
-  border-bottom-color: #007aff;
+  border-bottom-color: var(--accent);
 }
 
 /* 删除确认弹窗：标题与操作按钮统一红色语义 */
@@ -182,7 +193,7 @@ main {
 
 /* 侧边栏应用名 wordmark：Windows 自带几何字体 Bahnschrift + 品牌蓝紫渐变 */
 .apple-wordmark {
-  background: linear-gradient(90deg, #007aff 0%, #5856d6 100%);
+  background: linear-gradient(90deg, var(--accent) 0%, #5856d6 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -349,7 +360,7 @@ main {
   padding-inline: 0.5rem;
   font-size: 11px;
   font-weight: 500;
-  color: #007aff;
+  color: var(--accent);
   transition:
     background-color 150ms ease-out,
     opacity 150ms ease-out;
@@ -405,6 +416,12 @@ main {
   box-shadow:
     0 0 0 1px var(--panel-ring),
     0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* naive-ui 的 n-list 在深色下自带更暗的底色（--n-color），叠在卡片上
+   会形成明显的深色分层；列表底一律透明，由外层卡片统一承担背景 */
+.n-list.n-list {
+  background-color: transparent;
 }
 
 /* 统一大面板：外层用 apple-group，内部区块用 apple-panel-section；
@@ -477,6 +494,20 @@ main {
 .n-modal-container .n-modal-mask.fade-in-transition-enter-active,
 .n-modal-container .n-modal-mask.fade-in-transition-leave-active {
   transition: opacity 240ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* 模态框遮罩背景虚化：Apple 经典手法——弹窗打开时背景模糊 + 压暗，
+   内容弹出更有层级感；系统关闭透明度时退回纯遮罩 */
+.n-modal-container .n-modal-mask {
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+  backdrop-filter: blur(8px) saturate(160%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .n-modal-container .n-modal-mask {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -576,7 +607,7 @@ button:focus-visible {
   width: 3px;
   height: 20px;
   border-radius: 0 3px 3px 0;
-  background: #007aff;
+  background: var(--accent);
   transition:
     top 160ms cubic-bezier(0.22, 1, 0.36, 1),
     left 160ms cubic-bezier(0.22, 1, 0.36, 1);

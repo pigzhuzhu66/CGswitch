@@ -168,8 +168,8 @@ async function testConnection() {
       <ProfileIconTile :name="profile.name" :icon="profile.icon" />
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
-          <h3 class="cursor-pointer truncate text-base font-semibold tracking-tight transition-colors hover:text-[#007aff]" title="点击重命名" @click.stop="emit('rename')">{{ profile.name }}</h3>
-          <n-tag v-if="active" type="success" size="small">当前生效</n-tag>
+          <h3 class="cursor-pointer truncate text-base font-semibold tracking-tight transition-colors hover:text-accent" title="点击重命名" @click.stop="emit('rename')">{{ profile.name }}</h3>
+          <span v-if="active" class="inline-flex items-center rounded-full bg-success px-2 py-0.5 text-[11px] font-semibold leading-none text-white">活动</span>
           <n-tag
             v-if="profile.provider === null"
             :type="subscriptionAuthed ? 'success' : 'warning'"
@@ -190,7 +190,7 @@ async function testConnection() {
             v-if="isDeepSeek && profile.show_balance"
             type="button"
             class="flex items-center gap-1 rounded-full border border-current/15 bg-black/4 px-1.5 py-px leading-none dark:bg-white/8"
-            :class="balanceError && !balanceInfo ? 'text-[#ff3b30]/80' : 'text-[#007aff]'"
+            :class="balanceError && !balanceInfo ? 'text-[#ff3b30]/80' : 'text-accent'"
             :title="balanceTitle"
             :aria-label="'DeepSeek 余额'"
             @click.stop="fetchBalance"
@@ -204,7 +204,7 @@ async function testConnection() {
           <button
             v-if="profile.admin_url"
             type="button"
-            class="grid h-4 w-4 place-items-center rounded-full text-[#007aff] transition-colors hover:bg-[#007aff]/10"
+            class="grid h-4 w-4 place-items-center rounded-full text-accent transition-colors hover:bg-accent/10"
             title="打开官网"
             aria-label="打开官网"
             @click.stop="openAdmin"
@@ -220,7 +220,7 @@ async function testConnection() {
       <n-button type="primary" size="small" :disabled="busy || active" @click="emit('apply')">{{ active ? "已应用" : "应用" }}</n-button>
       <button
         type="button"
-        class="grid h-8 w-8 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-[#007aff]/10 hover:text-[#007aff] dark:text-zinc-500"
+        class="grid h-8 w-8 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-accent/10 hover:text-accent dark:text-zinc-500"
         title="复制供应商"
         aria-label="复制供应商"
         @click="emit('duplicate')"
@@ -232,8 +232,8 @@ async function testConnection() {
       </button>
       <button
         type="button"
-        class="grid h-8 w-8 place-items-center rounded-lg transition-colors enabled:hover:bg-[#007aff]/10 disabled:cursor-not-allowed disabled:opacity-40"
-        :class="connectionDimmed ? 'text-zinc-400' : 'text-[#007aff]'"
+        class="grid h-8 w-8 place-items-center rounded-lg transition-colors enabled:hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+        :class="connectionDimmed ? 'text-zinc-400' : 'text-accent'"
         :disabled="!profile.provider || busy || testing"
         :title="connectionTitle"
         :aria-label="'测试连通性'"

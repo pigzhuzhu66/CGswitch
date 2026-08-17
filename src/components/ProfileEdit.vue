@@ -556,7 +556,7 @@ async function save() {
         aria-label="返回"
         @click="emit('back')"
       >
-        <svg class="h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg class="h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M15 5.5 8.5 12l6.5 6.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <span class="apple-title">{{ creating ? "新建供应商" : "编辑供应商" }}</span>
@@ -575,7 +575,7 @@ async function save() {
           :key="preset.kind"
           type="button"
           class="flex items-center gap-2.5 rounded-xl p-2.5 text-left transition-colors"
-          :class="presetKind === preset.kind ? 'shadow-[0_0_0_1px_#007aff] bg-[var(--selection-bg)]' : 'shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4'"
+          :class="presetKind === preset.kind ? 'shadow-[0_0_0_1px_var(--accent)] bg-[var(--selection-bg)]' : 'shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4'"
           :aria-pressed="presetKind === preset.kind"
           @click="selectPreset(preset.kind)"
         >
@@ -584,7 +584,7 @@ async function save() {
             <span class="block truncate text-xs font-semibold tracking-tight">{{ preset.name }}</span>
             <span class="muted block truncate text-[11px]">{{ preset.model }}{{ preset.base_url ? "" : (preset.kind === "chatgpt" ? " · 认证登录" : " · 无需密钥") }}</span>
           </span>
-          <svg v-if="presetKind === preset.kind" class="h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
+          <svg v-if="presetKind === preset.kind" class="h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
             <path d="m6 12.5 4 4 8-9" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </button>
@@ -602,7 +602,7 @@ async function save() {
         >
           <span class="relative grid h-full w-full place-items-center">
             <ProfileIconTile :name="detail?.name ?? name" :icon="selectedIcon" size="fill" />
-            <span class="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-[#007aff] text-white shadow" aria-hidden="true">
+            <span class="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-white shadow" aria-hidden="true">
               <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
                 <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" stroke-linejoin="round" />
               </svg>
@@ -650,7 +650,7 @@ async function save() {
         </div>
         <n-input v-model:value="apiKey" type="password" show-password-on="click" placeholder="请输入 API 密钥" />
         <p v-if="isOpenCode" class="muted mt-2 flex items-start gap-1.5 text-xs">
-          <svg class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <svg class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <circle cx="12" cy="12" r="8.5" />
             <path d="M12 11.2v4.6" />
             <path d="M12 7.8h.01" />
@@ -671,7 +671,7 @@ async function save() {
           <span class="field-label">官网地址</span>
           <button
             type="button"
-            class="grid h-4 w-4 cursor-pointer place-items-center rounded-full text-[#007aff] transition-colors hover:bg-[#007aff]/10 disabled:cursor-default disabled:opacity-40"
+            class="grid h-4 w-4 cursor-pointer place-items-center rounded-full text-accent transition-colors hover:bg-accent/10 disabled:cursor-default disabled:opacity-40"
             title="打开官网"
             aria-label="打开官网"
             :disabled="!adminUrl.trim()"
@@ -701,7 +701,7 @@ async function save() {
             :key="tab.id"
             type="button"
             class="relative flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] transition-colors"
-            :class="activeTab === tab.id ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'muted hover:bg-black/5 dark:hover:bg-white/8'"
+            :class="activeTab === tab.id ? 'bg-[var(--selection-bg)] font-semibold text-accent' : 'muted hover:bg-black/5 dark:hover:bg-white/8'"
             :aria-pressed="activeTab === tab.id"
             @click="activeTab = tab.id"
           >
@@ -719,7 +719,7 @@ async function save() {
             </span>
             <span
               v-if="(tab.id === 'config' && configDirty) || (tab.id === 'models' && catalogDirty) || (tab.id === 'auth' && authDirty)"
-              class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#007aff]"
+              class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent"
               aria-label="有未保存的改动"
             />
           </button>

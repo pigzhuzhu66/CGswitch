@@ -23,6 +23,6 @@ const sizeClass = computed(() => {
 <template>
   <span class="grid shrink-0 place-items-center bg-[#f0f0f3]" :class="sizeClass.tile" aria-hidden="true">
     <img v-if="iconUrl" :src="iconUrl" alt="" :class="sizeClass.img" />
-    <span v-else class="font-bold text-[#007aff]" :class="sizeClass.text">{{ name.charAt(0) }}</span>
+    <span v-else class="font-bold text-accent" :class="sizeClass.text">{{ name.charAt(0) }}</span>
   </span>
 </template>

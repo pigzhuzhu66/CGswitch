@@ -117,7 +117,7 @@ onMounted(refreshStatus);
           <span class="mono whitespace-nowrap text-2xl font-bold tracking-[0.3em]">{{ login.user_code }}</span>
           <button
             type="button"
-            class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[#007aff] transition-colors hover:bg-[#007aff]/10"
+            class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-accent transition-colors hover:bg-accent/10"
             title="复制授权码"
             aria-label="复制授权码"
             @click="copyUserCode"
@@ -130,7 +130,7 @@ onMounted(refreshStatus);
         </div>
         <button
           type="button"
-          class="mono mt-3 block w-full break-all text-center text-[#007aff] hover:underline"
+          class="mono mt-3 block w-full break-all text-center text-accent hover:underline"
           @click="openVerification"
         >
           {{ login.verification_uri }}

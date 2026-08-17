@@ -291,29 +291,25 @@ onBeforeUnmount(() => {
   <section v-else class="mx-auto w-full max-w-none">
     <header class="flex flex-wrap items-center justify-between gap-4">
       <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors" :class="state.codex.running ? 'bg-[#34c759]/10 text-[#248a3d] dark:text-[#6ee7a0]' : 'bg-zinc-500/10 text-zinc-500'">
+        <span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors" :class="state.codex.running ? 'border-success/25 bg-success/10 text-[#248a3d] dark:border-success/30 dark:bg-success/10 dark:text-[#6ee7a0]' : 'border-[var(--panel-border)] bg-black/4 text-zinc-500 dark:bg-white/6'">
           <span class="relative flex h-2 w-2">
-            <span v-if="state.codex.running" class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#34c759] opacity-60" />
-            <span class="relative inline-flex h-2 w-2 rounded-full" :class="state.codex.running ? 'bg-[#34c759]' : 'bg-zinc-400'" />
+            <span v-if="state.codex.running" class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-50" />
+            <span class="relative inline-flex h-2 w-2 rounded-full shadow-[0_0_6px_1px_rgba(52,199,89,0.45)]" :class="state.codex.running ? 'bg-success' : 'bg-zinc-400 shadow-none'" />
           </span>
           Codex {{ state.codex.running ? "运行中" : "未运行" }}
         </span>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          class="grid h-8 w-8 place-items-center rounded-lg text-[#007aff] transition-colors hover:bg-[#007aff]/10"
-          title="刷新"
-          aria-label="刷新"
-          @click="emit('refresh')"
-        >
-          <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v6h-6" />
-          </svg>
-        </button>
-        <n-button quaternary :disabled="busy" :loading="restartStage !== 'idle' && restartStage !== 'success' && restartStage !== 'error'" @click="restart(false)">重启 Codex</n-button>
-        <n-button secondary :disabled="busy" title="捕获当前配置" aria-label="捕获当前配置" @click="openCapture">
+        <n-button quaternary :disabled="busy" :loading="restartStage !== 'idle' && restartStage !== 'success' && restartStage !== 'error'" title="重启 Codex" @click="restart(false)">
+          <template #icon>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+              <path d="M12 2v10" />
+            </svg>
+          </template>
+          重启 Codex
+        </n-button>
+        <n-button quaternary :disabled="busy" title="捕获当前配置" aria-label="捕获当前配置" @click="openCapture">
           <template #icon>
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />

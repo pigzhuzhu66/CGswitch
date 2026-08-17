@@ -46,8 +46,8 @@ const backupActions = [
     key: "import",
     label: "导入备份",
     desc: "从备份文件恢复供应商数据库",
-    color: "#007aff",
-    bgClass: "bg-[#007aff]/10 enabled:hover:bg-[#007aff]/[0.16]",
+    color: "var(--accent)",
+    bgClass: "bg-accent/10 enabled:hover:bg-accent/16",
     disabled: () => importing.value,
     run: () => importBackupFromFile(),
   },
@@ -306,7 +306,7 @@ async function openPath(item: PathInfo) {
         aria-label="返回首页"
         @click="emit('home')"
       >
-        <svg class="h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg class="h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M15 5.5 8.5 12l6.5 6.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <span class="apple-title">设置</span>
@@ -315,7 +315,7 @@ async function openPath(item: PathInfo) {
 
     <div ref="tabBar" class="relative mt-[var(--gap-page)] flex items-center gap-1 border-b border-[var(--panel-border)]" aria-label="设置分区">
       <span
-        class="settings-tab-indicator absolute -bottom-px h-0.5 rounded-full bg-[#007aff]"
+        class="settings-tab-indicator absolute -bottom-px h-0.5 rounded-full bg-accent"
         :style="{ left: indicatorLeft, width: indicatorWidth }"
         aria-hidden="true"
       />
@@ -323,7 +323,7 @@ async function openPath(item: PathInfo) {
         type="button"
         data-section="general"
         class="relative flex h-10 items-center gap-1.5 rounded-md px-3 text-sm transition-colors"
-        :class="section === 'general' ? 'font-semibold text-[#007aff]' : 'font-medium text-[var(--text-secondary)] hover:text-[#007aff]'"
+        :class="section === 'general' ? 'font-semibold text-accent' : 'font-medium text-[var(--text-secondary)] hover:text-accent'"
         :aria-current="section === 'general' ? 'page' : undefined"
         @click="section = 'general'"
       >
@@ -339,7 +339,7 @@ async function openPath(item: PathInfo) {
         type="button"
         data-section="codex"
         class="relative flex h-10 items-center gap-1.5 rounded-md px-3 text-sm transition-colors"
-        :class="section === 'codex' ? 'font-semibold text-[#007aff]' : 'font-medium text-[var(--text-secondary)] hover:text-[#007aff]'"
+        :class="section === 'codex' ? 'font-semibold text-accent' : 'font-medium text-[var(--text-secondary)] hover:text-accent'"
         :aria-current="section === 'codex' ? 'page' : undefined"
         @click="section = 'codex'"
       >
@@ -353,7 +353,7 @@ async function openPath(item: PathInfo) {
         type="button"
         data-section="account"
         class="relative flex h-10 items-center gap-1.5 rounded-md px-3 text-sm transition-colors"
-        :class="section === 'account' ? 'font-semibold text-[#007aff]' : 'font-medium text-[var(--text-secondary)] hover:text-[#007aff]'"
+        :class="section === 'account' ? 'font-semibold text-accent' : 'font-medium text-[var(--text-secondary)] hover:text-accent'"
         :aria-current="section === 'account' ? 'page' : undefined"
         @click="section = 'account'"
       >
@@ -367,7 +367,7 @@ async function openPath(item: PathInfo) {
         type="button"
         data-section="advanced"
         class="relative flex h-10 items-center gap-1.5 rounded-md px-3 text-sm transition-colors"
-        :class="section === 'advanced' ? 'font-semibold text-[#007aff]' : 'font-medium text-[var(--text-secondary)] hover:text-[#007aff]'"
+        :class="section === 'advanced' ? 'font-semibold text-accent' : 'font-medium text-[var(--text-secondary)] hover:text-accent'"
         :aria-current="section === 'advanced' ? 'page' : undefined"
         @click="section = 'advanced'"
       >
@@ -382,7 +382,7 @@ async function openPath(item: PathInfo) {
         type="button"
         data-section="about"
         class="relative flex h-10 items-center gap-1.5 rounded-md px-3 text-sm transition-colors"
-        :class="section === 'about' ? 'font-semibold text-[#007aff]' : 'font-medium text-[var(--text-secondary)] hover:text-[#007aff]'"
+        :class="section === 'about' ? 'font-semibold text-accent' : 'font-medium text-[var(--text-secondary)] hover:text-accent'"
         :aria-current="section === 'about' ? 'page' : undefined"
         @click="section = 'about'"
       >
@@ -403,7 +403,7 @@ async function openPath(item: PathInfo) {
           :key="option.value"
           type="button"
           class="inline-flex h-9 w-28 items-center justify-center gap-1.5 rounded-xl text-sm transition-colors"
-          :class="form.theme === option.value ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'"
+          :class="form.theme === option.value ? 'bg-[var(--selection-bg)] font-semibold text-accent' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'"
           :aria-pressed="form.theme === option.value"
           @click="updateTheme(option.value)"
         >
@@ -427,7 +427,7 @@ async function openPath(item: PathInfo) {
       <div class="flex flex-col gap-5">
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
-            <svg class="mt-0.5 h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <svg class="mt-0.5 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
               <path d="M12 3.5v7" stroke-linecap="round" />
               <path d="M7.2 6.2a7.5 7.5 0 1 0 9.6 0" stroke-linecap="round" />
             </svg>
@@ -443,7 +443,7 @@ async function openPath(item: PathInfo) {
         </div>
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
-            <svg class="mt-0.5 h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <svg class="mt-0.5 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
               <path d="M20 13.6A8.2 8.2 0 1 1 10.4 4a6.4 6.4 0 0 0 9.6 9.6Z" stroke-linejoin="round" />
             </svg>
             <div>
@@ -458,7 +458,7 @@ async function openPath(item: PathInfo) {
         </div>
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
-            <svg class="mt-0.5 h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <svg class="mt-0.5 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
               <path d="M4 14v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" stroke-linecap="round" />
               <path d="M12 3.5v8" stroke-linecap="round" />
               <path d="m8.5 8.5 3.5 3.5 3.5-3.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -478,7 +478,7 @@ async function openPath(item: PathInfo) {
 
     <div v-else-if="section === 'advanced'" class="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
       <div class="flex items-center gap-3">
-        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#007aff]/10 text-[#007aff]">
+        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent">
           <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
             <ellipse cx="12" cy="5" rx="8" ry="3" />
             <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
@@ -535,7 +535,7 @@ async function openPath(item: PathInfo) {
           class="flex items-center justify-between gap-3 rounded-xl shadow-[0_0_0_1px_var(--panel-ring)] px-3 py-2.5"
         >
           <div class="flex min-w-0 items-center gap-2.5">
-            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#007aff]/10 text-[#007aff]">
+            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
               <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="3" y="4" width="18" height="4" rx="1" />
                 <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />

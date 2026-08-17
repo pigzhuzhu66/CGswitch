@@ -22,7 +22,7 @@ const selected = ref<string | null>(props.icon);
         aria-label="返回"
         @click="emit('back')"
       >
-        <svg class="h-4 w-4 shrink-0 text-[#007aff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg class="h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M15 5.5 8.5 12l6.5 6.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <span class="apple-title">选择供应商图标</span>
@@ -37,7 +37,7 @@ const selected = ref<string | null>(props.icon);
           :key="icon.id"
           type="button"
           class="flex flex-col items-center gap-1 rounded-lg px-1.5 py-2 transition-colors"
-          :class="selected === icon.id ? 'shadow-[0_0_0_1px_#007aff] bg-[var(--selection-bg)]' : 'shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4'"
+          :class="selected === icon.id ? 'shadow-[0_0_0_1px_var(--accent)] bg-[var(--selection-bg)]' : 'shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4'"
           :aria-pressed="selected === icon.id"
           @click="selected = icon.id"
         >
@@ -51,7 +51,7 @@ const selected = ref<string | null>(props.icon);
       <button
         type="button"
         class="mt-3 w-full rounded-lg border border-dashed px-2 py-2.5 text-xs transition-colors"
-        :class="selected === null ? 'border-[#007aff] font-medium text-[#007aff]' : 'muted border-[var(--panel-border)] hover:bg-black/3 dark:hover:bg-white/4'"
+        :class="selected === null ? 'border-accent font-medium text-accent' : 'muted border-[var(--panel-border)] hover:bg-black/3 dark:hover:bg-white/4'"
         :aria-pressed="selected === null"
         @click="selected = null"
       >
