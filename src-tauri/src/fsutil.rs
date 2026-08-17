@@ -67,7 +67,7 @@ pub fn backup_file(source: &Path, directory: &Path, stem: &str) -> AppResult<Opt
     let target = directory.join(format!("{stem}-{}.bak", now_ms()));
     fs::copy(source, &target)
         .map_err(|error| err(format!("无法备份 {}: {error}", source.display())))?;
-    prune_backups(directory, stem, ".bak", 20);
+    prune_backups(directory, stem, ".bak", 5);
     Ok(Some(target))
 }
 

@@ -126,9 +126,9 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            if settings.silent_start {
+            if !settings.silent_start {
                 if let Some(window) = app.get_webview_window("main") {
-                    window.hide()?;
+                    window.show()?;
                 }
             }
             Ok(())

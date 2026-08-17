@@ -29,7 +29,15 @@ async function startLogin() {
     await api.openUrl(login.value.verification_uri);
     poll();
   } catch (error) {
-    message.error(String(error));
+    const text = String(error);
+    if (text.includes("unsupported_country_region_territory")) {
+      message.error(
+        "认证请求被地区限制拦截。请开启系统代理并确认节点位于 ChatGPT 支持的地区后重试。",
+        { duration: 6000 }
+      );
+    } else {
+      message.error(text);
+    }
     busy.value = false;
   }
 }
