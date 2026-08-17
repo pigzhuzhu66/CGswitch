@@ -388,8 +388,7 @@ impl CodexOAuthManager {
                 "换取 Token 失败: {status} - {text}"
             )));
         }
-        serde_json::from_str(&text)
-            .map_err(|error| CodexOAuthError::ParseError(error.to_string()))
+        serde_json::from_str(&text).map_err(|error| CodexOAuthError::ParseError(error.to_string()))
     }
 
     async fn refresh_with_token(
@@ -422,8 +421,7 @@ impl CodexOAuthManager {
                 "刷新 Token 失败: {status} - {text}"
             )));
         }
-        serde_json::from_str(&text)
-            .map_err(|error| CodexOAuthError::ParseError(error.to_string()))
+        serde_json::from_str(&text).map_err(|error| CodexOAuthError::ParseError(error.to_string()))
     }
 
     // ==================== Token 获取（含自动刷新） ====================
