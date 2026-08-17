@@ -174,6 +174,10 @@ onMounted(async () => {
     );
   }
   await refresh();
+  // 首帧渲染完成后再显示窗口，避免启动时出现空白/残影帧；静默启动保持不显示
+  if (isTauri && !state.value?.settings.silent_start) {
+    void appWindow?.show();
+  }
   syncCodexPolling();
 });
 

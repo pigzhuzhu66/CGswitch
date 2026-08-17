@@ -126,11 +126,6 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            if !settings.silent_start {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.show()?;
-                }
-            }
             Ok(())
         })
         .on_window_event(|window, event| {
