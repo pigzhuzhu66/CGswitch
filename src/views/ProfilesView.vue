@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, TransitionGroup, watch } from "vue";
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   NButton,
   NEmpty,
@@ -12,6 +12,7 @@ import {
 } from "naive-ui";
 import ProfileCard from "../components/ProfileCard.vue";
 import TrashIcon from "../components/TrashIcon.vue";
+import draggable from "vuedraggable";
 import { api } from "../api";
 import type { AppState, ManagedAccount, ProfileSummary, RestartStage } from "../types";
 
@@ -34,6 +35,21 @@ const creatingProfile = ref(false);
 const modalProfile = ref<ProfileSummary | null>(null);
 const subscriptionAuthed = ref(false);
 const subscriptionAccount = ref<string | null>(null);
+// 手动排序：vuedraggable（SortableJS）实时重排，结束后持久化
+function onDragStart() {
+  document.body.classList.add("drag-active");
+}
+
+async function persistOrder() {
+  try {
+    await api.reorderProfiles(props.state.profiles.map((item) => item.id));
+  } catch (error) {
+    message.error(String(error));
+    emit("refresh");
+  } finally {
+    document.body.classList.remove("drag-active");
+  }
+}
 const authAccounts = ref<ManagedAccount[]>([]);
 
 let unlisten: (() => void) | null = null;
@@ -344,29 +360,40 @@ onBeforeUnmount(() => {
     <div class="mt-[var(--gap-page)]">
       <n-empty v-if="state.profiles.length === 0" description="还没有供应商配置。可以添加内置官方供应商，或先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。" class="apple-group py-14" />
       <template v-else>
-        <TransitionGroup
+        <draggable
           tag="div"
-          name="profile-list"
           class="apple-group relative will-change-transform"
+          :component-data="{ name: 'profile-list' }"
+          :list="state.profiles"
+          item-key="id"
+          handle=".drag-handle"
+          :animation="250"
+          :force-fallback="true"
+          fallback-on-body="true"
+          :fallback-tolerance="5"
+          ghost-class="drag-ghost"
+          drag-class="drag-dragging"
+          @start="onDragStart"
+          @end="persistOrder"
         >
-          <ProfileCard
-            v-for="profile in state.profiles"
-            :key="profile.id"
-            class="border-t border-[var(--panel-divider)] -mt-px"
-            :profile="profile"
-            :active="profile.id === state.active_profile_id"
-            :busy="busy"
-            :subscription-authed="subscriptionAuthed"
-            :subscription-account="subscriptionAccount"
-            :bound-account="boundAccountLogin(profile)"
-            :balance-cache="state.balance_cache"
-            @apply="applyProfile(profile)"
-            @rename="openRename(profile)"
-            @edit="editingProfile = profile"
-            @remove="removeProfile(profile)"
-            @duplicate="duplicateProfile(profile)"
-          />
-        </TransitionGroup>
+          <template #item="{ element: profile, index }">
+            <ProfileCard
+              :class="index === 0 ? '' : 'profile-card-divider'"
+              :profile="profile"
+              :active="profile.id === state.active_profile_id"
+              :busy="busy"
+              :subscription-authed="subscriptionAuthed"
+              :subscription-account="subscriptionAccount"
+              :bound-account="boundAccountLogin(profile)"
+              :balance-cache="state.balance_cache"
+              @apply="applyProfile(profile)"
+              @rename="openRename(profile)"
+              @edit="editingProfile = profile"
+              @remove="removeProfile(profile)"
+              @duplicate="duplicateProfile(profile)"
+            />
+          </template>
+        </draggable>
       </template>
     </div>
 

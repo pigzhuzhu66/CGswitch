@@ -159,16 +159,31 @@ async function testConnection() {
 
 <template>
   <article
-    class="flex cursor-pointer flex-col gap-4 px-5 py-4 transition-colors sm:flex-row sm:items-center sm:justify-between"
+    class="flex cursor-pointer flex-col gap-4 px-5 py-[var(--gap-card)] transition-colors sm:flex-row sm:items-center sm:justify-between"
     :class="active ? 'bg-[linear-gradient(90deg,var(--selection-bg),transparent_65%)]' : 'hover:bg-black/3 dark:hover:bg-white/4'"
     title="单击编辑"
     @click="emit('edit')"
   >
+    <span
+      class="drag-handle -ml-5 -mr-4 grid shrink-0 cursor-grab place-items-center self-center rounded-md py-1 pl-3 pr-3 text-zinc-400 transition-colors hover:text-zinc-600 active:cursor-grabbing dark:text-zinc-500 dark:hover:text-zinc-300"
+      title="拖动排序"
+      aria-label="拖动排序"
+      @click.stop
+    >
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <circle cx="9" cy="6" r="1.1" />
+        <circle cx="15" cy="6" r="1.1" />
+        <circle cx="9" cy="12" r="1.1" />
+        <circle cx="15" cy="12" r="1.1" />
+        <circle cx="9" cy="18" r="1.1" />
+        <circle cx="15" cy="18" r="1.1" />
+      </svg>
+    </span>
     <div class="flex min-w-0 flex-1 items-center gap-3">
       <ProfileIconTile :name="profile.name" :icon="profile.icon" />
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
-          <h3 class="cursor-pointer truncate text-base font-semibold tracking-tight transition-colors hover:text-accent" title="点击重命名" @click.stop="emit('rename')">{{ profile.name }}</h3>
+          <h3 class="cursor-pointer truncate text-[17px] font-semibold tracking-tight transition-colors hover:text-accent" title="点击重命名" @click.stop="emit('rename')">{{ profile.name }}</h3>
           <span v-if="active" class="inline-flex items-center rounded-full bg-success px-2 py-0.5 text-[11px] font-semibold leading-none text-white">活动</span>
           <n-tag
             v-if="profile.provider === null"
@@ -182,7 +197,7 @@ async function testConnection() {
             订阅账号：{{ boundAccount }}
           </n-tag>
         </div>
-        <div class="muted mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+        <div class="muted mt-1 flex flex-wrap items-center gap-1 text-[11px]">
           <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.model ?? "未设置" }}</span>
           <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.provider ?? "官方" }}</span>
           <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.reasoning_effort ?? "默认" }}</span>

@@ -199,7 +199,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         created_at: now,
         updated_at: now,
       };
-      webProfiles.unshift(profile);
+      webProfiles.push(profile);
       // 捕获即建立“当前 live = 该供应商”的显式关联
       webActiveProfileId = profile.id;
       return profile as T;
@@ -228,7 +228,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         created_at: now,
         updated_at: now,
       };
-      webProfiles.unshift(profile);
+      webProfiles.push(profile);
       webDetails[profile.id] = {
         base_url: baseUrl,
         api_key: apiKey,
@@ -254,7 +254,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         created_at: now,
         updated_at: now,
       };
-      webProfiles.unshift(profile);
+      webProfiles.push(profile);
       webDetails[profile.id] = {
         base_url:
           typeof args?.baseUrl === "string" && args.baseUrl ? args.baseUrl : null,
@@ -363,7 +363,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         created_at: now,
         updated_at: now,
       };
-      webProfiles.unshift(copy);
+      webProfiles.push(copy);
       if (webDetails[profile.id]) webDetails[copy.id] = { ...webDetails[profile.id] };
       return copy as T;
     }
@@ -395,6 +395,11 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
     case "delete_profile": {
       const index = webProfiles.findIndex((item) => item.id === args?.id);
       if (index >= 0) webProfiles.splice(index, 1);
+      return undefined as T;
+    }
+    case "reorder_profiles": {
+      const ids = Array.isArray(args?.ids) ? (args.ids as string[]) : [];
+      webProfiles.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
       return undefined as T;
     }
     case "apply_profile":
@@ -493,6 +498,7 @@ export const api = {
     authText: string | null,
   ) => call<ProfileDetail>("update_profile_config", { id, configText, catalogText, authText }),
   deleteProfile: (id: string) => call<void>("delete_profile", { id }),
+  reorderProfiles: (ids: string[]) => call<void>("reorder_profiles", { ids }),
   applyProfile: (id: string) => call<void>("apply_profile", { id }),
   restartCodex: () => call<void>("restart_codex"),
   setWindowTheme: (dark: boolean) => call<void>("set_window_theme", { dark }),

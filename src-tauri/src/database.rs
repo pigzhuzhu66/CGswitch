@@ -54,7 +54,10 @@ CREATE INDEX idx_switch_events_profile_id ON switch_events(profile_id);
 "#;
 
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(SCHEMA_V1)])
+    Migrations::new(vec![
+        M::up(SCHEMA_V1),
+        M::up("ALTER TABLE profiles ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"),
+    ])
 }
 
 #[derive(Debug)]
@@ -88,7 +91,7 @@ impl Database {
         let mut statement = connection
             .prepare(
                 "SELECT id, name, payload_json, icon, kind, account_id, created_at, updated_at
-                 FROM profiles ORDER BY created_at ASC, id ASC",
+                 FROM profiles ORDER BY sort_order ASC, created_at ASC, id ASC",
             )
             .map_err(|error| app_err!("无法读取供应商配置: {error}"))?;
         let rows = statement
@@ -100,6 +103,25 @@ impl Database {
             profiles.push(row.map_err(|error| app_err!("供应商配置数据无效: {error}"))?);
         }
         Ok(profiles)
+    }
+
+    pub fn reorder_profiles(&self, ids: &[String], timestamp: &str) -> AppResult<()> {
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| app_err!("无法开始排序事务: {error}"))?;
+        for (index, id) in ids.iter().enumerate() {
+            transaction
+                .execute(
+                    "UPDATE profiles SET sort_order = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![id, index as i64, timestamp],
+                )
+                .map_err(|error| app_err!("保存排序失败: {error}"))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| app_err!("保存排序失败: {error}"))?;
+        Ok(())
     }
 
     pub fn profile(&self, id: &str) -> AppResult<StoredProfile> {
@@ -136,8 +158,9 @@ impl Database {
         let connection = self.lock()?;
         connection
             .execute(
-                "INSERT INTO profiles(id, name, payload_json, kind, created_at, updated_at)
-                 VALUES(?1, ?2, ?3, ?4, ?5, ?5)",
+                "INSERT INTO profiles(id, name, payload_json, kind, created_at, updated_at, sort_order)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?5,
+                        (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM profiles))",
                 params![id, name, payload_json, kind.as_db(), timestamp],
             )
             .map_err(|error| app_err!("无法保存供应商配置: {error}"))?;

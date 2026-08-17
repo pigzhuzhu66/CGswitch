@@ -623,7 +623,7 @@ async function save() {
           <div class="flex items-center gap-2">
             <span class="field-label">API 密钥</span>
             <button
-              v-if="isOpenCode"
+              v-if="isOpenCode && creating"
               type="button"
               class="apple-inline-btn"
               @click="openOpenCodeRef"
@@ -649,7 +649,7 @@ async function save() {
           </div>
         </div>
         <n-input v-model:value="apiKey" type="password" show-password-on="click" placeholder="请输入 API 密钥" />
-        <p v-if="isOpenCode" class="muted mt-2 flex items-start gap-1.5 text-xs">
+        <p v-if="isOpenCode && creating" class="muted mt-2 flex items-start gap-1.5 text-xs">
           <svg class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <circle cx="12" cy="12" r="8.5" />
             <path d="M12 11.2v4.6" />

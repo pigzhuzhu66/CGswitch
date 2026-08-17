@@ -47,6 +47,7 @@ pub fn run() {
             commands::delete_database_backup,
             commands::rename_database_backup,
             commands::rename_profile,
+            commands::reorder_profiles,
             commands::set_profile_icon,
             commands::set_profile_show_balance,
             commands::set_profile_balance,

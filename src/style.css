@@ -139,6 +139,11 @@ body {
   border-bottom-color: var(--accent);
 }
 
+/* 深色下下划线输入框的底边也提亮，与有边框输入框一致（naive-ui 深色默认 9-14% 太淡） */
+:root.dark .underline-input.n-input {
+  border-bottom-color: rgba(255, 255, 255, 0.24);
+}
+
 /* 删除确认弹窗：标题与操作按钮统一红色语义 */
 .delete-profile-dialog .n-dialog__title {
   color: #ff3b30;
@@ -236,6 +241,59 @@ main {
 .profile-list-leave-to {
   opacity: 0;
   transform: scale(0.97);
+}
+
+/* 拖拽跟手卡片（SortableJS fallback 模式：dragClass/fallbackClass 作用于
+   跟手克隆）：实底抬升、不透明，避免重影；scale 用独立属性不干扰 transform */
+.drag-dragging,
+.sortable-fallback {
+  background: var(--panel-bg);
+  border-radius: 12px;
+  cursor: grabbing;
+  opacity: 1;
+  scale: 1.02;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+/* 列表内的落点占位（ghostClass）：淡显，落点位置一目了然 */
+.drag-ghost {
+  opacity: 0.35;
+}
+
+/* 拖拽期间全局禁止文本选中，防止路过卡片时标题/内容被框选 */
+body.drag-active,
+body.drag-active * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* 供应商卡片行间分割线：两端截断 + 渐变淡化（与激活填充自然过渡），
+   0.5px 细线，不触达卡片边框 */
+.profile-card-divider {
+  position: relative;
+}
+
+.profile-card-divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0.5px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--panel-divider) 32px,
+    var(--panel-divider) calc(100% - 32px),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* 拖拽跟手克隆里的分割线隐藏，保持浮起卡片干净 */
+.sortable-fallback::before {
+  display: none;
 }
 
 .apple-sidebar-label {

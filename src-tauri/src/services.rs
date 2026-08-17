@@ -669,6 +669,10 @@ impl AppContext {
             .rename_profile(id, &name, &now_ms().to_string())
     }
 
+    pub fn reorder_profiles(&self, ids: &[String]) -> AppResult<()> {
+        self.database.reorder_profiles(ids, &now_ms().to_string())
+    }
+
     pub fn delete_profile(&self, id: &str) -> AppResult<()> {
         self.database.delete_profile(id)?;
         if self.active_profile_state()?.as_deref() == Some(id) {

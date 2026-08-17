@@ -18,7 +18,16 @@ export const themeOverrides: GlobalThemeOverrides = {
     fontSizeMedium: "14px",
   },
   Card: {
-    borderRadius: "14px",
+    borderRadius: "20px",
+  },
+  Dialog: {
+    borderRadius: "20px",
+  },
+  Modal: {
+    borderRadius: "20px",
+  },
+  Input: {
+    colorFocus: "#ffffff",
   },
   Button: {
     fontWeight: "600",
@@ -45,20 +54,26 @@ export const darkThemeOverrides: GlobalThemeOverrides = {
     fontSizeMedium: "14px",
   },
   Card: {
-    borderRadius: "14px",
+    borderRadius: "20px",
     color: "#24242a",
   },
   Dialog: {
     color: "#24242a",
+    borderRadius: "20px",
   },
   Modal: {
     color: "#24242a",
+    borderRadius: "20px",
   },
   Popover: {
     color: "#24242a",
   },
   Input: {
     color: "#24242a",
+    colorFocus: "#24242a",
+    border: "1px solid rgba(255, 255, 255, 0.24)",
+    borderHover: "1px solid rgba(255, 255, 255, 0.42)",
+    borderFocus: "1px solid #5e9cff",
   },
   Button: {
     fontWeight: "600",

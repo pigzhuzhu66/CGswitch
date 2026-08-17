@@ -25,7 +25,10 @@ export const providerIcons: ProviderIcon[] = Object.entries(files)
     const id = path.slice(path.lastIndexOf("/") + 1).replace(/\.svg$/, "");
     return { id, label: LABELS[id] ?? id, url };
   })
-  .sort((a, b) => a.label.localeCompare(b.label, "zh"));
+  // 自定义图标固定排末尾
+  .sort((a, b) =>
+    a.id === "custom" ? 1 : b.id === "custom" ? -1 : a.label.localeCompare(b.label, "zh"),
+  );
 
 export function providerIconUrl(id: string | null | undefined): string | null {
   return id ? (files[`./assets/providers/${id}.svg`] ?? null) : null;

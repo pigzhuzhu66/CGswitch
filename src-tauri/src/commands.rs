@@ -232,6 +232,11 @@ pub fn delete_profile(id: String, state: State<'_, AppContext>) -> AppResult<()>
 }
 
 #[tauri::command]
+pub fn reorder_profiles(ids: Vec<String>, state: State<'_, AppContext>) -> AppResult<()> {
+    state.reorder_profiles(&ids)
+}
+
+#[tauri::command]
 pub async fn apply_profile(
     id: String,
     state: State<'_, AppContext>,

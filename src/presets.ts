@@ -37,17 +37,6 @@ export const customAuthTemplate = `{
 
 export const builtinPresets: BuiltinPreset[] = [
   {
-    kind: "custom",
-    name: "自定义",
-    provider: null,
-    icon: "custom",
-    base_url: "https://api.example.com/v1",
-    admin_url: null,
-    model: "自定义",
-    model_values: { model_catalog_json: '"~/.codex/models.json"' },
-    fragment: customConfigTemplate,
-  },
-  {
     kind: "deepseek",
     name: "DeepSeek",
     provider: "deepseek",
@@ -168,6 +157,17 @@ export const builtinPresets: BuiltinPreset[] = [
       'wire_api = "responses"',
       'experimental_bearer_token = "<你的 OpenCode API Key>"',
     ].join("\n"),
+  },
+  {
+    kind: "custom",
+    name: "自定义",
+    provider: null,
+    icon: "custom",
+    base_url: "https://api.example.com/v1",
+    admin_url: null,
+    model: "自定义",
+    model_values: { model_catalog_json: '"~/.codex/models.json"' },
+    fragment: customConfigTemplate,
   },
 ];
 
