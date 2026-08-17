@@ -74,6 +74,32 @@ const webPaths = [
   { label: "数据库备份", path: "C:\\Users\\<user>\\.cgswitch\\backups\\database" },
 ];
 
+// 从 2xx 的 JSON 响应体里识别供应商级错误（OpenAI 风格 error 或智谱风格 code/success）。
+function connectionErrorFromBody(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const json = value as Record<string, unknown>;
+  if (json.error !== undefined) {
+    const error = json.error;
+    const message =
+      error && typeof error === "object"
+        ? (error as Record<string, unknown>).message
+        : error;
+    return typeof message === "string" && message ? message : "接口返回错误";
+  }
+  if (json.success === false) {
+    const message = typeof json.msg === "string" ? json.msg : json.message;
+    return typeof message === "string" && message ? message : "接口返回错误";
+  }
+  const code = json.code;
+  const codeNumber =
+    typeof code === "number" ? code : typeof code === "string" ? Number(code) : NaN;
+  if (Number.isFinite(codeNumber) && codeNumber >= 400) {
+    const message = typeof json.msg === "string" ? json.msg : json.message;
+    return typeof message === "string" && message ? message : "接口返回错误";
+  }
+  return null;
+}
+
 interface WebDetail {
   base_url: string | null;
   api_key: string | null;
@@ -278,12 +304,50 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
       if (!profile.provider) throw new Error("该供应商缺少配置，无法测试连通性");
-      const rawKey = args?.apiKey !== undefined ? String(args.apiKey) : "saved-key";
-      if (!rawKey.trim()) throw new Error("请填写 API 密钥");
-      const rawBase = args?.baseUrl !== undefined ? String(args.baseUrl) : "https://api.example.com";
-      if (!rawBase.trim()) throw new Error("请填写调用地址");
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      return { ok: true, latency_ms: 87, status: 200, error: null } as T;
+      const apiKey = args?.apiKey !== undefined ? String(args.apiKey) : "saved-key";
+      if (!apiKey.trim()) throw new Error("请填写 API 密钥");
+      const baseUrl = args?.baseUrl !== undefined ? String(args.baseUrl) : "https://api.example.com";
+      if (!baseUrl.trim()) throw new Error("请填写调用地址");
+      // 网页调试模式做真实请求，避免“随便填都能成功”的假象；
+      // 跨域被浏览器拦截时明确提示用桌面版验证
+      const url = `${baseUrl.replace(/\/+$/, "")}/models`;
+      const start = Date.now();
+      try {
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${apiKey.trim()}` },
+        });
+        const latency_ms = Date.now() - start;
+        if (res.ok) {
+          const text = await res.text();
+          let json: unknown = null;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            return {
+              ok: false,
+              latency_ms,
+              status: res.status,
+              error: `接口返回 HTTP ${res.status}，但响应不是有效的 JSON（请检查调用地址）`,
+            } as T;
+          }
+          const error = connectionErrorFromBody(json);
+          if (error) {
+            return { ok: false, latency_ms, status: res.status, error } as T;
+          }
+          return { ok: true, latency_ms, status: res.status, error: null } as T;
+        }
+        if (res.status === 401 || res.status === 403) {
+          return { ok: false, latency_ms, status: res.status, error: "API 密钥无效" } as T;
+        }
+        return { ok: false, latency_ms, status: res.status, error: `接口返回 HTTP ${res.status}` } as T;
+      } catch {
+        return {
+          ok: false,
+          latency_ms: null,
+          status: null,
+          error: "连接失败：浏览器跨域限制无法真实请求，请用桌面版验证",
+        } as T;
+      }
     }
     case "get_deepseek_balance": {
       const profile = webProfiles.find((item) => item.id === args?.id);

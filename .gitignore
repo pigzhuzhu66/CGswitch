@@ -30,3 +30,4 @@ CLAUDE.md
 .env
 .env.*
 .codex/config.toml
+BUG_HANDOFF_divider.md

@@ -136,6 +136,39 @@ fn profile_config_fragment(payload: &ProfilePayload) -> String {
     fragment
 }
 
+/// 从 2xx 的 JSON 响应体里识别供应商级错误（OpenAI 风格 `error` 或智谱风格 `code/success`）。
+fn connection_error_from_body(value: &serde_json::Value) -> Option<String> {
+    if let Some(error) = value.get("error") {
+        let message = error
+            .get("message")
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| error.as_str());
+        return Some(message.unwrap_or("接口返回错误").to_string());
+    }
+    if value.get("success").and_then(serde_json::Value::as_bool) == Some(false) {
+        let message = value
+            .get("msg")
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| value.get("message").and_then(serde_json::Value::as_str));
+        return Some(message.unwrap_or("接口返回错误").to_string());
+    }
+    if let Some(code) = value.get("code") {
+        let is_error_code = match code {
+            serde_json::Value::Number(number) => number.as_i64().is_some_and(|n| n >= 400),
+            serde_json::Value::String(text) => text.parse::<i64>().is_ok_and(|n| n >= 400),
+            _ => false,
+        };
+        if is_error_code {
+            let message = value
+                .get("msg")
+                .and_then(serde_json::Value::as_str)
+                .or_else(|| value.get("message").and_then(serde_json::Value::as_str));
+            return Some(message.unwrap_or("接口返回错误").to_string());
+        }
+    }
+    None
+}
+
 #[derive(Debug)]
 pub struct AppContext {
     database: Arc<Database>,
@@ -428,12 +461,36 @@ impl AppContext {
                 let status = response.status();
                 let latency_ms = Some(start.elapsed().as_millis());
                 if status.is_success() {
-                    Ok(ProfileConnectionResult {
-                        ok: true,
-                        latency_ms,
-                        status: Some(status.as_u16()),
-                        error: None,
-                    })
+                    // 部分服务端（如智谱 /api/v1/models）用 HTTP 200 包装认证失败，
+                    // 只认状态码会把“密钥错误/地址错误”误判成连通成功，必须校验响应体。
+                    let body = response.text().await.unwrap_or_default();
+                    match serde_json::from_str::<serde_json::Value>(&body) {
+                        Ok(json) => {
+                            if let Some(error) = connection_error_from_body(&json) {
+                                Ok(ProfileConnectionResult {
+                                    ok: false,
+                                    latency_ms,
+                                    status: Some(status.as_u16()),
+                                    error: Some(error),
+                                })
+                            } else {
+                                Ok(ProfileConnectionResult {
+                                    ok: true,
+                                    latency_ms,
+                                    status: Some(status.as_u16()),
+                                    error: None,
+                                })
+                            }
+                        }
+                        Err(_) => Ok(ProfileConnectionResult {
+                            ok: false,
+                            latency_ms,
+                            status: Some(status.as_u16()),
+                            error: Some(format!(
+                                "接口返回 HTTP {status}，但响应不是有效的 JSON（请检查调用地址）"
+                            )),
+                        }),
+                    }
                 } else if status == reqwest::StatusCode::UNAUTHORIZED
                     || status == reqwest::StatusCode::FORBIDDEN
                 {
@@ -1535,6 +1592,38 @@ fn read_optional_text(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connection_error_body_detects_provider_level_failures() {
+        let parse = |text: &str| {
+            serde_json::from_str::<serde_json::Value>(text)
+                .ok()
+                .and_then(|json| connection_error_from_body(&json))
+        };
+        // 智谱风格：HTTP 200 包装 401
+        assert_eq!(
+            parse(r#"{"code":401,"msg":"令牌已过期或验证不正确","success":false}"#).as_deref(),
+            Some("令牌已过期或验证不正确")
+        );
+        // OpenAI 风格：error.message
+        assert_eq!(
+            parse(r#"{"error":{"message":"Incorrect API key provided"}}"#).as_deref(),
+            Some("Incorrect API key provided")
+        );
+        // error 为字符串
+        assert_eq!(
+            parse(r#"{"error":"unauthorized"}"#).as_deref(),
+            Some("unauthorized")
+        );
+        // 字符串业务错误码
+        assert_eq!(
+            parse(r#"{"code":"401","msg":"invalid key"}"#).as_deref(),
+            Some("invalid key")
+        );
+        // 正常模型列表 / 2xx 业务码不应误判
+        assert_eq!(parse(r#"{"data":[{"id":"glm-5.3"}]}"#), None);
+        assert_eq!(parse(r#"{"code":200,"msg":"ok","success":true}"#), None);
+    }
 
     #[test]
     fn capture_and_apply_profile_round_trip() {
