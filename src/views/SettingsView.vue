@@ -583,7 +583,7 @@ async function openPath(item: PathInfo) {
       <div class="flex items-center gap-3">
         <img src="/logo.png" alt="CGSwitch" class="h-12 w-12 shrink-0 rounded-2xl" />
         <div>
-          <div class="text-[15px] font-bold tracking-tight">CGSwitch</div>
+          <div class="apple-wordmark">CGSwitch</div>
           <div class="app-version mt-1.5" :aria-label="`版本 ${version.trim()}`">
             <span>v{{ version.trim() }}</span>
           </div>

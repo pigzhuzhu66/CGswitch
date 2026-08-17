@@ -193,7 +193,20 @@ useWindowActivation({
         <n-layout class="h-full! rounded-none! bg-transparent!">
           <div class="flex h-screen flex-col">
             <div class="flex h-8 shrink-0 items-center bg-[var(--app-bg)]">
-              <div data-tauri-drag-region class="h-full shrink-0 bg-[var(--sidebar-bg)] transition-[width] duration-[360ms] ease-[cubic-bezier(0.22,1,0.36,1)]" :class="isSidebarCollapsed ? 'w-12' : 'w-[144px]'" />
+              <div data-tauri-drag-region class="flex h-full shrink-0 items-center overflow-hidden bg-[var(--sidebar-bg)] transition-[width] duration-[360ms] ease-[cubic-bezier(0.22,1,0.36,1)]" :class="isSidebarCollapsed ? 'w-12' : 'w-[144px]'">
+                <div
+                  class="apple-sidebar-brand flex h-full w-full cursor-pointer items-center pt-2"
+                  :class="isSidebarCollapsed ? 'justify-center' : 'gap-2 pl-3'"
+                  role="button"
+                  tabindex="0"
+                  aria-label="CGSwitch"
+                  @click="toggleSidebar"
+                  @keyup.enter="toggleSidebar"
+                >
+                  <img src="/logo.png" alt="CGSwitch" class="h-5 w-5 shrink-0 rounded-md" draggable="false" />
+                  <span v-if="!isSidebarCollapsed" class="apple-sidebar-label apple-wordmark whitespace-nowrap">CGSwitch</span>
+                </div>
+              </div>
               <div data-tauri-drag-region class="min-w-0 flex-1 self-stretch" />
               <div class="flex h-full items-center">
                 <button type="button" class="grid h-8 w-10 place-items-center text-[var(--text-secondary)] transition-colors hover:bg-black/6 dark:hover:bg-white/10" aria-label="最小化" @click="windowMinimize">
@@ -215,29 +228,7 @@ useWindowActivation({
             </div>
             <div class="flex min-h-0 flex-1">
             <aside class="apple-sidebar relative h-full shrink-0" :class="isSidebarCollapsed ? ['w-12', 'apple-sidebar--collapsed'] : 'w-[144px]'">
-              <div
-                class="apple-sidebar-brand mt-3 flex h-9 cursor-pointer items-center"
-                :class="isSidebarCollapsed ? 'justify-center' : 'mx-3'"
-                role="button"
-                tabindex="0"
-                aria-label="CGSwitch"
-                @click="toggleSidebar"
-                @keyup.enter="toggleSidebar"
-              >
-                <span
-                  v-if="isSidebarCollapsed"
-                  class="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[var(--text-secondary)] transition-colors hover:bg-black/5 hover:text-[#007aff] dark:hover:bg-white/8"
-                  aria-hidden="true"
-                >
-                  <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="16" rx="2" />
-                    <path d="M9 4v16" />
-                  </svg>
-                </span>
-                <span v-else class="apple-sidebar-label apple-wordmark whitespace-nowrap">CGSwitch</span>
-              </div>
-
-              <nav ref="sidebarNavRef" class="relative mx-1.5 mt-6 space-y-1">
+              <nav ref="sidebarNavRef" class="relative mx-1.5 mt-3 space-y-1">
                 <span class="apple-sidebar-indicator" :style="{ top: `${indicatorTop}px`, left: `${indicatorLeft}px` }" aria-hidden="true" />
                 <button ref="profilesNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'profiles' ? 'bg-[var(--selection-bg)] font-semibold text-[#007aff]' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="供应商配置" @click="goProfiles" @mouseenter="sidebarFlyoutArmed = true">
                   <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
