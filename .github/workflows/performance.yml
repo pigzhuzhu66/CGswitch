@@ -18,17 +18,21 @@ concurrency:
 
 jobs:
   store:
-    name: 存储基准到 gh-pages
+    name: 存储基准到缓存
     if: github.event_name != 'pull_request'
     runs-on: windows-latest
     permissions:
-      contents: write
-      deployments: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - name: 恢复上次基准数据
+        uses: actions/cache@v6
+        with:
+          path: .bench-cache
+          key: cgswitch-bench-${{ runner.os }}
       - name: 运行热路径基准
         shell: bash
         working-directory: src-tauri
@@ -39,8 +43,8 @@ jobs:
           name: cgswitch-core-hotpath
           tool: cargo
           output-file-path: src-tauri/output.txt
+          external-data-json-path: .bench-cache/benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
           alert-threshold: '200%'
           fail-on-alert: false
           summary-always: true
@@ -58,6 +62,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - name: 恢复上次基准数据
+        uses: actions/cache@v6
+        with:
+          path: .bench-cache
+          key: cgswitch-bench-${{ runner.os }}
       - name: 运行热路径基准
         shell: bash
         working-directory: src-tauri
@@ -68,8 +77,9 @@ jobs:
           name: cgswitch-core-hotpath
           tool: cargo
           output-file-path: src-tauri/output.txt
+          external-data-json-path: .bench-cache/benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
+          save-data-file: false
           alert-threshold: '200%'
           fail-on-alert: false
           comment-on-alert: true
