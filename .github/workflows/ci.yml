@@ -25,26 +25,9 @@ concurrency:
 
 jobs:
   check:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: windows-x64
-            os: windows-latest
-            rust-target: x86_64-pc-windows-msvc
-            host-checks: true
-          - name: macos-arm64
-            os: macos-latest
-            rust-target: aarch64-apple-darwin
-            host-checks: true
-          # macos-latest 是 ARM 机型，x64 目标为交叉编译；
-          # fmt/clippy/test 只依赖宿主架构，在 arm64 任务上跑即可，避免重复
-          - name: macos-x64
-            os: macos-latest
-            rust-target: x86_64-apple-darwin
-            host-checks: false
+    name: typecheck + fmt + clippy + test
+    # 打包验证移到 release.yml（发布时才对 3 个平台构建），CI 只跑能查出项目问题的检查
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -53,9 +36,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: rustup target add ${{ matrix.rust-target }}
-        shell: bash
-        working-directory: src-tauri
       - run: rustup component add rustfmt clippy
         shell: bash
         working-directory: src-tauri
@@ -65,12 +45,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: cargo fmt --all -- --check
-        if: matrix.host-checks
         working-directory: src-tauri
       - run: cargo clippy --all-targets -- -D warnings
-        if: matrix.host-checks
         working-directory: src-tauri
       - run: cargo test
-        if: matrix.host-checks
         working-directory: src-tauri
-      - run: pnpm tauri build --target ${{ matrix.rust-target }}
+  test-macos:
+    name: macOS cargo test
+    # 保险：覆盖 macOS 平台编译兼容性（不打包），避免编译问题积压到发布才发现
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: cargo test
+        working-directory: src-tauri
