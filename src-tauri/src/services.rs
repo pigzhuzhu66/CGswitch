@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter};
 
-use crate::auth::codex_oauth::CodexOAuthState;
+use crate::auth::codex_oauth::{parse_external_auth_json, CodexOAuthState, ManagedAccount};
 use crate::builtin;
 use crate::codex::{config as codex_config, process as codex_process};
 use crate::database::{profile_summary, Database};
@@ -720,6 +720,68 @@ impl AppContext {
         }
     }
 
+    /// 验证 ChatGPT 订阅认证连通性：用当前 access_token 请求 Codex 官方后端用量端点
+    /// （Codex CLI 后台轮询同一个端点）。2xx 可用；401/403 登录失效或地区拦截；
+    /// 网络错误提示代理/网络问题。仅手动点击测试时调用，不参与切换流程。
+    pub async fn test_subscription_connection(
+        &self,
+        access_token: &str,
+    ) -> AppResult<ProfileConnectionResult> {
+        let client = http_client()?;
+        let start = std::time::Instant::now();
+        match client
+            .get("https://chatgpt.com/backend-api/wham/usage")
+            .bearer_auth(access_token)
+            .send()
+            .await
+        {
+            Ok(response) => {
+                let status = response.status();
+                let latency_ms = Some(start.elapsed().as_millis());
+                if status.is_success() {
+                    Ok(ProfileConnectionResult {
+                        ok: true,
+                        latency_ms,
+                        status: Some(status.as_u16()),
+                        error: None,
+                    })
+                } else if status == reqwest::StatusCode::UNAUTHORIZED
+                    || status == reqwest::StatusCode::FORBIDDEN
+                {
+                    let text = response.text().await.unwrap_or_default();
+                    let error = if text.contains("unsupported_country_region_territory") {
+                        "认证请求被地区限制拦截。请开启系统代理并确认节点位于 ChatGPT 支持的地区后重试。"
+                            .to_string()
+                    } else {
+                        "ChatGPT 登录已失效，请重新登录".to_string()
+                    };
+                    Ok(ProfileConnectionResult {
+                        ok: false,
+                        latency_ms,
+                        status: Some(status.as_u16()),
+                        error: Some(error),
+                    })
+                } else {
+                    Ok(ProfileConnectionResult {
+                        ok: false,
+                        latency_ms,
+                        status: Some(status.as_u16()),
+                        error: Some(format!("接口返回 HTTP {status}")),
+                    })
+                }
+            }
+            Err(error) => {
+                let status = error.status().map(|status| status.as_u16());
+                Ok(ProfileConnectionResult {
+                    ok: false,
+                    latency_ms: None,
+                    status,
+                    error: Some(reqwest_error_message(&error)),
+                })
+            }
+        }
+    }
+
     /// 按供应商查询余额/用量：DeepSeek 查账户余额，MiniMax 查 Token Plan 剩余用量。
     /// 使用该供应商自己保存的 API 密钥，以配置为单位查询。
     pub async fn get_profile_balance(&self, id: &str) -> AppResult<ProfileBalance> {
@@ -973,8 +1035,10 @@ impl AppContext {
         let mut stored = self.database.profile(id)?;
         // 使用中的第三方供应商：快照没单独保存 auth 时连当前 live auth.json 一起复制，
         // 保证副本应用后凭据与源一致；官方订阅的 auth 由账号动态生成，不复制。
+        // 外部 Codex 官方认证属于全局订阅凭据，不吞进第三方档案（避免副本应用时覆盖官方认证）。
         if active && stored.kind == ProfileKind::ThirdParty && stored.payload.raw_auth.is_none() {
-            stored.payload.raw_auth = read_optional_text(&self.paths.codex_home.join("auth.json"));
+            stored.payload.raw_auth = read_optional_text(&self.paths.codex_home.join("auth.json"))
+                .filter(|text| parse_external_auth_json(text).is_none());
         }
         let profiles = self.database.profiles()?;
         let base: String = stored.name.trim().chars().take(47).collect();
@@ -1098,7 +1162,13 @@ impl AppContext {
             model_values: payload.model_values.clone(),
             config_fragment,
             raw_config,
-            auth_content: payload.raw_auth.clone().or(live_auth),
+            // 官方订阅：展示当前生效的全局认证（未保存时不写进档案）；
+            // 第三方：只展示档案级认证，避免把 live 的 Codex 官方认证预填进编辑页、保存时意外收进档案
+            auth_content: if payload.provider_id.is_none() {
+                payload.raw_auth.clone().or(live_auth)
+            } else {
+                payload.raw_auth.clone()
+            },
             catalog_content,
             raw_catalog: payload.raw_catalog.clone(),
             raw_auth: payload.raw_auth.clone(),
@@ -1315,6 +1385,33 @@ impl AppContext {
         backup_file(&destination, &self.paths.codex_files_backup, "auth")?;
         atomic_write(&destination, content.as_bytes())?;
         Ok(())
+    }
+
+    /// 识别 Codex 官方外部认证（~/.codex/auth.json，由 codex login 生成）。
+    /// 只读识别、不导入数据库；不是有效的 ChatGPT 订阅认证时返回 None。
+    pub fn external_codex_auth(&self) -> AppResult<Option<ManagedAccount>> {
+        let Some(text) = read_optional_text(&self.paths.codex_home.join("auth.json")) else {
+            return Ok(None);
+        };
+        let Some(auth) = parse_external_auth_json(&text) else {
+            return Ok(None);
+        };
+        Ok(Some(ManagedAccount {
+            id: auth.account_id,
+            login: auth
+                .email
+                .unwrap_or_else(|| "ChatGPT（Codex 官方认证）".to_string()),
+            authenticated_at: 0,
+            is_default: false,
+        }))
+    }
+
+    /// 读取 live auth.json 中有效的 ChatGPT 订阅 access_token（外部 Codex 认证）。
+    pub fn external_codex_access_token(&self) -> AppResult<Option<String>> {
+        let Some(text) = read_optional_text(&self.paths.codex_home.join("auth.json")) else {
+            return Ok(None);
+        };
+        Ok(parse_external_auth_json(&text).map(|auth| auth.access_token))
     }
 
     /// 是否为官方订阅供应商（无 API 供应商，凭据走 ChatGPT 订阅）。
@@ -2029,10 +2126,8 @@ experimental_bearer_token = "secret-token"
             detail.catalog_content.as_deref(),
             Some(r#"{"models":[{"id":"glm-5.3","api_key":"sk-secret"}]}"#)
         );
-        assert_eq!(
-            detail.auth_content.as_deref(),
-            Some(r#"{"auth_mode":"chatgpt","tokens":{"access_token":"raw-token"}}"#)
-        );
+        // 档案没保存自己的认证时，不把 live 的 Codex 官方认证预填进编辑页
+        assert_eq!(detail.auth_content, None);
     }
 
     #[test]
@@ -3214,6 +3309,7 @@ base_url = "https://api.example"
                 email: Some("a@example.com".into()),
                 id_token: None,
                 refresh_token: "rt".into(),
+                auth_json: None,
                 authenticated_at: 1,
             })
             .unwrap();

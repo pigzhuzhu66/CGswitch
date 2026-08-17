@@ -204,12 +204,8 @@ const accountOptions = computed(() => [
     value: account.id,
   })),
 ]);
-// 官方订阅与带密钥的第三方都有认证文件组件
-const hasAuthTab = computed(
-  () =>
-    !creating.value &&
-    (detail.value?.provider === null || Boolean(detail.value?.api_key)),
-);
+// 编辑态所有供应商都显示认证文件组件：第三方可保存自己的 auth.json 随应用写入
+const hasAuthTab = computed(() => !creating.value);
 
 const tabs = computed(() => {
   if (creating.value) {
@@ -751,6 +747,15 @@ async function save() {
           />
         </div>
         <div v-else-if="activeTab === 'auth'">
+          <p
+            v-if="detail?.provider !== null && !detail?.raw_auth"
+            class="muted mb-2 text-xs"
+          >
+            该配置未保存自定义认证文件：应用时不会写入 ~/.codex/auth.json，全局认证保持现状。
+          </p>
+          <p v-else-if="detail?.provider === null && !detail?.raw_auth" class="muted mb-2 text-xs">
+            当前显示的是全局生效的认证文件（来自订阅账号 / Codex 登录），只展示，未保存到本配置。
+          </p>
           <ConfigTextEditor
             v-model="authText"
             language="json"

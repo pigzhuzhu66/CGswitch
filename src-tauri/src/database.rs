@@ -57,6 +57,8 @@ fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
         M::up(SCHEMA_V1),
         M::up("ALTER TABLE profiles ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"),
+        // 缓存上次生成的 auth.json 原文：切换 ChatGPT 配置时离线复用，不触发 token 刷新
+        M::up("ALTER TABLE accounts ADD COLUMN auth_json TEXT"),
     ])
 }
 
@@ -253,7 +255,7 @@ impl Database {
         let connection = self.lock()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, email, id_token, refresh_token, authenticated_at
+                "SELECT id, email, id_token, refresh_token, auth_json, authenticated_at
                  FROM accounts ORDER BY authenticated_at DESC, id ASC",
             )
             .map_err(|error| app_err!("无法读取订阅账号: {error}"))?;
@@ -272,18 +274,20 @@ impl Database {
         let connection = self.lock()?;
         connection
             .execute(
-                "INSERT INTO accounts(id, email, id_token, refresh_token, authenticated_at)
-                 VALUES(?1, ?2, ?3, ?4, ?5)
+                "INSERT INTO accounts(id, email, id_token, refresh_token, auth_json, authenticated_at)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6)
                  ON CONFLICT(id) DO UPDATE SET
                    email=excluded.email,
                    id_token=excluded.id_token,
                    refresh_token=excluded.refresh_token,
+                   auth_json=excluded.auth_json,
                    authenticated_at=excluded.authenticated_at",
                 params![
                     account.id,
                     account.email,
                     account.id_token,
                     account.refresh_token,
+                    account.auth_json,
                     account.authenticated_at,
                 ],
             )
@@ -416,9 +420,9 @@ impl Database {
             &source,
             &transaction,
             "accounts",
-            "SELECT id, email, id_token, refresh_token, authenticated_at FROM accounts",
-            "INSERT INTO accounts(id, email, id_token, refresh_token, authenticated_at)
-             VALUES(?1, ?2, ?3, ?4, ?5)",
+            "SELECT id, email, id_token, refresh_token, auth_json, authenticated_at FROM accounts",
+            "INSERT INTO accounts(id, email, id_token, refresh_token, auth_json, authenticated_at)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
         )?;
         copy_table(
             &source,
@@ -508,6 +512,7 @@ pub struct StoredAccount {
     pub email: Option<String>,
     pub id_token: Option<String>,
     pub refresh_token: String,
+    pub auth_json: Option<String>,
     pub authenticated_at: i64,
 }
 
@@ -536,7 +541,8 @@ fn account_from_row(row: &Row<'_>) -> rusqlite::Result<StoredAccount> {
         email: row.get(1)?,
         id_token: row.get(2)?,
         refresh_token: row.get(3)?,
-        authenticated_at: row.get(4)?,
+        auth_json: row.get(4)?,
+        authenticated_at: row.get(5)?,
     })
 }
 
@@ -685,6 +691,7 @@ mod tests {
             email: Some("a@example.com".into()),
             id_token: Some("id-jwt".into()),
             refresh_token: "rt-1".into(),
+            auth_json: None,
             authenticated_at: 100,
         };
         db.upsert_account(&account).unwrap();

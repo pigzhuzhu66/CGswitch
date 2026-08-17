@@ -303,7 +303,10 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
     case "test_profile_connection": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
-      if (!profile.provider) throw new Error("该供应商缺少配置，无法测试连通性");
+      if (!profile.provider) {
+        // 官方订阅：网页调试模式直接模拟认证连通正常
+        return { ok: true, latency_ms: 12, status: 200, error: null } as T;
+      }
       const apiKey = args?.apiKey !== undefined ? String(args.apiKey) : "saved-key";
       if (!apiKey.trim()) throw new Error("请填写 API 密钥");
       const baseUrl = args?.baseUrl !== undefined ? String(args.baseUrl) : "https://api.example.com";
@@ -498,7 +501,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
     case "set_window_theme":
       return undefined as T;
     case "auth_get_status":
-      return { authenticated: false, default_account_id: null, accounts: [] } as T;
+      return { authenticated: false, default_account_id: null, accounts: [], external: null } as T;
     case "auth_apply_to_codex":
       return undefined as T;
     case "auth_set_default_account":

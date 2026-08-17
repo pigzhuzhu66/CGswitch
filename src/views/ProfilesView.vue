@@ -272,7 +272,9 @@ onMounted(async () => {
     subscriptionAuthed.value = status.authenticated;
     authAccounts.value = status.accounts;
     subscriptionAccount.value =
-      status.accounts.find((account) => account.id === status.default_account_id)?.login ?? null;
+      status.accounts.find((account) => account.id === status.default_account_id)?.login ??
+      status.external?.login ??
+      null;
   } catch {
     subscriptionAuthed.value = false;
   }

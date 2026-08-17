@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { NButton, NTag, useMessage } from "naive-ui";
+import { NButton, NTag, useDialog, useMessage } from "naive-ui";
 import { api } from "../api";
 import type { AuthStatus, DeviceCodeResponse } from "../types";
 
 const message = useMessage();
+const dialog = useDialog();
 const status = ref<AuthStatus | null>(null);
 const loadError = ref("");
 const busy = ref(false);
@@ -94,13 +95,22 @@ function cancelLogin() {
 }
 
 async function removeAccount(accountId: string) {
-  try {
-    await api.authRemoveAccount(accountId);
-    message.success("账号已移除");
-    await refreshStatus();
-  } catch (error) {
-    message.error(String(error));
-  }
+  dialog.warning({
+    title: "移除订阅账号",
+    content: "确定移除该 ChatGPT 订阅账号吗？移除后本机将清除该账号的登录凭据。",
+    positiveText: "移除",
+    negativeText: "取消",
+    positiveButtonProps: { type: "error" },
+    onPositiveClick: async () => {
+      try {
+        await api.authRemoveAccount(accountId);
+        message.success("账号已移除");
+        await refreshStatus();
+      } catch (error) {
+        message.error(String(error));
+      }
+    },
+  });
 }
 
 async function setDefault(accountId: string) {
@@ -162,6 +172,15 @@ onMounted(refreshStatus);
 
     <div v-else-if="status?.authenticated" class="space-y-3">
       <p class="muted text-sm">ChatGPT 官方订阅已认证，添加 ChatGPT 供应商时无需再输入密钥。</p>
+      <div
+        v-if="status.external"
+        class="flex items-center justify-between gap-3 rounded-xl shadow-[0_0_0_1px_var(--panel-ring)] px-3 py-2.5"
+      >
+        <div class="flex min-w-0 items-center gap-2">
+          <span class="mono truncate">{{ status.external.login }}</span>
+          <n-tag size="small" type="info">Codex 官方认证</n-tag>
+        </div>
+      </div>
       <div
         v-for="account in status.accounts"
         :key="account.id"

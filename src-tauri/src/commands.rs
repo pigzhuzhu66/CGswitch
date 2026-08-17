@@ -80,7 +80,30 @@ pub async fn test_profile_connection(
     base_url: Option<String>,
     api_key: Option<String>,
     state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
 ) -> AppResult<ProfileConnectionResult> {
+    // 官方订阅：测认证连通性（token 有效 + 网络可达），走 Codex 官方后端端点
+    if state.is_subscription_profile(&id)? {
+        let manager = oauth.0.read().await;
+        let bound = state.bound_account_id(&id)?;
+        let access_token = match bound {
+            Some(account_id) => manager
+                .get_valid_token_for_account(&account_id)
+                .await
+                .map_err(|error| app_err!("{error}"))?,
+            None => match state.external_codex_access_token()? {
+                Some(token) => token,
+                None => match manager.default_account_id().await {
+                    Some(account_id) => manager
+                        .get_valid_token_for_account(&account_id)
+                        .await
+                        .map_err(|error| app_err!("{error}"))?,
+                    None => return Err(app_err!("未检测到已认证的 ChatGPT 订阅账号，请先登录")),
+                },
+            },
+        };
+        return state.test_subscription_connection(&access_token).await;
+    }
     state
         .test_profile_connection(&id, base_url.as_deref(), api_key.as_deref())
         .await
@@ -254,15 +277,28 @@ pub async fn apply_profile(
         .map_err(|error| error.to_string())?;
     if is_subscription && !has_auth_override {
         let manager = oauth.0.read().await;
-        let account_id = state
+        let bound = state
             .bound_account_id(&id)
+            .map_err(|error| error.to_string())?;
+        // Codex 官方外部认证生效中：配置未显式绑定账号时不写不覆盖，保持 Codex 自己维护的认证
+        let external_live = state
+            .external_codex_auth()
             .map_err(|error| error.to_string())?
-            .or(manager.default_account_id().await);
+            .is_some();
+        let account_id = match (bound, external_live) {
+            (Some(id), _) => Some(id),
+            (None, true) => None,
+            (None, false) => manager.default_account_id().await,
+        };
         if let Some(account_id) = account_id {
-            let content = manager
-                .codex_auth_json(&account_id)
-                .await
-                .map_err(|error| error.to_string())?;
+            // 优先用缓存凭据离线切换；首次（无缓存）才刷新一次播种，之后不再发网络请求
+            let content = match manager.cached_auth_json(&account_id).await {
+                Some(cached) => cached,
+                None => manager
+                    .codex_auth_json(&account_id)
+                    .await
+                    .map_err(|error| error.to_string())?,
+            };
             state
                 .write_codex_auth_json(&content)
                 .map_err(|error| error.to_string())?;
@@ -343,8 +379,20 @@ pub async fn auth_poll_for_account(
 }
 
 #[tauri::command]
-pub async fn auth_get_status(state: State<'_, CodexOAuthState>) -> Result<AuthStatus, String> {
-    Ok(state.0.read().await.get_status().await)
+pub async fn auth_get_status(
+    app: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
+) -> Result<AuthStatus, String> {
+    let mut status = oauth.0.read().await.get_status().await;
+    // Codex 官方外部认证（~/.codex/auth.json）：只识别不导入，认证过就显示已认证
+    if let Some(external) = app
+        .external_codex_auth()
+        .map_err(|error| error.to_string())?
+    {
+        status.external = Some(external);
+        status.authenticated = true;
+    }
+    Ok(status)
 }
 
 #[tauri::command]

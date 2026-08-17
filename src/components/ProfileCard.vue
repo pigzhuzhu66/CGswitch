@@ -108,13 +108,15 @@ watch(
 );
 
 const connectionDimmed = computed(() => {
-  if (!props.profile.provider) return true;
+  if (!props.profile.provider) return !props.subscriptionAuthed;
   if (connectionState.value === "fail") return true;
   return !props.profile.has_key;
 });
 
 const connectionTitle = computed(() => {
-  if (!props.profile.provider) return "该供应商缺少配置，无法测试";
+  if (!props.profile.provider) {
+    return props.subscriptionAuthed ? "测试订阅认证连通性" : "尚未认证 ChatGPT 订阅";
+  }
   if (!props.profile.has_key) return "缺少 API 密钥，点击查看提示";
   return "测试连通性";
 });
@@ -130,8 +132,13 @@ async function openAdmin() {
 }
 
 async function testConnection() {
-  if (testing.value || !props.profile.provider) return;
-  if (!props.profile.has_key) {
+  if (testing.value) return;
+  if (!props.profile.provider) {
+    if (!props.subscriptionAuthed) {
+      message.warning("尚未完成 ChatGPT 订阅认证，请先到设置页登录");
+      return;
+    }
+  } else if (!props.profile.has_key) {
     connectionState.value = "fail";
     message.warning(`「${props.profile.name}」还没有配置 API 密钥，请先填写后再测试`);
     return;
@@ -249,7 +256,15 @@ async function testConnection() {
       </div>
     </div>
     <div class="flex shrink-0 items-center gap-2" @click.stop>
-      <n-button type="primary" size="small" :disabled="busy || active" @click="emit('apply')">{{ active ? "已应用" : "应用" }}</n-button>
+      <n-button
+        type="primary"
+        size="small"
+        :style="{ '--n-height': '32px', '--n-padding': '0 14px' }"
+        :disabled="busy || active"
+        @click="emit('apply')"
+      >
+        {{ active ? "已应用" : "应用" }}
+      </n-button>
       <button
         type="button"
         class="grid h-8 w-8 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-accent/10 hover:text-accent dark:text-zinc-500"
@@ -266,7 +281,7 @@ async function testConnection() {
         type="button"
         class="grid h-8 w-8 place-items-center rounded-lg transition-colors enabled:hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
         :class="connectionDimmed ? 'text-zinc-400' : 'text-accent'"
-        :disabled="!profile.provider || busy || testing"
+        :disabled="(!profile.provider && !subscriptionAuthed) || busy || testing"
         :title="connectionTitle"
         :aria-label="'测试连通性'"
         @click="testConnection"

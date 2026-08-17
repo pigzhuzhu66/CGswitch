@@ -92,6 +92,7 @@ export interface AuthStatus {
   authenticated: boolean;
   default_account_id: string | null;
   accounts: ManagedAccount[];
+  external: ManagedAccount | null;
 }
 
 export interface Settings {

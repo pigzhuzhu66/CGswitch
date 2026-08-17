@@ -85,6 +85,8 @@ pub struct AuthStatus {
     pub authenticated: bool,
     pub default_account_id: Option<String>,
     pub accounts: Vec<ManagedAccount>,
+    /// Codex CLI 官方认证（~/.codex/auth.json），只识别不导入数据库。
+    pub external: Option<ManagedAccount>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -157,13 +159,14 @@ struct PendingDeviceCode {
     expires_at_ms: i64,
 }
 
-/// 持久化的账号数据（只存 refresh_token，access_token 不落盘）
+/// 持久化的账号数据（refresh_token/id_token + 上次生成的 auth.json 缓存，access_token 不落盘）
 #[derive(Debug, Clone)]
 struct CodexAccountData {
     account_id: String,
     email: Option<String>,
     id_token: Option<String>,
     refresh_token: String,
+    auth_json: Option<String>,
     authenticated_at: i64,
 }
 
@@ -174,6 +177,7 @@ impl From<StoredAccount> for CodexAccountData {
             email: account.email,
             id_token: account.id_token,
             refresh_token: account.refresh_token,
+            auth_json: account.auth_json,
             authenticated_at: account.authenticated_at,
         }
     }
@@ -513,8 +517,29 @@ impl CodexOAuthManager {
             },
             "last_refresh": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
         });
-        serde_json::to_string_pretty(&auth)
-            .map_err(|error| CodexOAuthError::ParseError(error.to_string()))
+        let text = serde_json::to_string_pretty(&auth)
+            .map_err(|error| CodexOAuthError::ParseError(error.to_string()))?;
+        // 缓存本次生成的 auth.json：后续切换配置可离线复用，不发网络请求刷新 token
+        {
+            let mut accounts = self.accounts.write().await;
+            if let Some(account) = accounts.get_mut(account_id) {
+                if account.auth_json.as_deref() != Some(text.as_str()) {
+                    account.auth_json = Some(text.clone());
+                    if let Err(error) = self.save_account(account) {
+                        eprintln!("[auth] 缓存 auth.json 失败: {error}");
+                    }
+                }
+            }
+        }
+        Ok(text)
+    }
+
+    /// 读取缓存的 auth.json（离线切换配置用，不触发 token 刷新）。
+    pub async fn cached_auth_json(&self, account_id: &str) -> Option<String> {
+        let accounts = self.accounts.read().await;
+        accounts
+            .get(account_id)
+            .and_then(|account| account.auth_json.clone())
     }
 
     // ==================== 账号管理 ====================
@@ -532,6 +557,7 @@ impl CodexOAuthManager {
             authenticated: !accounts.is_empty(),
             default_account_id: default_id.clone(),
             accounts: sorted_accounts(&accounts, default_id.as_deref()),
+            external: None,
         }
     }
 
@@ -598,6 +624,7 @@ impl CodexOAuthManager {
             email,
             id_token,
             refresh_token,
+            auth_json: None,
             authenticated_at: now_secs(),
         };
         self.save_account(&data)?;
@@ -657,6 +684,7 @@ impl CodexOAuthManager {
                 email: account.email.clone(),
                 id_token: account.id_token.clone(),
                 refresh_token: account.refresh_token.clone(),
+                auth_json: account.auth_json.clone(),
                 authenticated_at: account.authenticated_at,
             })
             .map_err(|error| CodexOAuthError::IoError(error.to_string()))
@@ -756,40 +784,69 @@ fn extract_identity_from_tokens(tokens: &OAuthTokenResponse) -> (Option<String>,
     let mut email: Option<String> = None;
 
     if let Some(id_token) = tokens.id_token.as_deref() {
-        if let Some(claims) = parse_jwt_claims(id_token) {
-            account_id = claims
-                .chatgpt_account_id
-                .clone()
-                .or_else(|| {
-                    claims
-                        .openai_auth
-                        .as_ref()
-                        .and_then(|auth| auth.chatgpt_account_id.clone())
-                })
-                .or_else(|| claims.organizations.first().and_then(|org| org.id.clone()));
-            email = claims.email.clone();
-        }
+        (account_id, email) = identity_from_jwt(id_token);
     }
 
     if account_id.is_none() {
-        if let Some(claims) = parse_jwt_claims(&tokens.access_token) {
-            account_id = claims
-                .chatgpt_account_id
-                .clone()
-                .or_else(|| {
-                    claims
-                        .openai_auth
-                        .as_ref()
-                        .and_then(|auth| auth.chatgpt_account_id.clone())
-                })
-                .or_else(|| claims.organizations.first().and_then(|org| org.id.clone()));
-            if email.is_none() {
-                email = claims.email.clone();
-            }
+        let (fallback_id, fallback_email) = identity_from_jwt(&tokens.access_token);
+        account_id = fallback_id;
+        if email.is_none() {
+            email = fallback_email;
         }
     }
 
     (account_id, email)
+}
+
+fn identity_from_jwt(token: &str) -> (Option<String>, Option<String>) {
+    let Some(claims) = parse_jwt_claims(token) else {
+        return (None, None);
+    };
+    (
+        claims
+            .chatgpt_account_id
+            .clone()
+            .or_else(|| {
+                claims
+                    .openai_auth
+                    .as_ref()
+                    .and_then(|auth| auth.chatgpt_account_id.clone())
+            })
+            .or_else(|| claims.organizations.first().and_then(|org| org.id.clone())),
+        claims.email.clone(),
+    )
+}
+
+/// Codex CLI 官方 auth.json 中识别出的 ChatGPT 订阅认证（只读、不导入数据库）。
+#[derive(Debug, Clone)]
+pub struct ExternalCodexAuth {
+    pub account_id: String,
+    pub email: Option<String>,
+    pub access_token: String,
+}
+
+/// 解析 Codex CLI 官方生成的 auth.json。
+/// 校验为 ChatGPT 订阅认证（auth_mode=chatgpt 且 access_token 非空）；
+/// id_token 缺失或解不出时 account_id 用占位 id。
+pub fn parse_external_auth_json(text: &str) -> Option<ExternalCodexAuth> {
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    if value["auth_mode"].as_str() != Some("chatgpt") {
+        return None;
+    }
+    let tokens = value.get("tokens")?;
+    let access_token = tokens
+        .get("access_token")
+        .and_then(|token| token.as_str())
+        .filter(|token| !token.is_empty())?;
+    let (account_id, email) = match tokens.get("id_token").and_then(|token| token.as_str()) {
+        Some(id_token) => identity_from_jwt(id_token),
+        None => (None, None),
+    };
+    Some(ExternalCodexAuth {
+        account_id: account_id.unwrap_or_else(|| "codex-external".to_string()),
+        email,
+        access_token: access_token.to_string(),
+    })
 }
 
 fn now_ms() -> i64 {
@@ -846,6 +903,32 @@ mod tests {
     fn parse_jwt_claims_rejects_malformed() {
         assert!(parse_jwt_claims("not-a-jwt").is_none());
         assert!(parse_jwt_claims("only.two").is_none());
+    }
+
+    #[test]
+    fn parse_external_auth_json_recognizes_chatgpt_shape() {
+        let header = URL_SAFE_NO_PAD.encode(b"{\"alg\":\"none\"}");
+        let payload = URL_SAFE_NO_PAD
+            .encode(b"{\"chatgpt_account_id\":\"acc-123\",\"email\":\"test@example.com\"}");
+        let id_token = format!("{header}.{payload}.");
+        let json = format!(
+            r#"{{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{{"access_token":"at-1","id_token":"{id_token}","refresh_token":"rt-1","account_id":"acc-123"}},"last_refresh":"2026-08-17T09:15:01Z"}}"#
+        );
+        let auth = parse_external_auth_json(&json).unwrap();
+        assert_eq!(auth.account_id, "acc-123");
+        assert_eq!(auth.email.as_deref(), Some("test@example.com"));
+        assert_eq!(auth.access_token, "at-1");
+    }
+
+    #[test]
+    fn parse_external_auth_json_rejects_non_chatgpt_or_invalid() {
+        assert!(parse_external_auth_json(r#"{"auth_mode":"api"}"#).is_none());
+        assert!(parse_external_auth_json(r#"{"auth_mode":"chatgpt"}"#).is_none());
+        assert!(parse_external_auth_json(
+            r#"{"auth_mode":"chatgpt","tokens":{"access_token":""}}"#
+        )
+        .is_none());
+        assert!(parse_external_auth_json("not-json").is_none());
     }
 
     #[test]
