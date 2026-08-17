@@ -6,6 +6,7 @@ import ProfileIconEdit from "./ProfileIconEdit.vue";
 import ProfileIconTile from "./ProfileIconTile.vue";
 import { api } from "../api";
 import {
+  balanceQueryProviders,
   builtinPresets,
   customAuthTemplate,
   customCatalogTemplate,
@@ -180,6 +181,10 @@ const isOfficial = computed(() =>
     : detail.value?.provider === null,
 );
 const isCustom = computed(() => creating.value && presetKind.value === "custom");
+// 余额查询开关是否显示：由 presets.ts 的供应商表决定，新增供应商只需在那里加一行
+const supportsBalance = computed(() =>
+  balanceQueryProviders.has(detail.value?.provider ?? ""),
+);
 const isOpenCode = computed(() =>
   creating.value
     ? presetKind.value === "opencode"
@@ -684,7 +689,7 @@ async function save() {
         </div>
         <n-input v-model:value="adminUrl" placeholder="https://console.example.com（可选）" />
       </div>
-      <div v-if="!creating && detail?.provider === 'deepseek'" class="mt-4 flex items-center justify-between gap-3">
+      <div v-if="!creating && supportsBalance" class="mt-4 flex items-center justify-between gap-3">
         <div class="min-w-0">
           <div class="text-sm font-semibold">余额查询</div>
           <div class="muted mt-0.5 text-xs">窗口激活时自动刷新，点击余额手动刷新</div>

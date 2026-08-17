@@ -5,6 +5,7 @@ import LoadingSpinner from "./LoadingSpinner.vue";
 import ProfileIconTile from "./ProfileIconTile.vue";
 import TrashIcon from "./TrashIcon.vue";
 import { api } from "../api";
+import { balanceQueryProviders } from "../presets";
 import { useWindowActivation } from "../composables/useWindowActivation";
 import type { DeepSeekBalanceInfo, ProfileSummary } from "../types";
 
@@ -37,7 +38,10 @@ const balanceInfo = ref<DeepSeekBalanceInfo | null>(null);
 const balanceFetching = ref(false);
 const balanceError = ref("");
 
-const isDeepSeek = computed(() => props.profile.provider === "deepseek");
+// 是否支持余额查询由 presets.ts 的供应商表决定，新增供应商只需在那里加一行
+const supportsBalance = computed(() =>
+  balanceQueryProviders.has(props.profile.provider ?? ""),
+);
 const balanceText = computed(() => {
   if (balanceInfo.value) {
     const symbol = balanceInfo.value.currency === "USD" ? "$" : "¥";
@@ -47,7 +51,7 @@ const balanceText = computed(() => {
   return balanceError.value ? "查询失败" : "余额 --";
 });
 const balanceTitle = computed(() => {
-  if (!balanceError.value) return "DeepSeek 余额，点击刷新";
+  if (!balanceError.value) return "余额，点击刷新";
   return balanceInfo.value
     ? `余额刷新失败：${balanceError.value}（显示上次余额，点击重试）`
     : `余额查询失败：${balanceError.value}（点击重试）`;
@@ -55,7 +59,7 @@ const balanceTitle = computed(() => {
 
 async function fetchBalance() {
   if (
-    !isDeepSeek.value ||
+    !supportsBalance.value ||
     !props.profile.show_balance ||
     !props.profile.has_key ||
     balanceFetching.value
@@ -80,7 +84,7 @@ async function fetchBalance() {
 }
 
 onMounted(() => {
-  if (!isDeepSeek.value) return;
+  if (!supportsBalance.value) return;
   // 先取缓存数字（模块缓存 > 应用状态缓存），保证首次渲染就有数字
   balanceInfo.value =
     balanceInfoCache.get(props.profile.id) ??
@@ -202,12 +206,12 @@ async function testConnection() {
           <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.provider ?? "官方" }}</span>
           <span class="rounded-full border border-current/15 bg-black/4 px-1 py-px leading-none dark:bg-white/8">{{ profile.reasoning_effort ?? "默认" }}</span>
           <button
-            v-if="isDeepSeek && profile.show_balance"
+            v-if="supportsBalance && profile.show_balance"
             type="button"
             class="flex items-center gap-1 rounded-full border border-current/15 bg-black/4 px-1.5 py-px leading-none dark:bg-white/8"
             :class="balanceError && !balanceInfo ? 'text-[#ff3b30]/80' : 'text-accent'"
             :title="balanceTitle"
-            :aria-label="'DeepSeek 余额'"
+            :aria-label="'余额'"
             @click.stop="fetchBalance"
           >
             <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

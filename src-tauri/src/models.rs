@@ -49,7 +49,7 @@ pub struct ProfilePayload {
     /// 模型提供方的管理后台网址（卡片显示跳转按钮）。
     #[serde(default)]
     pub admin_url: Option<String>,
-    /// 供应商级开关：是否在卡片显示并自动刷新 DeepSeek 余额（默认关，用户自行开启）。
+    /// 供应商级开关：是否在卡片显示并自动刷新余额/用量（默认关，用户自行开启）。
     #[serde(default = "default_false")]
     pub show_balance: bool,
 }

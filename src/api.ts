@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { builtinPresetByKind } from "./presets";
+import { balanceQueryProviders, builtinPresetByKind } from "./presets";
 import type {
   AppState,
   AuthStatus,
@@ -352,8 +352,8 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
     case "get_deepseek_balance": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
-      if (profile.provider !== "deepseek") {
-        throw new Error("该供应商不是 DeepSeek，无法查询余额");
+      if (!balanceQueryProviders.has(profile.provider ?? "")) {
+        throw new Error("该供应商不支持余额查询");
       }
       await new Promise((resolve) => setTimeout(resolve, 400));
       return {

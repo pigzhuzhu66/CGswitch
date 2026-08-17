@@ -10,6 +10,9 @@ export interface BuiltinPreset {
   fragment: string;
 }
 
+/** 支持余额/用量查询的供应商（以 provider_id 键控）；加供应商时在这里加一行即可 */
+export const balanceQueryProviders = new Set(["deepseek"]);
+
 export const customConfigTemplate = `model = "your-model"
 model_provider = "your-provider"
 model_reasoning_effort = "medium"

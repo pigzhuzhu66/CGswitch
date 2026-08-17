@@ -8,7 +8,7 @@ export interface ProfileSummary {
   reasoning_effort: string | null;
   has_key: boolean;
   admin_url: string | null;
-  /** 供应商级开关：是否在卡片显示并自动刷新 DeepSeek 余额。 */
+  /** 供应商级开关：是否在卡片显示并自动刷新余额/用量。 */
   show_balance: boolean;
   icon: string | null;
   created_at: string;
