@@ -25,12 +25,17 @@ jobs:
           - name: windows-x64
             os: windows-latest
             rust-target: x86_64-pc-windows-msvc
+            upload-paths: |
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
           - name: macos-arm64
             os: macos-latest
             rust-target: aarch64-apple-darwin
+            upload-paths: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
           - name: macos-x64
             os: macos-latest
             rust-target: x86_64-apple-darwin
+            upload-paths: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -51,7 +56,8 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.name }}
-          path: src-tauri/target/${{ matrix.rust-target }}/release/bundle
+          # 只上传安装包产物，避免把 .app 内的图标/脚本等打包文件一并传进发行页
+          path: ${{ matrix.upload-paths }}
           retention-days: 1
           if-no-files-found: error
 
