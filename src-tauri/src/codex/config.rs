@@ -40,12 +40,6 @@ pub fn capture_from_document(document: &DocumentMut) -> AppResult<ProfilePayload
             .map(Table::to_string)
     });
 
-    if provider_id.is_some() && provider_body.is_none() {
-        return Err(app_err!(
-            "当前 model_provider 在 model_providers 中不存在，未捕获供应商配置"
-        ));
-    }
-
     Ok(ProfilePayload {
         model_values,
         provider_id,

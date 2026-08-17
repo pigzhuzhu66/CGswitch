@@ -23,8 +23,12 @@ const props = defineProps<{
 }>();
 
 // 读取 [model_providers.*] 段里的 base_url / 密钥，供编辑器回填表单
-function readProviderFields(text: string): { base_url: string; experimental_bearer_token: string } {
-  const values = { base_url: "", experimental_bearer_token: "" };
+function readProviderFields(text: string): {
+  base_url: string;
+  experimental_bearer_token: string;
+  found: boolean;
+} {
+  const values = { base_url: "", experimental_bearer_token: "", found: false };
   const lines = text.split("\n");
   let providerId: string | null = null;
   for (const line of lines) {
@@ -43,7 +47,10 @@ function readProviderFields(text: string): { base_url: string; experimental_bear
       if (section && !done) {
         // 只处理 model_provider 指向的段；无 model_provider 时退化为第一段
         inProvider = providerId === null || section[1] === providerId;
-        if (inProvider) done = true;
+        if (inProvider) {
+          done = true;
+          values.found = true;
+        }
       } else {
         inProvider = false;
       }
@@ -390,12 +397,16 @@ watch([baseUrl, apiKey], () => {
 watch(configText, (text) => {
   if (!initialized) return;
   const fields = readProviderFields(text);
-  if (fields.base_url !== baseUrl.value) baseUrl.value = fields.base_url;
-  // 模板占位符（<你的 API Key> 等）不应当回填进输入框
-  const key = /^<.*>$/.test(fields.experimental_bearer_token)
-    ? ""
-    : fields.experimental_bearer_token;
-  if (key !== apiKey.value) apiKey.value = key;
+  // 只在校准到当前供应商段时同步表单；段没匹配上（如正在改供应商名）时保留原值，
+  // 避免表单被清空后反向把配置里的请求地址/密钥覆写成空
+  if (fields.found) {
+    if (fields.base_url !== baseUrl.value) baseUrl.value = fields.base_url;
+    // 模板占位符（<你的 API Key> 等）不应当回填进输入框
+    const key = /^<.*>$/.test(fields.experimental_bearer_token)
+      ? ""
+      : fields.experimental_bearer_token;
+    if (key !== apiKey.value) apiKey.value = key;
+  }
   if (creating.value && text !== liveConfigFragment.value) {
     configTouched.value = true;
   }
@@ -554,7 +565,7 @@ async function save() {
     @save="saveIcon"
   />
   <section v-else class="mx-auto flex h-[calc(100vh-4.75rem)] w-full max-w-none flex-col" @keydown.ctrl.enter="save">
-    <div class="apple-page-bar">
+    <div class="apple-page-bar apple-page-bar--roomy">
       <button
         type="button"
         class="apple-page-header apple-back-button"

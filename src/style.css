@@ -443,6 +443,12 @@ body.drag-active * {
   padding: 0.875rem 2rem 0.125rem;
 }
 
+/* 新建/编辑供应商页标题栏：底部留白 12px，避免与下方内容贴太近；
+   设置页保持 2px 不走这条路 */
+.apple-page-bar--roomy {
+  padding-bottom: 0.75rem;
+}
+
 /* 表单行内小按钮（测试连通 / 获取 API 密钥 等同款样式全局复用） */
 .apple-inline-btn {
   display: inline-flex;

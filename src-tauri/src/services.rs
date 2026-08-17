@@ -1126,24 +1126,6 @@ impl AppContext {
             .filter(|text| !text.is_empty())
             .map(str::to_string);
         let document = codex_config::parse_document(config_text)?;
-        if let Some(provider_id) = payload.provider_id.as_deref() {
-            let provider_ok = document
-                .as_table()
-                .get("model_provider")
-                .and_then(toml_edit::Item::as_str)
-                .is_some_and(|current| current == provider_id)
-                && document
-                    .as_table()
-                    .get("model_providers")
-                    .and_then(toml_edit::Item::as_table)
-                    .and_then(|providers| providers.get(provider_id))
-                    .is_some();
-            if !provider_ok {
-                return Err(app_err!(
-                    "编辑后的配置缺少或改名了 model_providers.{provider_id}，已取消保存"
-                ));
-            }
-        }
         if let Some(text) = catalog_text {
             serde_json::from_str::<serde_json::Value>(text)
                 .map_err(|error| app_err!("models.json 不是有效 JSON: {error}"))?;
@@ -1155,6 +1137,12 @@ impl AppContext {
 
         // 所见即所得：编辑器文本是唯一事实源，内置/普通供应商都重新解析结构化字段
         let parsed = codex_config::capture_from_document(&document)?;
+        // 供应商身份跟随当前配置：用户改了什么名字，胶囊就显示什么；不再用旧库值拦截
+        if payload.builtin.is_some() && parsed.provider_id != payload.provider_id {
+            // 改写了内置供应商的 provider 身份后脱离内置模板，按完整快照档案应用
+            payload.builtin = None;
+        }
+        payload.provider_id = parsed.provider_id;
         payload.model_values = parsed.model_values;
         payload.provider_body = parsed.provider_body;
         payload.raw_config = Some(config_text.to_string());
@@ -2918,7 +2906,7 @@ experimental_bearer_token = "new-key"
     }
 
     #[test]
-    fn update_profile_config_rejects_missing_or_renamed_provider() {
+    fn update_profile_config_follows_edited_provider_and_detaches_builtin() {
         let home = tempfile::tempdir().unwrap();
         let paths = crate::paths::from_home(home.path()).unwrap();
         paths.ensure().unwrap();
@@ -2935,22 +2923,65 @@ name = "ZAI"
         )
         .unwrap();
         let context = AppContext::new(paths).unwrap();
+
+        // 捕获档案：model_provider 指向不存在的段 → 宽容保存，段体留空
         let profile = context.capture_profile("GLM").unwrap();
+        let saved = context
+            .update_profile_config(
+                &profile.id,
+                "model = \"glm-5.3\"\nmodel_provider = \"ZAI\"\n",
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(saved.provider.as_deref(), Some("ZAI"));
+        assert_eq!(
+            context
+                .database
+                .profile(&profile.id)
+                .unwrap()
+                .payload
+                .provider_body,
+            None
+        );
 
-        let missing = context
-            .update_profile_config(&profile.id, "model = \"glm-5.3\"\n", None, None)
-            .unwrap_err();
-        assert!(missing.0.contains("model_providers.ZAI"));
-
-        let renamed = context
+        // 捕获档案：供应商名与段一致改名 → 供应商身份跟随配置
+        let updated = context
             .update_profile_config(
                 &profile.id,
                 "model = \"glm-5.3\"\nmodel_provider = \"OTHER\"\n\n[model_providers.OTHER]\nname = \"OTHER\"\n",
                 None,
                 None,
             )
-            .unwrap_err();
-        assert!(renamed.0.contains("model_providers.ZAI"));
+            .unwrap();
+        assert_eq!(updated.provider.as_deref(), Some("OTHER"));
+        assert_eq!(
+            context
+                .database
+                .profile(&profile.id)
+                .unwrap()
+                .payload
+                .provider_id
+                .as_deref(),
+            Some("OTHER")
+        );
+
+        // 内置档案：改名后脱离内置模板，按完整快照档案处理
+        let builtin = context
+            .add_builtin_profile("zhipu", None, Some("sk-test"), None, None)
+            .unwrap();
+        let updated = context
+            .update_profile_config(
+                &builtin.id,
+                "model = \"glm-5.3\"\nmodel_provider = \"OTHER\"\n\n[model_providers.OTHER]\nname = \"OTHER\"\nbase_url = \"https://api.example\"\nexperimental_bearer_token = \"sk-test\"\n",
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(updated.provider.as_deref(), Some("OTHER"));
+        let stored = context.database.profile(&builtin.id).unwrap();
+        assert_eq!(stored.payload.provider_id.as_deref(), Some("OTHER"));
+        assert_eq!(stored.payload.builtin, None);
     }
 
     #[test]
