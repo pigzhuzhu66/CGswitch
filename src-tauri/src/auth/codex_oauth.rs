@@ -30,6 +30,7 @@ const TOKEN_REFRESH_BUFFER_MS: i64 = 60_000;
 const DEVICE_CODE_DEFAULT_EXPIRES_IN: u64 = 900;
 const POLLING_SAFETY_MARGIN_SECS: u64 = 3;
 const CODEX_USER_AGENT: &str = "cgswitch-codex-oauth";
+const REGION_BLOCKED_MARKER: &str = "unsupported_country_region_territory";
 
 #[derive(Debug, thiserror::Error)]
 pub enum CodexOAuthError {
@@ -180,7 +181,7 @@ impl From<StoredAccount> for CodexAccountData {
 
 /// 多账号认证管理器
 pub struct CodexOAuthManager {
-    client: reqwest::Client,
+    client: Mutex<reqwest::Client>,
     accounts: Arc<RwLock<HashMap<String, CodexAccountData>>>,
     default_account_id: Arc<RwLock<Option<String>>>,
     access_tokens: Arc<RwLock<HashMap<String, CachedAccessToken>>>,
@@ -190,13 +191,37 @@ pub struct CodexOAuthManager {
 }
 
 impl CodexOAuthManager {
-    pub fn new(database: Arc<Database>) -> Self {
-        let client = reqwest::Client::builder()
+    fn build_client() -> reqwest::Client {
+        reqwest::Client::builder()
             .user_agent(CODEX_USER_AGENT)
             .build()
-            .expect("创建 HTTP 客户端失败");
+            .expect("创建 HTTP 客户端失败")
+    }
+
+    /// 发送请求；响应为地区拦截 403 时，重建客户端（重新读取系统代理）后重试一次。
+    /// 正常路径复用缓存客户端，不影响性能。
+    async fn request_with_proxy_retry(
+        &self,
+        make: impl Fn(reqwest::Client) -> reqwest::RequestBuilder,
+    ) -> Result<(reqwest::StatusCode, String), CodexOAuthError> {
+        let client = self.client.lock().await.clone();
+        let response = make(client).send().await?;
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        if status == reqwest::StatusCode::FORBIDDEN && text.contains(REGION_BLOCKED_MARKER) {
+            *self.client.lock().await = Self::build_client();
+            let client = self.client.lock().await.clone();
+            let response = make(client).send().await?;
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Ok((status, text));
+        }
+        Ok((status, text))
+    }
+
+    pub fn new(database: Arc<Database>) -> Self {
         let manager = Self {
-            client,
+            client: Mutex::new(Self::build_client()),
             accounts: Arc::new(RwLock::new(HashMap::new())),
             default_account_id: Arc::new(RwLock::new(None)),
             access_tokens: Arc::new(RwLock::new(HashMap::new())),
@@ -219,23 +244,20 @@ impl CodexOAuthManager {
 
     /// 启动设备码流程，返回需要展示给用户的 user_code 与验证网址
     pub async fn start_device_flow(&self) -> Result<DeviceCodeResponse, CodexOAuthError> {
-        let response = self
-            .client
-            .post(DEVICE_AUTH_USERCODE_URL)
-            .header("Content-Type", "application/json")
-            .json(&serde_json::json!({ "client_id": CODEX_CLIENT_ID }))
-            .send()
+        let (status, text) = self
+            .request_with_proxy_retry(|client| {
+                client
+                    .post(DEVICE_AUTH_USERCODE_URL)
+                    .header("Content-Type", "application/json")
+                    .json(&serde_json::json!({ "client_id": CODEX_CLIENT_ID }))
+            })
             .await?;
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
+        if !status.is_success() {
             return Err(CodexOAuthError::RequestFailed(format!(
                 "设备码请求失败: {status} - {text}"
             )));
         }
-        let device: RawDeviceCodeResponse = response
-            .json()
-            .await
+        let device: RawDeviceCodeResponse = serde_json::from_str(&text)
             .map_err(|error| CodexOAuthError::ParseError(error.to_string()))?;
 
         let interval = parse_interval(device.interval.as_ref());
@@ -283,18 +305,23 @@ impl CodexOAuthManager {
             return Err(CodexOAuthError::ExpiredToken);
         }
 
-        let response = self
-            .client
-            .post(DEVICE_AUTH_TOKEN_URL)
-            .header("Content-Type", "application/json")
-            .json(&serde_json::json!({
-                "device_auth_id": device_code,
-                "user_code": entry.user_code,
-            }))
-            .send()
+        let (status, text) = self
+            .request_with_proxy_retry(|client| {
+                client
+                    .post(DEVICE_AUTH_TOKEN_URL)
+                    .header("Content-Type", "application/json")
+                    .json(&serde_json::json!({
+                        "device_auth_id": device_code,
+                        "user_code": entry.user_code,
+                    }))
+            })
             .await?;
-        let status = response.status();
         if status == reqwest::StatusCode::FORBIDDEN || status == reqwest::StatusCode::NOT_FOUND {
+            if text.contains(REGION_BLOCKED_MARKER) {
+                return Err(CodexOAuthError::RequestFailed(format!(
+                    "设备码轮询失败: {status} - {text}"
+                )));
+            }
             return Err(CodexOAuthError::AuthorizationPending);
         }
         if status == reqwest::StatusCode::GONE {
@@ -302,15 +329,12 @@ impl CodexOAuthManager {
             return Err(CodexOAuthError::ExpiredToken);
         }
         if !status.is_success() {
-            let text = response.text().await.unwrap_or_default();
             return Err(CodexOAuthError::RequestFailed(format!(
                 "设备码轮询失败: {status} - {text}"
             )));
         }
 
-        let success: RawDevicePollSuccess = response
-            .json()
-            .await
+        let success: RawDevicePollSuccess = serde_json::from_str(&text)
             .map_err(|error| CodexOAuthError::ParseError(error.to_string()))?;
         let tokens = self
             .exchange_code_for_tokens(&success.authorization_code, &success.code_verifier)
@@ -345,29 +369,26 @@ impl CodexOAuthManager {
         code: &str,
         code_verifier: &str,
     ) -> Result<OAuthTokenResponse, CodexOAuthError> {
-        let response = self
-            .client
-            .post(OAUTH_TOKEN_URL)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .form(&[
-                ("grant_type", "authorization_code"),
-                ("code", code),
-                ("redirect_uri", DEVICE_REDIRECT_URI),
-                ("client_id", CODEX_CLIENT_ID),
-                ("code_verifier", code_verifier),
-            ])
-            .send()
+        let (status, text) = self
+            .request_with_proxy_retry(|client| {
+                client
+                    .post(OAUTH_TOKEN_URL)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .form(&[
+                        ("grant_type", "authorization_code"),
+                        ("code", code),
+                        ("redirect_uri", DEVICE_REDIRECT_URI),
+                        ("client_id", CODEX_CLIENT_ID),
+                        ("code_verifier", code_verifier),
+                    ])
+            })
             .await?;
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
+        if !status.is_success() {
             return Err(CodexOAuthError::RequestFailed(format!(
                 "换取 Token 失败: {status} - {text}"
             )));
         }
-        response
-            .json()
-            .await
+        serde_json::from_str(&text)
             .map_err(|error| CodexOAuthError::ParseError(error.to_string()))
     }
 
@@ -375,31 +396,33 @@ impl CodexOAuthManager {
         &self,
         refresh_token: &str,
     ) -> Result<OAuthTokenResponse, CodexOAuthError> {
-        let response = self
-            .client
-            .post(OAUTH_TOKEN_URL)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .form(&[
-                ("grant_type", "refresh_token"),
-                ("refresh_token", refresh_token),
-                ("client_id", CODEX_CLIENT_ID),
-                ("scope", "openid profile email"),
-            ])
-            .send()
+        let (status, text) = self
+            .request_with_proxy_retry(|client| {
+                client
+                    .post(OAUTH_TOKEN_URL)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .form(&[
+                        ("grant_type", "refresh_token"),
+                        ("refresh_token", refresh_token),
+                        ("client_id", CODEX_CLIENT_ID),
+                        ("scope", "openid profile email"),
+                    ])
+            })
             .await?;
-        let status = response.status();
-        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-            return Err(CodexOAuthError::RefreshTokenInvalid);
-        }
-        if !status.is_success() {
-            let text = response.text().await.unwrap_or_default();
+        if text.contains(REGION_BLOCKED_MARKER) {
             return Err(CodexOAuthError::RequestFailed(format!(
                 "刷新 Token 失败: {status} - {text}"
             )));
         }
-        response
-            .json()
-            .await
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(CodexOAuthError::RefreshTokenInvalid);
+        }
+        if !status.is_success() {
+            return Err(CodexOAuthError::RequestFailed(format!(
+                "刷新 Token 失败: {status} - {text}"
+            )));
+        }
+        serde_json::from_str(&text)
             .map_err(|error| CodexOAuthError::ParseError(error.to_string()))
     }
 

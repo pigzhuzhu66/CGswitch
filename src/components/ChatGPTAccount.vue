@@ -144,8 +144,17 @@ onMounted(refreshStatus);
           {{ login.verification_uri }}
         </button>
       </div>
-      <div class="flex items-center justify-between">
-        <n-button size="small" secondary @click="openVerification">重新打开浏览器</n-button>
+      <div class="flex items-center gap-2">
+        <n-button size="small" secondary type="primary" @click="openVerification">
+          <template #icon>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 4h6v6" />
+              <path d="M20 4 10 14" />
+              <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
+            </svg>
+          </template>
+          重新打开浏览器
+        </n-button>
         <n-button size="small" quaternary @click="cancelLogin">取消</n-button>
       </div>
       <p class="muted text-xs">{{ polling ? "正在等待授权…" : "即将打开浏览器" }}</p>
