@@ -9,6 +9,21 @@ use crate::models::{
 };
 use crate::services::{AppContext, DatabaseBackupInfo, ProfileBalance, ProfileConnectionResult};
 
+async fn unmanaged_external_codex_auth(
+    state: &AppContext,
+    oauth: &CodexOAuthState,
+) -> AppResult<Option<ManagedAccount>> {
+    let Some(external) = state.external_codex_auth()? else {
+        return Ok(None);
+    };
+    let status = oauth.0.read().await.get_status().await;
+    if status.accounts.iter().any(|account| account.id == external.id) {
+        Ok(None)
+    } else {
+        Ok(Some(external))
+    }
+}
+
 #[tauri::command]
 pub fn get_state(state: State<'_, AppContext>) -> AppResult<AppState> {
     state.get_state()
@@ -91,8 +106,10 @@ pub async fn test_profile_connection(
                 .get_valid_token_for_account(&account_id)
                 .await
                 .map_err(|error| app_err!("{error}"))?,
-            None => match state.external_codex_access_token()? {
-                Some(token) => token,
+            None => match unmanaged_external_codex_auth(&state, &oauth).await? {
+                Some(_) => state
+                    .external_codex_access_token()?
+                    .ok_or_else(|| app_err!("未检测到有效的 Codex 官方认证"))?,
                 None => match manager.default_account_id().await {
                     Some(account_id) => manager
                         .get_valid_token_for_account(&account_id)
@@ -268,7 +285,7 @@ pub async fn apply_profile(
     state
         .apply_profile(&id)
         .map_err(|error| error.to_string())?;
-    // 订阅供应商：有档案级 auth 覆盖时直接用它，否则优先绑定账号、未绑定用默认账号
+    // 认证优先级：档案 auth 覆盖 > 显式绑定账号 > 未托管的 Codex 官方认证 > CGSwitch 默认账号。
     let is_subscription = state
         .is_subscription_profile(&id)
         .map_err(|error| error.to_string())?;
@@ -280,9 +297,8 @@ pub async fn apply_profile(
         let bound = state
             .bound_account_id(&id)
             .map_err(|error| error.to_string())?;
-        // Codex 官方外部认证生效中：配置未显式绑定账号时不写不覆盖，保持 Codex 自己维护的认证
-        let external_live = state
-            .external_codex_auth()
+        let external_live = unmanaged_external_codex_auth(&state, &oauth)
+            .await
             .map_err(|error| error.to_string())?
             .is_some();
         let account_id = match (bound, external_live) {
@@ -384,9 +400,9 @@ pub async fn auth_get_status(
     oauth: State<'_, CodexOAuthState>,
 ) -> Result<AuthStatus, String> {
     let mut status = oauth.0.read().await.get_status().await;
-    // Codex 官方外部认证（~/.codex/auth.json）：只识别不导入，认证过就显示已认证
-    if let Some(external) = app
-        .external_codex_auth()
+    // 只把不属于 CGSwitch 管理列表的 auth.json 识别为 Codex 官方外部认证。
+    if let Some(external) = unmanaged_external_codex_auth(&app, &oauth)
+        .await
         .map_err(|error| error.to_string())?
     {
         status.external = Some(external);

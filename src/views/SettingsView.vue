@@ -14,6 +14,7 @@ import {
 } from "naive-ui";
 import { api, isTauri } from "../api";
 import ChatGPTAccount from "../components/ChatGPTAccount.vue";
+import ProfileIconTile from "../components/ProfileIconTile.vue";
 import TrashIcon from "../components/TrashIcon.vue";
 import type { AppState, DatabaseBackupInfo, PathInfo, Settings } from "../types";
 import {
@@ -205,7 +206,12 @@ function restoreBackup(backup: DatabaseBackupInfo) {
 function deleteBackup(backup: DatabaseBackupInfo) {
   dialog.warning({
     title: "删除数据库备份",
-    content: `确定删除「${backup.name}」吗？删除后不可恢复。`,
+    content: () =>
+      h("span", [
+        "确定删除「",
+        h("strong", { class: "font-semibold" }, backup.name),
+        "」吗？删除后不可恢复。",
+      ]),
     positiveText: "删除",
     negativeText: "取消",
     icon: () => h(TrashIcon),
@@ -535,7 +541,10 @@ async function openPath(item: PathInfo) {
     </div>
 
     <div v-else-if="section === 'account'" class="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
-      <h2 class="text-[15px] font-semibold tracking-tight">ChatGPT 账号</h2>
+      <div class="flex items-center gap-3">
+        <ProfileIconTile name="ChatGPT" icon="openai-chatgpt" size="sm" />
+        <h2 class="text-[15px] font-semibold tracking-tight">ChatGPT 账号</h2>
+      </div>
       <div class="mt-4">
         <ChatGPTAccount />
       </div>
@@ -588,7 +597,7 @@ async function openPath(item: PathInfo) {
           placeholder="输入新的备份标题"
           @keyup.enter="submitRename"
         />
-        <div class="flex justify-end gap-2">
+        <div class="dialog-actions flex justify-end gap-2">
           <n-button @click="renameTarget = null">取消</n-button>
           <n-button type="primary" :loading="renaming" :disabled="!renameText.trim()" @click="submitRename">
             保存

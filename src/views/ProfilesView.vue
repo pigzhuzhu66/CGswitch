@@ -214,7 +214,12 @@ async function applyProfile(profile: ProfileSummary) {
 async function removeProfile(profile: ProfileSummary) {
   dialog.error({
     title: "删除供应商",
-    content: `确定删除“${profile.name}”吗？删除后不可恢复。`,
+    content: () =>
+      h("span", [
+        "确定删除“",
+        h("strong", { class: "font-semibold" }, profile.name),
+        "”吗？删除后不可恢复。",
+      ]),
     positiveText: "删除",
     negativeText: "取消",
     class: "delete-profile-dialog",
@@ -398,7 +403,7 @@ onBeforeUnmount(() => {
           {{ modalMode === "capture" ? "为当前 Codex 配置创建快照，切换供应商后可一键恢复。" : "输入新的供应商名称。" }}
         </p>
         <n-input v-model:value="profileName" maxlength="50" show-count placeholder="例如：DeepSeek 日常" @keyup.enter="submitModal" />
-        <div class="flex justify-end gap-2">
+        <div class="dialog-actions flex justify-end gap-2">
           <n-button @click="modalVisible = false">取消</n-button>
           <n-button type="primary" :loading="busy" @click="submitModal">保存</n-button>
         </div>

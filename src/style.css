@@ -184,6 +184,13 @@ body {
   color: #ff3b30;
 }
 
+/* 弹窗操作按钮略放大，保持自定义模态框与 useDialog 的触控尺寸一致 */
+.n-dialog__action .n-button,
+.dialog-actions .n-button {
+  --n-height: 34px !important;
+  --n-padding: 0 16px !important;
+}
+
 /* 全局悬浮滚动条：默认隐藏，鼠标进入可滚动区域时才显现缩略图，
    轨道始终透明（与所在背景合并），视觉上弱且不抢眼。
    注：Chromium 下自定义 ::-webkit-scrollbar 会覆盖标准属性，故只写 webkit 一套 */
