@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { NButton } from "naive-ui";
 import { providerIcons } from "../icons";
+import { PhArrowLeft, PhFloppyDisk } from "@phosphor-icons/vue";
 
 const props = defineProps<{ icon: string | null; name: string }>();
 
@@ -22,9 +23,7 @@ const selected = ref<string | null>(props.icon);
         aria-label="返回"
         @click="emit('back')"
       >
-        <svg class="h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M15 5.5 8.5 12l6.5 6.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <PhArrowLeft class="h-4 w-4 shrink-0 text-accent" weight="bold" aria-hidden="true" />
         <span class="apple-title">选择供应商图标</span>
       </button>
     </div>
@@ -64,11 +63,7 @@ const selected = ref<string | null>(props.icon);
       <n-button secondary @click="emit('back')">取消</n-button>
       <n-button type="primary" @click="emit('save', selected)">
         <template #icon>
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <path d="M17 21v-8H7v8" />
-            <path d="M7 3v5h8" />
-          </svg>
+          <PhFloppyDisk class="h-4 w-4" weight="bold" aria-hidden="true" />
         </template>
         保存
       </n-button>

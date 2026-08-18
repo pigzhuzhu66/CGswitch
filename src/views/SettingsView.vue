@@ -16,6 +16,24 @@ import { api, isTauri } from "../api";
 import ChatGPTAccount from "../components/ChatGPTAccount.vue";
 import TrashIcon from "../components/TrashIcon.vue";
 import type { AppState, DatabaseBackupInfo, PathInfo, Settings } from "../types";
+import {
+  PhArrowLeft,
+  PhArrowRight,
+  PhDatabase,
+  PhDownloadSimple,
+  PhFolderOpen,
+  PhInfo,
+  PhMoon,
+  PhMoonStars,
+  PhMonitor,
+  PhPower,
+  PhSlidersHorizontal,
+  PhSun,
+  PhTerminalWindow,
+  PhTrayArrowDown,
+  PhUploadSimple,
+  PhUserCircle,
+} from "@phosphor-icons/vue";
 import version from "../../VERSION?raw";
 
 const props = defineProps<{ state: AppState }>();
@@ -306,9 +324,7 @@ async function openPath(item: PathInfo) {
         aria-label="返回首页"
         @click="emit('home')"
       >
-        <svg class="h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M15 5.5 8.5 12l6.5 6.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <PhArrowLeft class="h-4 w-4 shrink-0 text-accent" weight="bold" aria-hidden="true" />
         <span class="apple-title">设置</span>
       </button>
     </div>
@@ -327,12 +343,7 @@ async function openPath(item: PathInfo) {
         :aria-current="section === 'general' ? 'page' : undefined"
         @click="section = 'general'"
       >
-        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3" />
-          <circle cx="14" cy="4" r="2" />
-          <circle cx="8" cy="12" r="2" />
-          <circle cx="16" cy="20" r="2" />
-        </svg>
+        <PhSlidersHorizontal class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
         <span>通用</span>
       </button>
       <button
@@ -343,10 +354,7 @@ async function openPath(item: PathInfo) {
         :aria-current="section === 'codex' ? 'page' : undefined"
         @click="section = 'codex'"
       >
-        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="m5 8 4 4-4 4" />
-          <path d="M11 16h8" />
-        </svg>
+        <PhTerminalWindow class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
         <span>应用</span>
       </button>
       <button
@@ -357,10 +365,7 @@ async function openPath(item: PathInfo) {
         :aria-current="section === 'account' ? 'page' : undefined"
         @click="section = 'account'"
       >
-        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-        </svg>
+        <PhUserCircle class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
         <span>账号</span>
       </button>
       <button
@@ -371,11 +376,7 @@ async function openPath(item: PathInfo) {
         :aria-current="section === 'advanced' ? 'page' : undefined"
         @click="section = 'advanced'"
       >
-        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <ellipse cx="12" cy="5.5" rx="7.5" ry="3" />
-          <path d="M4.5 5.5v13c0 1.66 3.36 3 7.5 3s7.5-1.34 7.5-3v-13" />
-          <path d="M4.5 12c0 1.66 3.36 3 7.5 3s7.5-1.34 7.5-3" />
-        </svg>
+        <PhDatabase class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
         <span>高级</span>
       </button>
       <button
@@ -386,11 +387,7 @@ async function openPath(item: PathInfo) {
         :aria-current="section === 'about' ? 'page' : undefined"
         @click="section = 'about'"
       >
-        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M12 11.2v4.6" />
-          <path d="M12 7.8h.01" />
-        </svg>
+        <PhInfo class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
         <span>关于</span>
       </button>
     </div>
@@ -407,19 +404,9 @@ async function openPath(item: PathInfo) {
           :aria-pressed="form.theme === option.value"
           @click="updateTheme(option.value)"
         >
-          <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <template v-if="option.value === 'system'">
-              <rect x="3.5" y="5" width="17" height="11" rx="2" />
-              <path d="M9.5 19.5h5M12 16v3.5" stroke-linecap="round" />
-            </template>
-            <template v-else-if="option.value === 'light'">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 3.5v1.8M12 18.7v1.8M3.5 12h1.8M18.7 12h1.8M6 6l1.3 1.3M16.7 16.7 18 18M18 6l-1.3 1.3M7.3 16.7 6 18" stroke-linecap="round" />
-            </template>
-            <template v-else>
-              <path d="M20 13.6A8.2 8.2 0 1 1 10.4 4a6.4 6.4 0 0 0 9.6 9.6Z" stroke-linejoin="round" />
-            </template>
-          </svg>
+          <PhMonitor v-if="option.value === 'system'" class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
+          <PhSun v-else-if="option.value === 'light'" class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
+          <PhMoon v-else class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
           <span>{{ option.label }}</span>
         </button>
       </div>
@@ -427,10 +414,9 @@ async function openPath(item: PathInfo) {
       <div class="flex flex-col gap-5">
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
-            <svg class="mt-0.5 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <path d="M12 3.5v7" stroke-linecap="round" />
-              <path d="M7.2 6.2a7.5 7.5 0 1 0 9.6 0" stroke-linecap="round" />
-            </svg>
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#007aff]/10 text-[#007aff]">
+              <PhPower class="h-[18px] w-[18px]" weight="bold" aria-hidden="true" />
+            </span>
             <div>
               <div class="text-sm font-semibold">开机自启</div>
               <div class="muted mt-0.5 text-xs">登录系统后自动启动 CGSwitch</div>
@@ -443,9 +429,9 @@ async function openPath(item: PathInfo) {
         </div>
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
-            <svg class="mt-0.5 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <path d="M20 13.6A8.2 8.2 0 1 1 10.4 4a6.4 6.4 0 0 0 9.6 9.6Z" stroke-linejoin="round" />
-            </svg>
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#af52de]/10 text-[#af52de]">
+              <PhMoonStars class="h-[18px] w-[18px]" weight="bold" aria-hidden="true" />
+            </span>
             <div>
               <div class="text-sm font-semibold">静默启动</div>
               <div class="muted mt-0.5 text-xs">启动时不显示主窗口，驻留系统托盘</div>
@@ -458,11 +444,9 @@ async function openPath(item: PathInfo) {
         </div>
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
-            <svg class="mt-0.5 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <path d="M4 14v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" stroke-linecap="round" />
-              <path d="M12 3.5v8" stroke-linecap="round" />
-              <path d="m8.5 8.5 3.5 3.5 3.5-3.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#ff9500]/10 text-[#ff9500]">
+              <PhTrayArrowDown class="h-[18px] w-[18px]" weight="bold" aria-hidden="true" />
+            </span>
             <div>
               <div class="text-sm font-semibold">关闭时最小化到托盘</div>
               <div class="muted mt-0.5 text-xs">点击关闭按钮时隐藏到托盘而不是退出</div>
@@ -479,11 +463,7 @@ async function openPath(item: PathInfo) {
     <div v-else-if="section === 'advanced'" class="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
       <div class="flex items-center gap-3">
         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent">
-          <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
-            <ellipse cx="12" cy="5" rx="8" ry="3" />
-            <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
-            <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
-          </svg>
+          <PhDatabase class="h-[18px] w-[18px]" weight="bold" aria-hidden="true" />
         </span>
         <div>
           <div class="field-subtitle">数据备份</div>
@@ -502,27 +482,15 @@ async function openPath(item: PathInfo) {
           @click="action.run()"
         >
           <span class="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-white" :style="{ backgroundColor: action.color }">
-            <svg v-if="action.key === 'import'" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3v12" />
-              <path d="m7 10 5 5 5-5" />
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            </svg>
-            <svg v-else-if="action.key === 'export'" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 15V3" />
-              <path d="m7 8 5-5 5 5" />
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            </svg>
-            <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-            </svg>
+            <PhDownloadSimple v-if="action.key === 'import'" class="h-4 w-4" weight="bold" aria-hidden="true" />
+            <PhUploadSimple v-else-if="action.key === 'export'" class="h-4 w-4" weight="bold" aria-hidden="true" />
+            <PhFolderOpen v-else class="h-4 w-4" weight="bold" aria-hidden="true" />
           </span>
           <span class="min-w-0 flex-1">
             <span class="block text-sm font-semibold">{{ action.label }}</span>
             <span class="muted block truncate text-xs">{{ action.desc }}</span>
           </span>
-          <svg class="h-4 w-4 shrink-0" :style="{ color: action.color }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
+          <PhArrowRight class="h-4 w-4 shrink-0" :style="{ color: action.color }" weight="bold" aria-hidden="true" />
         </button>
       </div>
 
@@ -536,11 +504,7 @@ async function openPath(item: PathInfo) {
         >
           <div class="flex min-w-0 items-center gap-2.5">
             <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="4" rx="1" />
-                <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
-                <path d="M10 12h4" />
-              </svg>
+              <PhDatabase class="h-4 w-4" weight="bold" aria-hidden="true" />
             </span>
             <div class="min-w-0">
               <div class="mono truncate text-xs font-medium">{{ backup.name }}</div>
@@ -555,11 +519,7 @@ async function openPath(item: PathInfo) {
         </div>
       </div>
       <div v-else class="muted flex items-center gap-2 text-xs">
-        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="4" rx="1" />
-          <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
-          <path d="M10 12h4" />
-        </svg>
+        <PhDatabase class="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
         还没有导出过备份。
       </div>
     </div>
@@ -604,9 +564,7 @@ async function openPath(item: PathInfo) {
             </div>
             <n-button size="small" secondary :loading="openingPath === item.path" :disabled="Boolean(openingPath)" title="在资源管理器中打开" @click="openPath(item)">
               <template #icon>
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                  <path d="M3.75 7.75A2.75 2.75 0 0 1 6.5 5h3l1.7 2h6.05A2.75 2.75 0 0 1 20 9.75v7.75a2.75 2.75 0 0 1-2.75 2.75h-10.5A2.75 2.75 0 0 1 4 17.5V9.75" stroke-linejoin="round" />
-                </svg>
+                <PhFolderOpen class="h-4 w-4" weight="bold" aria-hidden="true" />
               </template>
               打开
             </n-button>

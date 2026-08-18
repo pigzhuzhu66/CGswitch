@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 import { NButton, NTag, useDialog, useMessage } from "naive-ui";
 import { api } from "../api";
 import type { AuthStatus, DeviceCodeResponse } from "../types";
+import { PhArrowSquareOut, PhCopy, PhPlus } from "@phosphor-icons/vue";
 
 const message = useMessage();
 const dialog = useDialog();
@@ -140,10 +141,7 @@ onMounted(refreshStatus);
             aria-label="复制授权码"
             @click="copyUserCode"
           >
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="9" y="9" width="12" height="12" rx="2" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
+            <PhCopy class="h-4 w-4" weight="bold" aria-hidden="true" />
           </button>
         </div>
         <button
@@ -157,11 +155,7 @@ onMounted(refreshStatus);
       <div class="flex items-center gap-2">
         <n-button size="small" secondary type="primary" @click="openVerification">
           <template #icon>
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 4h6v6" />
-              <path d="M20 4 10 14" />
-              <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
-            </svg>
+            <PhArrowSquareOut class="h-4 w-4" weight="bold" aria-hidden="true" />
           </template>
           重新打开浏览器
         </n-button>
@@ -195,9 +189,7 @@ onMounted(refreshStatus);
       </div>
       <n-button secondary :loading="busy" @click="startLogin">
         <template #icon>
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+          <PhPlus class="h-4 w-4" weight="bold" aria-hidden="true" />
         </template>
         添加账号
       </n-button>

@@ -31,3 +31,5 @@ CLAUDE.md
 .env.*
 .codex/config.toml
 BUG_HANDOFF_divider.md
+src/views/SettingsView.vue
+docs/superpowers

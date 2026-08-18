@@ -15,6 +15,7 @@ import TrashIcon from "../components/TrashIcon.vue";
 import draggable from "vuedraggable";
 import { api } from "../api";
 import type { AppState, ManagedAccount, ProfileSummary, RestartStage } from "../types";
+import { PhArrowClockwise, PhCamera, PhPlus } from "@phosphor-icons/vue";
 
 // 编辑页按需加载：只在打开编辑/新建时拉取，避免把 CodeMirror/预设数据带进启动入口
 const ProfileEdit = defineAsyncComponent(() => import("../components/ProfileEdit.vue"));
@@ -320,26 +321,18 @@ onBeforeUnmount(() => {
       <div class="flex flex-wrap items-center gap-2">
         <n-button quaternary :disabled="busy" :loading="restartStage !== 'idle' && restartStage !== 'success' && restartStage !== 'error'" title="重启 Codex" @click="restart(false)">
           <template #icon>
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
-              <path d="M12 2v10" />
-            </svg>
+            <PhArrowClockwise class="h-4 w-4" weight="bold" aria-hidden="true" />
           </template>
           重启 Codex
         </n-button>
         <n-button quaternary :disabled="busy" title="捕获当前配置" aria-label="捕获当前配置" @click="openCapture">
           <template #icon>
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
+            <PhCamera class="h-4 w-4" weight="bold" aria-hidden="true" />
           </template>
         </n-button>
         <n-button type="primary" :disabled="busy" @click="creatingProfile = true">
           <template #icon>
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <PhPlus class="h-4 w-4" weight="bold" aria-hidden="true" />
           </template>
           添加供应商
         </n-button>

@@ -8,6 +8,7 @@ import { api } from "../api";
 import { balanceChipClass, balanceQueryProviders } from "../presets";
 import { useWindowActivation } from "../composables/useWindowActivation";
 import type { ProfileBalanceInfo, ProfileSummary } from "../types";
+import { PhArrowSquareOut, PhCopy, PhDotsSixVertical, PhWallet, PhWifiHigh } from "@phosphor-icons/vue";
 
 // 模块级缓存：切换视图/窗口时数字立即可见，不等网络
 const balanceInfoCache = new Map<string, ProfileBalanceInfo>();
@@ -177,14 +178,7 @@ async function testConnection() {
       aria-label="拖动排序"
       @click.stop
     >
-      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <circle cx="9" cy="6" r="1.1" />
-        <circle cx="15" cy="6" r="1.1" />
-        <circle cx="9" cy="12" r="1.1" />
-        <circle cx="15" cy="12" r="1.1" />
-        <circle cx="9" cy="18" r="1.1" />
-        <circle cx="15" cy="18" r="1.1" />
-      </svg>
+      <PhDotsSixVertical class="h-4 w-4" weight="bold" aria-hidden="true" />
     </span>
     <div class="flex min-w-0 flex-1 items-center gap-3">
       <ProfileIconTile :name="profile.name" :icon="profile.icon" />
@@ -216,10 +210,7 @@ async function testConnection() {
             :aria-label="'余额'"
             @click.stop="fetchBalance"
           >
-            <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="2" y="6" width="20" height="12" rx="2" />
-              <path d="M2 10h20" />
-            </svg>
+            <PhWallet class="h-3 w-3" weight="bold" aria-hidden="true" />
             <template v-if="balanceInfo?.usage_percent != null">
               <span>5小时:</span>
               <span :class="balanceChipClass(balanceInfo.usage_percent, false)">{{ balanceInfo.usage_percent }}%</span>
@@ -248,9 +239,7 @@ async function testConnection() {
             aria-label="打开官网"
             @click.stop="openAdmin"
           >
-            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z" />
-            </svg>
+            <PhArrowSquareOut class="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -272,10 +261,7 @@ async function testConnection() {
         aria-label="复制供应商"
         @click="emit('duplicate')"
       >
-        <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="9" y="9" width="12" height="12" rx="2" />
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        </svg>
+        <PhCopy class="h-[18px] w-[18px]" weight="bold" aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -287,11 +273,7 @@ async function testConnection() {
         @click="testConnection"
       >
         <LoadingSpinner v-if="testing" size="md" />
-        <svg v-else class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4.5 11.5a13 13 0 0 1 15 0" />
-          <path d="M7.5 15a8.5 8.5 0 0 1 9 0" />
-          <path d="M10.5 18.5a4 4 0 0 1 3 0" />
-        </svg>
+        <PhWifiHigh v-else class="h-[18px] w-[18px]" weight="bold" aria-hidden="true" />
       </button>
       <button
         type="button"

@@ -14,6 +14,7 @@ import { useWindowActivation } from "./composables/useWindowActivation";
 import { useModalEnterConfirm } from "./composables/useModalEnterConfirm";
 import { darkThemeOverrides, themeOverrides } from "./theme";
 import type { AppState, Settings } from "./types";
+import { PhGearSix, PhMinus, PhSquare, PhStack, PhX } from "@phosphor-icons/vue";
 
 // 设置页按需加载：进入设置时才拉取，不拖累启动入口
 const SettingsView = defineAsyncComponent(() => import("./views/SettingsView.vue"));
@@ -225,19 +226,13 @@ useModalEnterConfirm();
               <div data-tauri-drag-region class="min-w-0 flex-1 self-stretch" />
               <div class="flex h-full items-center">
                 <button type="button" class="grid h-8 w-10 place-items-center text-[var(--text-secondary)] transition-colors hover:bg-black/6 dark:hover:bg-white/10" aria-label="最小化" @click="windowMinimize">
-                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-                    <path d="M5 12h14" />
-                  </svg>
+                  <PhMinus class="h-4 w-4" weight="bold" aria-hidden="true" />
                 </button>
                 <button type="button" class="grid h-8 w-10 place-items-center text-[var(--text-secondary)] transition-colors hover:bg-black/6 dark:hover:bg-white/10" aria-label="最大化" @click="windowToggleMaximize">
-                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-                    <rect x="5.5" y="5.5" width="13" height="13" rx="1" />
-                  </svg>
+                  <PhSquare class="h-4 w-4" weight="bold" aria-hidden="true" />
                 </button>
                 <button type="button" class="grid h-8 w-10 place-items-center text-[var(--text-secondary)] transition-colors hover:bg-[#e81123] hover:text-white" aria-label="关闭" @click="windowClose">
-                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
+                  <PhX class="h-4 w-4" weight="bold" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -246,11 +241,7 @@ useModalEnterConfirm();
               <nav ref="sidebarNavRef" class="relative mx-1.5 mt-3 space-y-1">
                 <span class="apple-sidebar-indicator" :style="{ top: `${indicatorTop}px`, left: `${indicatorLeft}px` }" aria-hidden="true" />
                 <button ref="profilesNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'profiles' ? 'bg-[var(--selection-bg)] font-semibold text-accent' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="供应商配置" @click="goProfiles" @mouseenter="sidebarFlyoutArmed = true">
-                  <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="2" y="3" width="20" height="7" rx="2" />
-                    <rect x="2" y="14" width="20" height="7" rx="2" />
-                    <path d="M6 6.5h.01M6 17.5h.01" />
-                  </svg>
+                  <PhStack class="h-[18px] w-[18px] shrink-0" weight="bold" aria-hidden="true" />
                   <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">供应商配置</span>
                   <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">供应商配置</span>
                 </button>
@@ -258,10 +249,7 @@ useModalEnterConfirm();
 
               <div class="absolute inset-x-1.5 bottom-4">
                 <button ref="settingsNavBtn" type="button" class="apple-sidebar-nav-button relative flex h-9 w-full items-center rounded-[10px] text-sm transition-colors" :class="view === 'settings' ? 'bg-[var(--selection-bg)] font-semibold text-accent' : 'font-medium hover:bg-black/5 dark:hover:bg-white/8'" aria-label="设置" @click="view = 'settings'" @mouseenter="sidebarFlyoutArmed = true">
-                  <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
+                  <PhGearSix class="h-[18px] w-[18px] shrink-0" weight="bold" aria-hidden="true" />
                   <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">设置</span>
                   <span v-if="isSidebarCollapsed && sidebarFlyoutArmed" class="apple-sidebar-flyout" aria-hidden="true">设置</span>
                 </button>

@@ -13,6 +13,17 @@ import {
   customConfigTemplate,
 } from "../presets";
 import type { ManagedAccount, ProfileDetail, ProfileSummary } from "../types";
+import {
+  PhActivity,
+  PhArrowLeft,
+  PhArrowSquareOut,
+  PhBracketsCurly,
+  PhCheck,
+  PhFloppyDisk,
+  PhGearSix,
+  PhInfo,
+  PhPencilSimple,
+} from "@phosphor-icons/vue";
 
 // CodeMirror 编辑器按需加载：只在打开编辑弹窗时拉取，不影响应用启动
 const ConfigTextEditor = defineAsyncComponent(() => import("./ConfigTextEditor.vue"));
@@ -568,9 +579,7 @@ async function save() {
         aria-label="返回"
         @click="emit('back')"
       >
-        <svg class="h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M15 5.5 8.5 12l6.5 6.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <PhArrowLeft class="h-4 w-4 shrink-0 text-accent" weight="bold" aria-hidden="true" />
         <span class="apple-title">{{ creating ? "新建供应商" : "编辑供应商" }}</span>
       </button>
     </div>
@@ -596,9 +605,7 @@ async function save() {
             <span class="block truncate text-xs font-semibold tracking-tight">{{ preset.name }}</span>
             <span class="muted block truncate text-[11px]">{{ preset.model }}{{ preset.base_url ? "" : (preset.kind === "chatgpt" ? " · 认证登录" : " · 无需密钥") }}</span>
           </span>
-          <svg v-if="presetKind === preset.kind" class="h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
-            <path d="m6 12.5 4 4 8-9" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <PhCheck v-if="presetKind === preset.kind" class="h-4 w-4 shrink-0 text-accent" weight="bold" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -615,9 +622,7 @@ async function save() {
           <span class="relative grid h-full w-full place-items-center">
             <ProfileIconTile :name="detail?.name ?? name" :icon="selectedIcon" size="fill" />
             <span class="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-white shadow" aria-hidden="true">
-              <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-                <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" stroke-linejoin="round" />
-              </svg>
+              <PhPencilSimple class="h-2.5 w-2.5" weight="bold" aria-hidden="true" />
             </span>
           </span>
         </button>
@@ -640,9 +645,7 @@ async function save() {
               class="apple-inline-btn"
               @click="openOpenCodeRef"
             >
-              <svg class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z" />
-              </svg>
+              <PhArrowSquareOut class="h-3 w-3" weight="bold" aria-hidden="true" />
               获取 API 密钥
             </button>
             <button
@@ -653,20 +656,14 @@ async function save() {
               @click="testConnection"
             >
               <LoadingSpinner v-if="testing" />
-              <svg v-else class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 12h3l2-7 4 14 2-7h3" />
-              </svg>
+              <PhActivity v-else class="h-3 w-3" weight="bold" aria-hidden="true" />
               测试连通
             </button>
           </div>
         </div>
         <n-input v-model:value="apiKey" type="password" show-password-on="click" placeholder="请输入 API 密钥" />
         <p v-if="isOpenCode && creating" class="muted mt-2 flex items-start gap-1.5 text-xs">
-          <svg class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <circle cx="12" cy="12" r="8.5" />
-            <path d="M12 11.2v4.6" />
-            <path d="M12 7.8h.01" />
-          </svg>
+          <PhInfo class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" weight="bold" aria-hidden="true" />
           使用此链接订阅 OpenCode Go，首月只需 $5，并可获得额外的 $5 额度！
         </p>
       </div>
@@ -689,9 +686,7 @@ async function save() {
             :disabled="!adminUrl.trim()"
             @click="openAdminUrl"
           >
-            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z" />
-            </svg>
+            <PhArrowSquareOut class="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
           </button>
         </div>
         <n-input v-model:value="adminUrl" placeholder="https://console.example.com（可选）" />
@@ -717,14 +712,8 @@ async function save() {
             :aria-pressed="activeTab === tab.id"
             @click="activeTab = tab.id"
           >
-            <svg v-if="tab.id === 'config'" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            <svg v-else class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1" />
-              <path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" />
-            </svg>
+            <PhGearSix v-if="tab.id === 'config'" class="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
+            <PhBracketsCurly v-else class="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
             <span class="relative inline-grid">
               <span class="invisible font-semibold" aria-hidden="true">{{ tab.label }}</span>
               <span class="absolute inset-0 whitespace-nowrap">{{ tab.label }}</span>
@@ -784,11 +773,7 @@ async function save() {
       <n-button secondary @click="emit('back')">取消</n-button>
       <n-button type="primary" :loading="saving" :disabled="!canSave" @click="save">
         <template #icon>
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <path d="M17 21v-8H7v8" />
-            <path d="M7 3v5h8" />
-          </svg>
+          <PhFloppyDisk class="h-4 w-4" weight="bold" aria-hidden="true" />
         </template>
         保存
       </n-button>
