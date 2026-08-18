@@ -632,11 +632,18 @@ impl CodexOAuthManager {
             let mut accounts = self.accounts.write().await;
             accounts.insert(account_id.clone(), data);
         }
-        {
+        let should_set_default = {
             let mut default = self.default_account_id.write().await;
-            *default = Some(account_id.clone());
+            if default.is_none() {
+                *default = Some(account_id.clone());
+                true
+            } else {
+                false
+            }
+        };
+        if should_set_default {
+            self.save_default_account(Some(account_id.as_str()))?;
         }
-        self.save_default_account(Some(account_id.as_str()))?;
         Ok(ManagedAccount {
             id: account_id.clone(),
             login: display_login(
@@ -983,6 +990,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(manager.default_account_id().await.as_deref(), Some("acc-123"));
         manager
             .add_account_internal(
                 "acc-456".to_string(),
@@ -992,6 +1000,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(manager.default_account_id().await.as_deref(), Some("acc-123"));
 
         manager.remove_account("acc-123").await.unwrap();
         let accounts = manager.list_accounts().await;

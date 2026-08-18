@@ -60,12 +60,7 @@ async function poll() {
       if (account) {
         login.value = null;
         await refreshStatus();
-        try {
-          await api.authApplyToCodex(account.id);
-          message.success("ChatGPT 账号已登录，Codex 将使用订阅额度");
-        } catch (error) {
-          message.error(`账号已登录，但写入认证失败：${String(error)}`);
-        }
+        message.success("ChatGPT 账号已添加，可手动设为当前");
         break;
       }
       await new Promise((resolve) => setTimeout(resolve, current.interval * 1000));
@@ -120,7 +115,8 @@ async function removeAccount(accountId: string) {
 async function setDefault(accountId: string) {
   try {
     await api.authSetDefaultAccount(accountId);
-    message.success("已切换当前订阅账号");
+    await api.authApplyToCodex(accountId);
+    message.success("已切换当前订阅账号，Codex 将使用该账号");
     await refreshStatus();
   } catch (error) {
     message.error(String(error));
@@ -230,7 +226,6 @@ onMounted(refreshStatus);
               <span class="mono truncate text-sm font-medium">{{ account.login }}</span>
               <n-tag v-if="account.is_default" size="small" type="success">当前默认</n-tag>
             </div>
-            <div v-if="!account.is_default" class="muted mt-0.5 text-xs">CGSwitch 管理的账号</div>
           </div>
           <div class="flex shrink-0 gap-1.5">
             <n-button v-if="!account.is_default" size="small" secondary @click="setDefault(account.id)">设为当前</n-button>

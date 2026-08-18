@@ -66,7 +66,6 @@ const backupActions = [
     label: "导入备份",
     desc: "从备份文件恢复供应商数据库",
     color: "var(--accent)",
-    bgClass: "bg-accent/10 enabled:hover:bg-accent/16",
     disabled: () => importing.value,
     run: () => importBackupFromFile(),
   },
@@ -75,7 +74,6 @@ const backupActions = [
     label: "导出备份",
     desc: "导出全部供应商配置",
     color: "#34c759",
-    bgClass: "bg-[#34c759]/10 enabled:hover:bg-[#34c759]/[0.16]",
     disabled: () => exporting.value,
     run: () => exportBackupToFile(),
   },
@@ -84,7 +82,6 @@ const backupActions = [
     label: "打开备份文件夹",
     desc: "查看本地备份文件",
     color: "#ff9500",
-    bgClass: "bg-[#ff9500]/10 hover:bg-[#ff9500]/[0.16]",
     disabled: () => false,
     run: () => openBackupFolder(),
   },
@@ -482,8 +479,7 @@ async function openPath(item: PathInfo) {
           v-for="action in backupActions"
           :key="action.key"
           type="button"
-          class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          :class="action.bgClass"
+          class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-white/8"
           :disabled="action.disabled()"
           @click="action.run()"
         >
