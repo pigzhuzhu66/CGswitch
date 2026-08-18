@@ -17,7 +17,11 @@ async fn unmanaged_external_codex_auth(
         return Ok(None);
     };
     let status = oauth.0.read().await.get_status().await;
-    if status.accounts.iter().any(|account| account.id == external.id) {
+    if status
+        .accounts
+        .iter()
+        .any(|account| account.id == external.id)
+    {
         Ok(None)
     } else {
         Ok(Some(external))

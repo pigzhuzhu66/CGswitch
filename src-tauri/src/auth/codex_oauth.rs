@@ -990,7 +990,10 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(manager.default_account_id().await.as_deref(), Some("acc-123"));
+        assert_eq!(
+            manager.default_account_id().await.as_deref(),
+            Some("acc-123")
+        );
         manager
             .add_account_internal(
                 "acc-456".to_string(),
@@ -1000,7 +1003,10 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(manager.default_account_id().await.as_deref(), Some("acc-123"));
+        assert_eq!(
+            manager.default_account_id().await.as_deref(),
+            Some("acc-123")
+        );
 
         manager.remove_account("acc-123").await.unwrap();
         let accounts = manager.list_accounts().await;
