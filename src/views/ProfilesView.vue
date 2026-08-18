@@ -347,7 +347,7 @@ onBeforeUnmount(() => {
     </header>
 
     <transition :css="false" @enter="onRestartCardEnter" @leave="onRestartCardLeave">
-      <div v-if="restartStage !== 'idle'" class="mt-[var(--gap-page)] rounded-xl shadow-[0_0_0_1px_var(--panel-ring)] bg-[var(--panel-bg)] px-4 py-3">
+      <div v-if="restartStage !== 'idle'" class="apple-group mt-[var(--gap-page)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="font-semibold">重启进度</div>
           <n-tag size="small" :type="restartStage === 'error' ? 'error' : restartStage === 'success' ? 'success' : 'default'">
