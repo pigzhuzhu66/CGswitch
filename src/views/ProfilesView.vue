@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, h, onActivated, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   NButton,
   NEmpty,
@@ -20,7 +20,7 @@ import { PhArrowClockwise, PhCamera, PhPlus } from "@phosphor-icons/vue";
 // 编辑页按需加载：只在打开编辑/新建时拉取，避免把 CodeMirror/预设数据带进启动入口
 const ProfileEdit = defineAsyncComponent(() => import("../components/ProfileEdit.vue"));
 
-const props = defineProps<{ state: AppState }>();
+const props = defineProps<{ state: AppState; navReset: number }>();
 const emit = defineEmits<{ refresh: [] }>();
 
 const message = useMessage();
@@ -36,6 +36,18 @@ const creatingProfile = ref(false);
 const modalProfile = ref<ProfileSummary | null>(null);
 const subscriptionAuthed = ref(false);
 const subscriptionAccount = ref<string | null>(null);
+const subscriptionSource = ref<"desktop" | "oauth" | null>(null);
+
+watch(
+  () => props.navReset,
+  () => {
+    editingProfile.value = null;
+    creatingProfile.value = false;
+    modalVisible.value = false;
+    modalProfile.value = null;
+  },
+);
+
 // 手动排序：vuedraggable（SortableJS）实时重排，结束后持久化
 function onDragStart() {
   document.body.classList.add("drag-active");
@@ -52,6 +64,30 @@ async function persistOrder() {
   }
 }
 const authAccounts = ref<ManagedAccount[]>([]);
+let subscriptionStatusLoaded = false;
+
+async function refreshSubscriptionStatus() {
+  try {
+    const status = await api.authGetStatus();
+    subscriptionAuthed.value = status.authenticated;
+    authAccounts.value = status.accounts;
+    subscriptionSource.value = status.external ? "desktop" : status.accounts.length ? "oauth" : null;
+    // 桌面端当前认证才是实际生效来源；CGswitch 默认账号仅作为没有外部认证时的回退。
+    subscriptionAccount.value =
+      status.external?.login ??
+      status.accounts.find((account) => account.id === status.default_account_id)?.login ??
+      null;
+  } catch {
+    if (!subscriptionStatusLoaded) {
+      subscriptionAuthed.value = false;
+      subscriptionAccount.value = null;
+      subscriptionSource.value = null;
+      authAccounts.value = [];
+    }
+  } finally {
+    subscriptionStatusLoaded = true;
+  }
+}
 
 let unlisten: (() => void) | null = null;
 
@@ -273,17 +309,11 @@ onMounted(async () => {
     restartStage.value = payload.stage;
     restartMessage.value = payload.message ?? "";
   });
-  try {
-    const status = await api.authGetStatus();
-    subscriptionAuthed.value = status.authenticated;
-    authAccounts.value = status.accounts;
-    subscriptionAccount.value =
-      status.accounts.find((account) => account.id === status.default_account_id)?.login ??
-      status.external?.login ??
-      null;
-  } catch {
-    subscriptionAuthed.value = false;
-  }
+  await refreshSubscriptionStatus();
+});
+
+onActivated(() => {
+  if (subscriptionStatusLoaded) void refreshSubscriptionStatus();
 });
 
 function boundAccountLogin(profile: ProfileSummary): string | null {
@@ -362,7 +392,7 @@ onBeforeUnmount(() => {
       <template v-else>
         <draggable
           tag="div"
-          class="apple-group relative will-change-transform"
+          class="profile-list apple-group relative will-change-transform"
           :component-data="{ name: 'profile-list' }"
           :list="state.profiles"
           item-key="id"
@@ -376,14 +406,14 @@ onBeforeUnmount(() => {
           @start="onDragStart"
           @end="persistOrder"
         >
-          <template #item="{ element: profile, index }">
+          <template #item="{ element: profile }">
             <ProfileCard
-              :class="index === 0 ? '' : 'profile-card-divider'"
               :profile="profile"
               :active="profile.id === state.active_profile_id"
               :busy="busy"
               :subscription-authed="subscriptionAuthed"
               :subscription-account="subscriptionAccount"
+              :subscription-source="subscriptionSource"
               :bound-account="boundAccountLogin(profile)"
               :balance-cache="state.balance_cache"
               @apply="applyProfile(profile)"

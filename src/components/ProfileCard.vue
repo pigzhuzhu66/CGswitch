@@ -8,7 +8,7 @@ import { api } from "../api";
 import { balanceChipClass, balanceQueryProviders } from "../presets";
 import { useWindowActivation } from "../composables/useWindowActivation";
 import type { ProfileBalanceInfo, ProfileSummary } from "../types";
-import { PhArrowSquareOut, PhCopy, PhDotsSixVertical, PhWallet, PhWifiHigh } from "@phosphor-icons/vue";
+import { PhArrowSquareOut, PhCopy, PhDotsSixVertical, PhKey, PhMonitor, PhWallet, PhWifiHigh } from "@phosphor-icons/vue";
 
 // 模块级缓存：切换视图/窗口时数字立即可见，不等网络
 const balanceInfoCache = new Map<string, ProfileBalanceInfo>();
@@ -19,6 +19,7 @@ const props = defineProps<{
   busy: boolean;
   subscriptionAuthed?: boolean;
   subscriptionAccount?: string | null;
+  subscriptionSource?: "desktop" | "oauth" | null;
   boundAccount?: string | null;
   balanceCache?: Record<string, ProfileBalanceInfo>;
 }>();
@@ -122,6 +123,25 @@ const connectionTitle = computed(() => {
   return "测试连通性";
 });
 
+const subscriptionTagLabel = computed(() => {
+  if (!props.subscriptionAuthed) return "未认证";
+  return props.boundAccount ?? props.subscriptionAccount ?? "";
+});
+
+const subscriptionSourceKind = computed(() => {
+  if (!props.subscriptionAuthed) return null;
+  return props.boundAccount ? "oauth" : props.subscriptionSource ?? "oauth";
+});
+
+const subscriptionTagTitle = computed(() => {
+  if (!props.subscriptionAuthed) return "ChatGPT 尚未完成认证，请到设置页登录";
+  if (props.boundAccount) {
+    return `OAuth 认证账号：${props.boundAccount}`;
+  }
+  const source = subscriptionSourceKind.value === "desktop" ? "桌面端认证" : "OAuth 认证";
+  return props.subscriptionAccount ? `${source}账号：${props.subscriptionAccount}` : source;
+});
+
 async function openAdmin() {
   const url = props.profile.admin_url;
   if (!url) return;
@@ -167,8 +187,8 @@ async function testConnection() {
 
 <template>
   <article
-    class="flex cursor-pointer select-none flex-col gap-4 px-5 py-[var(--gap-card)] transition-colors sm:flex-row sm:items-center sm:justify-between"
-    :class="active ? 'bg-[linear-gradient(90deg,var(--selection-bg),transparent_65%)]' : 'hover:bg-black/3 dark:hover:bg-white/4'"
+    class="group flex cursor-pointer select-none flex-col gap-4 px-5 py-[var(--gap-card)] transition-colors sm:flex-row sm:items-center sm:justify-between"
+    :class="active ? 'bg-[linear-gradient(90deg,color-mix(in_srgb,var(--selection-bg)_70%,transparent),transparent_65%)]' : 'hover:bg-black/3 dark:hover:bg-white/4'"
     title="单击编辑"
     @click="emit('edit')"
   >
@@ -190,12 +210,24 @@ async function testConnection() {
             v-if="profile.provider === null"
             :type="subscriptionAuthed ? 'info' : 'warning'"
             size="small"
-            :title="subscriptionAuthed ? (subscriptionAccount ? `当前订阅账号：${subscriptionAccount}` : 'ChatGPT 订阅已登录，Codex 使用订阅额度') : '尚未完成 ChatGPT 订阅登录，请到设置页认证'"
+            class="max-w-[min(42vw,280px)]"
+            :title="subscriptionTagTitle"
           >
-            {{ subscriptionAuthed ? "订阅已认证" : "订阅未认证" }}
-          </n-tag>
-          <n-tag v-if="profile.provider === null && boundAccount" size="small" type="info">
-            订阅账号：{{ boundAccount }}
+            <span class="inline-flex min-w-0 max-w-full items-center gap-1.5 leading-4">
+              <PhMonitor
+                v-if="subscriptionSourceKind === 'desktop'"
+                class="h-3.5 w-3.5 shrink-0"
+                weight="bold"
+                aria-hidden="true"
+              />
+              <PhKey
+                v-else-if="subscriptionSourceKind === 'oauth'"
+                class="h-3.5 w-3.5 shrink-0"
+                weight="bold"
+                aria-hidden="true"
+              />
+              <span class="min-w-0 truncate leading-4">{{ subscriptionTagLabel }}</span>
+            </span>
           </n-tag>
         </div>
         <div class="muted mt-1 flex flex-wrap items-center gap-1">
@@ -244,7 +276,10 @@ async function testConnection() {
         </div>
       </div>
     </div>
-    <div class="flex shrink-0 items-center gap-2" @click.stop>
+    <div
+      class="pointer-events-none flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+      @click.stop
+    >
       <n-button
         type="primary"
         size="small"
