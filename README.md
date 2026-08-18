@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo.svg" width="112" alt="CGSwitch logo" />
+  <img src="src-tauri/icons/256x256.png" width="112" alt="CGswitch logo" />
 </p>
 
 <h1 align="center">CGSwitch</h1>
