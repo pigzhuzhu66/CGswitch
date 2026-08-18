@@ -15,7 +15,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: verify (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: corepack enable
+        shell: bash
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: rustup component add rustfmt clippy
+        shell: bash
+        working-directory: src-tauri
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
   build:
+    needs: verify
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -62,7 +83,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    # 所有平台构建成功后才会执行：needs 的任一任务失败都会跳过本任务
+    # 校验和所有平台构建成功后才会执行；任何失败都不会创建发行
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -73,7 +94,7 @@ jobs:
           fetch-depth: 0
       - id: version
         run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
-      - name: 生成更新日志并创建预发布（已存在则跳过，支持重跑）
+      - name: 生成项目更新日志并创建草稿预发布
         run: |
           TAG="v$VERSION"
           # 取最近一个已发布版本（排除当前要发的 tag），用于生成对比日志
@@ -84,6 +105,16 @@ jobs:
           else
             RANGE="HEAD"
           fi
+          # 只保留包含项目代码/资源的提交；README、文档、工作流等提交不进入发行说明
+          is_project_commit() {
+            local sha="$1" changed_files project_files
+            changed_files="$(git diff-tree --root --no-commit-id --name-only -r "$sha")"
+            project_files="$(printf '%s\n' "$changed_files" \
+              | grep -Ev '^$|(^|/)(README[^/]*|LICENSE[^/]*)$|(^|/)docs/|\.md$|^\.github/|^\.codex/|(^|/)AGENTS\.md$|(^|/)VERSION$' \
+              || true)"
+            [[ -n "$project_files" ]]
+          }
+
           # 清洗：去掉提交哈希、gitmoji、feat/fix 等类型前缀与 scope，只留用户能看懂的描述
           # LC_ALL=C 按字节处理，避免多字节 emoji 在部分 locale 下剥不干净
           fmt() {
@@ -95,10 +126,18 @@ jobs:
           }
           # 只收对用户可见的变更；空分类不输出；重复条目只留一条
           section() {
-            local pattern="$1" title="$2" entries
-            entries="$(git log --oneline --no-merges -E --grep="$pattern" "$RANGE" \
-              | grep -viE '更新版本号|README|LICENSE|文档|依赖|pnpm check|CI|工作流' \
-              | fmt | awk '!seen[$0]++')"
+            local pattern="$1" title="$2" entries sha subject
+            entries="$(
+              while IFS=$'\t' read -r sha subject; do
+                [[ -z "$sha" ]] && continue
+                if printf '%s\n' "$subject" | grep -qiE '更新版本号|README|LICENSE|文档|依赖|dependenc|(^|[^[:alnum:]])deps([^[:alnum:]]|$)|pnpm[[:space:]]check|(^|[^[:alnum:]])CI([^[:alnum:]]|$)|workflow|工作流'; then
+                  continue
+                fi
+                is_project_commit "$sha" || continue
+                printf '%s\n' "$subject"
+              done < <(git log --format='%H%x09%s' --no-merges -E --grep="$pattern" "$RANGE") \
+                | fmt | awk '!seen[$0]++'
+            )"
             if [ -n "$entries" ]; then
               printf '### %s\n%s\n\n' "$title" "$entries"
             fi
@@ -112,9 +151,20 @@ jobs:
             section '^(🔥)' '🔥 移除'
             section '^(🔒)' '🔒 安全'
           } > "$NOTES"
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --prerelease --notes-file "$NOTES" --target "$GITHUB_SHA"
+          if [ ! -s "$NOTES" ]; then
+            echo '没有可发布的项目变更，停止发行。'
+            exit 1
           fi
+
+          RELEASE_STATE="$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null || true)"
+          if [ -z "$RELEASE_STATE" ]; then
+            gh release create "$TAG" --draft --prerelease --notes-file "$NOTES" --target "$GITHUB_SHA"
+            RELEASE_STATE=true
+          elif [ "$RELEASE_STATE" = true ]; then
+            gh release edit "$TAG" --notes-file "$NOTES"
+          fi
+
+          echo "release_state=$RELEASE_STATE" >> "$GITHUB_ENV"
         env:
           VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ github.token }}
@@ -123,6 +173,13 @@ jobs:
           path: artifacts
       - name: 上传产物到预发布
         run: gh release upload "v$VERSION" $(find artifacts -type f) --clobber
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+      - name: 发布预发布
+        if: env.release_state == 'true'
+        run: gh release edit "v$VERSION" --draft=false --prerelease
         shell: bash
         env:
           VERSION: ${{ steps.version.outputs.version }}

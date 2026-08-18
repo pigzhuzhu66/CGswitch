@@ -3,17 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'README*'
-      - 'docs/**'
-      - '*.md'
-      - 'LICENSE*'
   pull_request:
-    paths-ignore:
-      - 'README*'
-      - 'docs/**'
-      - '*.md'
-      - 'LICENSE*'
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -25,8 +16,8 @@ concurrency:
 
 jobs:
   check:
-    name: typecheck + fmt + clippy + test
-    # 打包验证移到 release.yml（发布时才对 3 个平台构建），CI 只跑能查出项目问题的检查
+    name: check + frontend build (Windows)
+    # 完整安装包验证保留在 release.yml；CI 检查项目质量并验证生产前端构建
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,13 +34,8 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: cargo fmt --all -- --check
-        working-directory: src-tauri
-      - run: cargo clippy --all-targets -- -D warnings
-        working-directory: src-tauri
-      - run: cargo test
-        working-directory: src-tauri
+      - run: pnpm check
+      - run: pnpm build
   test-macos:
     name: macOS cargo test
     # 保险：覆盖 macOS 平台编译兼容性（不打包），避免编译问题积压到发布才发现
