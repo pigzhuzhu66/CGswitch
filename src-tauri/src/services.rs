@@ -923,7 +923,12 @@ impl AppContext {
                 });
             }
         }
-        backups.sort_by(|left, right| right.name.cmp(&left.name));
+        backups.sort_by(|left, right| {
+            right
+                .created_at
+                .cmp(&left.created_at)
+                .then_with(|| right.name.cmp(&left.name))
+        });
         Ok(backups)
     }
 
