@@ -15,7 +15,9 @@ import type {
   ProfileSummary,
   RestartStage,
   Settings,
+  TomlDiagnostic,
 } from "./types";
+import { stripTomlQuotes } from "./utils";
 
 export const isTauri = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
 
@@ -262,7 +264,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
         account_id: preset.provider ? null : (typeof args?.accountId === "string" ? args.accountId : null),
         model: preset.model,
         provider: preset.provider,
-        reasoning_effort: preset.model_values.model_reasoning_effort?.replace(/^"|"$/g, "") ?? null,
+        reasoning_effort: stripTomlQuotes(preset.model_values.model_reasoning_effort) || null,
         has_key: preset.provider ? Boolean(rawKey.trim()) : false,
         admin_url: adminUrl,
         show_balance: false,
@@ -315,6 +317,27 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       const preset = builtinPresetByKind(String(args?.kind ?? ""));
       if (!preset?.model_values.model_catalog_json) return null as T;
       return '{\n  "models": [\n    { "id": "preview", "name": "模型目录预览" }\n  ]\n}' as T;
+    }
+    case "test_provider_connection": {
+      const apiKey = String(args?.apiKey ?? "");
+      const baseUrl = String(args?.baseUrl ?? "");
+      if (!apiKey.trim()) throw new Error("请填写 API 密钥");
+      if (!baseUrl.trim()) throw new Error("请填写调用地址");
+      const url = `${baseUrl.replace(/\/+$/, "")}/models`;
+      const start = Date.now();
+      try {
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${apiKey.trim()}` },
+        });
+        return {
+          ok: res.ok,
+          latency_ms: Date.now() - start,
+          status: res.status,
+          error: res.ok ? null : `接口返回 HTTP ${res.status}`,
+        } as T;
+      } catch {
+        throw new Error("网络请求被浏览器拦截，请在桌面版验证连通性");
+      }
     }
     case "test_profile_connection": {
       const profile = webProfiles.find((item) => item.id === args?.id);
@@ -523,10 +546,6 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       return undefined as T;
     case "auth_get_status":
       return { authenticated: false, default_account_id: null, accounts: [], external: null } as T;
-    case "auth_apply_to_codex":
-      return undefined as T;
-    case "auth_set_default_account":
-      return undefined as T;
     case "set_profile_account": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (profile) {
@@ -539,6 +558,9 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
     case "save_settings":
       webSettings = { ...(args?.settings as Settings) };
       return { ...webSettings } as T;
+    // Web 调试模式无 Rust 侧解析器，TOML 校验一律视为通过（与既有 mock 桩风格一致）
+    case "validate_toml":
+      return [] as T;
     default:
       throw new Error(`Web 调试模式不支持命令：${command}`);
   }
@@ -580,6 +602,9 @@ export const api = {
   getBuiltinCatalog: (kind: string) => call<string | null>("get_builtin_catalog", { kind }),
   testProfileConnection: (id: string, baseUrl?: string, apiKey?: string) =>
     call<ProfileConnectionResult>("test_profile_connection", { id, baseUrl, apiKey }),
+  // 创建态表单测试：供应商尚未保存，直接用表单里的地址/密钥
+  testProviderConnection: (baseUrl: string, apiKey: string) =>
+    call<ProfileConnectionResult>("test_provider_connection", { baseUrl, apiKey }),
   getProfileBalance: (id: string) =>
     call<ProfileBalance>("get_profile_balance", { id }),
   exportDatabase: () => call<string>("export_database"),
@@ -609,6 +634,8 @@ export const api = {
   ) => call<ProfileDetail>("update_profile_config", { id, configText, catalogText, authText }),
   patchChatgptContextConfig: (configText: string, enabled: boolean) =>
     call<string>("patch_chatgpt_context_config", { configText, enabled }),
+  validateToml: (text: string) => call<TomlDiagnostic[]>("validate_toml", { text }),
+  formatToml: (text: string) => call<string>("format_toml", { text }),
   deleteProfile: (id: string) => call<void>("delete_profile", { id }),
   reorderProfiles: (ids: string[]) => call<void>("reorder_profiles", { ids }),
   applyProfile: (id: string) => call<void>("apply_profile", { id }),
@@ -620,10 +647,6 @@ export const api = {
   authGetStatus: () => call<AuthStatus>("auth_get_status"),
   authRemoveAccount: (accountId: string) =>
     call<void>("auth_remove_account", { accountId }),
-  authSetDefaultAccount: (accountId: string) =>
-    call<void>("auth_set_default_account", { accountId }),
-  authApplyToCodex: (accountId: string) =>
-    call<void>("auth_apply_to_codex", { accountId }),
   openUrl: (url: string) => call<void>("open_url", { url }),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<Settings>("save_settings", { settings }),

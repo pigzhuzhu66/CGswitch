@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter};
 
-use crate::auth::codex_oauth::{parse_external_auth_json, CodexOAuthState, ManagedAccount};
+use crate::auth::codex_oauth::{parse_external_auth_json, ManagedAccount};
 use crate::builtin;
 use crate::codex::{config as codex_config, process as codex_process};
 use crate::database::{profile_summary, Database};
@@ -282,6 +282,94 @@ async fn query_deepseek_balance(
 
 /// MiniMax Coding Plan 用量查询：GET {base}/api/openplatform/coding_plan/remains。
 /// 接口形态以用户实测可用的 statusline.ps1 为准（国内版 Coding Plan）。
+/// GET {base}/models 带密钥的连通性测试核心，与 profile 无关（创建态表单直接复用）。
+async fn test_models_endpoint(base_url: &str, api_key: &str) -> AppResult<ProfileConnectionResult> {
+    let models_url = format!("{}/models", base_url.trim_end_matches('/'));
+    let client = http_client()?;
+
+    let start = std::time::Instant::now();
+    match client.get(&models_url).bearer_auth(api_key).send().await {
+        Ok(response) => {
+            let status = response.status();
+            let latency_ms = Some(start.elapsed().as_millis());
+            if status.is_success() {
+                // 部分服务端（如智谱 /api/v1/models）用 HTTP 200 包装认证失败，
+                // 只认状态码会把“密钥错误/地址错误”误判成连通成功，必须校验响应体。
+                let body = response.text().await.unwrap_or_default();
+                match serde_json::from_str::<serde_json::Value>(&body) {
+                    Ok(json) => {
+                        if let Some(error) = connection_error_from_body(&json) {
+                            Ok(ProfileConnectionResult {
+                                ok: false,
+                                latency_ms,
+                                status: Some(status.as_u16()),
+                                error: Some(error),
+                            })
+                        } else {
+                            Ok(ProfileConnectionResult {
+                                ok: true,
+                                latency_ms,
+                                status: Some(status.as_u16()),
+                                error: None,
+                            })
+                        }
+                    }
+                    Err(_) => Ok(ProfileConnectionResult {
+                        ok: false,
+                        latency_ms,
+                        status: Some(status.as_u16()),
+                        error: Some(format!(
+                            "接口返回 HTTP {status}，但响应不是有效的 JSON（请检查调用地址）"
+                        )),
+                    }),
+                }
+            } else if status == reqwest::StatusCode::UNAUTHORIZED
+                || status == reqwest::StatusCode::FORBIDDEN
+            {
+                Ok(ProfileConnectionResult {
+                    ok: false,
+                    latency_ms,
+                    status: Some(status.as_u16()),
+                    error: Some("API 密钥无效".to_string()),
+                })
+            } else {
+                Ok(ProfileConnectionResult {
+                    ok: false,
+                    latency_ms,
+                    status: Some(status.as_u16()),
+                    error: Some(format!("接口返回 HTTP {status}")),
+                })
+            }
+        }
+        Err(error) => {
+            let status = error.status().map(|status| status.as_u16());
+            let error_message = reqwest_error_message(&error);
+            Ok(ProfileConnectionResult {
+                ok: false,
+                latency_ms: None,
+                status,
+                error: Some(error_message),
+            })
+        }
+    }
+}
+
+/// 创建态表单的连通性测试：地址/密钥实时传入，无已存 profile 可回退，空值直接报错。
+pub async fn test_provider_connection(
+    base_url: &str,
+    api_key: &str,
+) -> AppResult<ProfileConnectionResult> {
+    let base_url = base_url.trim();
+    if base_url.is_empty() {
+        return Err(app_err!("请填写调用地址"));
+    }
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return Err(app_err!("请填写 API 密钥"));
+    }
+    test_models_endpoint(base_url, api_key).await
+}
+
 async fn query_minimax_balance(
     client: &reqwest::Client,
     base: &str,
@@ -650,74 +738,7 @@ impl AppContext {
                 .ok_or_else(|| app_err!("该供应商没有配置 API 密钥，请先填写后再测试"))?,
         };
 
-        let models_url = format!("{}/models", base_url.trim_end_matches('/'));
-        let client = http_client()?;
-
-        let start = std::time::Instant::now();
-        match client.get(&models_url).bearer_auth(api_key).send().await {
-            Ok(response) => {
-                let status = response.status();
-                let latency_ms = Some(start.elapsed().as_millis());
-                if status.is_success() {
-                    // 部分服务端（如智谱 /api/v1/models）用 HTTP 200 包装认证失败，
-                    // 只认状态码会把“密钥错误/地址错误”误判成连通成功，必须校验响应体。
-                    let body = response.text().await.unwrap_or_default();
-                    match serde_json::from_str::<serde_json::Value>(&body) {
-                        Ok(json) => {
-                            if let Some(error) = connection_error_from_body(&json) {
-                                Ok(ProfileConnectionResult {
-                                    ok: false,
-                                    latency_ms,
-                                    status: Some(status.as_u16()),
-                                    error: Some(error),
-                                })
-                            } else {
-                                Ok(ProfileConnectionResult {
-                                    ok: true,
-                                    latency_ms,
-                                    status: Some(status.as_u16()),
-                                    error: None,
-                                })
-                            }
-                        }
-                        Err(_) => Ok(ProfileConnectionResult {
-                            ok: false,
-                            latency_ms,
-                            status: Some(status.as_u16()),
-                            error: Some(format!(
-                                "接口返回 HTTP {status}，但响应不是有效的 JSON（请检查调用地址）"
-                            )),
-                        }),
-                    }
-                } else if status == reqwest::StatusCode::UNAUTHORIZED
-                    || status == reqwest::StatusCode::FORBIDDEN
-                {
-                    Ok(ProfileConnectionResult {
-                        ok: false,
-                        latency_ms,
-                        status: Some(status.as_u16()),
-                        error: Some("API 密钥无效".to_string()),
-                    })
-                } else {
-                    Ok(ProfileConnectionResult {
-                        ok: false,
-                        latency_ms,
-                        status: Some(status.as_u16()),
-                        error: Some(format!("接口返回 HTTP {status}")),
-                    })
-                }
-            }
-            Err(error) => {
-                let status = error.status().map(|status| status.as_u16());
-                let error_message = reqwest_error_message(&error);
-                Ok(ProfileConnectionResult {
-                    ok: false,
-                    latency_ms: None,
-                    status,
-                    error: Some(error_message),
-                })
-            }
-        }
+        test_models_endpoint(&base_url, &api_key).await
     }
 
     /// 验证 ChatGPT 订阅认证连通性：用当前 access_token 请求 Codex 官方后端用量端点
@@ -1367,23 +1388,6 @@ impl AppContext {
         Ok(())
     }
 
-    /// 把 OAuth 账号的订阅凭据按官方格式写入 ~/.codex/auth.json，
-    /// 让 Codex 直接使用该 ChatGPT 订阅额度，而不是 API key。
-    pub async fn apply_oauth_auth(
-        &self,
-        oauth: &CodexOAuthState,
-        account_id: &str,
-    ) -> AppResult<()> {
-        let content = oauth
-            .0
-            .read()
-            .await
-            .codex_auth_json(account_id)
-            .await
-            .map_err(|error| app_err!("{error}"))?;
-        self.write_codex_auth_json(&content)
-    }
-
     /// 把订阅凭据原文写入 ~/.codex/auth.json（写前备份旧文件）。
     pub fn write_codex_auth_json(&self, content: &str) -> AppResult<()> {
         let destination = self.paths.codex_home.join("auth.json");
@@ -1417,6 +1421,20 @@ impl AppContext {
             return Ok(None);
         };
         Ok(parse_external_auth_json(&text).map(|auth| auth.access_token))
+    }
+
+    /// 读取 live auth.json 中属于指定账号的 ChatGPT access_token。
+    pub fn external_codex_access_token_for_account(
+        &self,
+        account_id: &str,
+    ) -> AppResult<Option<String>> {
+        let Some(text) = read_optional_text(&self.paths.codex_home.join("auth.json")) else {
+            return Ok(None);
+        };
+        let Some(auth) = parse_external_auth_json(&text) else {
+            return Ok(None);
+        };
+        Ok((auth.account_id == account_id).then_some(auth.access_token))
     }
 
     /// 是否为官方订阅供应商（无 API 供应商，凭据走 ChatGPT 订阅）。
@@ -1860,6 +1878,36 @@ fn read_optional_text(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_codex_auth_is_available_for_matching_account_only() {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(home.path()).unwrap();
+        paths.ensure().unwrap();
+        std::fs::create_dir_all(&paths.codex_home).unwrap();
+        let payload = URL_SAFE_NO_PAD
+            .encode(br#"{"chatgpt_account_id":"acc-live","email":"live@example.com"}"#);
+        let auth = format!(
+            r#"{{"auth_mode":"chatgpt","tokens":{{"id_token":"e30.{payload}.sig","access_token":"live-access"}}}}"#
+        );
+        std::fs::write(paths.codex_home.join("auth.json"), auth).unwrap();
+
+        let context = AppContext::new(paths).unwrap();
+
+        assert_eq!(
+            context
+                .external_codex_access_token_for_account("acc-live")
+                .unwrap()
+                .as_deref(),
+            Some("live-access")
+        );
+        assert!(context
+            .external_codex_access_token_for_account("acc-other")
+            .unwrap()
+            .is_none());
+    }
 
     #[test]
     fn connection_error_body_detects_provider_level_failures() {

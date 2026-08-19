@@ -13,7 +13,12 @@ import {
   customCatalogTemplate,
   customConfigTemplate,
 } from "../presets";
-import type { ManagedAccount, ProfileDetail, ProfileSummary } from "../types";
+import type {
+  EditorDiagnosticSummary,
+  ManagedAccount,
+  ProfileDetail,
+  ProfileSummary,
+} from "../types";
 import {
   PhActivity,
   PhArrowLeft,
@@ -152,6 +157,7 @@ const message = useMessage();
 const detail = ref<ProfileDetail | null>(null);
 const loadError = ref("");
 const saving = ref(false);
+const formatting = ref(false);
 const testing = ref(false);
 const pickingIcon = ref(false);
 const name = ref(props.profile?.name ?? "");
@@ -176,8 +182,21 @@ const longContextEnabled = ref(false);
 const patchingLongContext = ref(false);
 const showBalance = ref(false);
 const savingBalance = ref(false);
+const activeEditor = ref<{ focusFirstDiagnostic: () => void } | null>(null);
+const editorDiagnostics = ref<EditorDiagnosticSummary>({
+  count: 0,
+  firstLine: null,
+});
 // 初始数据装载完成后才允许双向同步，避免装载时产生假差异
 let initialized = false;
+
+function handleEditorDiagnostics(summary: EditorDiagnosticSummary) {
+  editorDiagnostics.value = summary;
+}
+
+function jumpToFirstDiagnostic() {
+  activeEditor.value?.focusFirstDiagnostic();
+}
 
 const creating = computed(() => props.create === true);
 const selectedPreset = computed(
@@ -206,6 +225,12 @@ const isOfficial = computed(() =>
 );
 const isCustom = computed(() => creating.value && presetKind.value === "custom");
 const showLongContextOverride = computed(() => isOfficial.value);
+
+watch(activeTab, () => {
+  activeEditor.value = null;
+  editorDiagnostics.value = { count: 0, firstLine: null };
+});
+
 const hasProfileAuthOverride = computed(() => {
   if (creating.value || !detail.value?.raw_auth?.trim()) return false;
   return !(authDirty.value && !authText.value.trim());
@@ -221,7 +246,7 @@ const isOpenCode = computed(() =>
 );
 const accountOptions = computed(() => [
   {
-    label: externalAccount.value?.login ?? "跟随 CGswitch 默认",
+    label: externalAccount.value?.login ?? "自动选择账号",
     source: externalAccount.value ? "desktop" : "oauth",
     value: "",
   },
@@ -253,33 +278,39 @@ function renderAuthOptionLabel(option: SelectOption) {
 // 编辑态所有供应商都显示认证文件组件：第三方可保存自己的 auth.json 随应用写入
 const hasAuthTab = computed(() => !creating.value);
 
+// 模型目录引用随草稿 config.toml 实时联动（readProviderFields 同款模式）：
+// 贴上路径标签即出现，删掉即消失，避免已删引用的幽灵 tab 把目录内容存成孤儿文件
+const liveCatalogPath = computed(() => {
+  const m = /^\s*model_catalog_json\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/m.exec(
+    configText.value,
+  );
+  return m ? (m[1] ?? m[2] ?? m[3] ?? "") : "";
+});
+
+// 标签随实际文件名显示（models.json / custom-catalog.json 等），无路径数据时回退通用名
+const catalogFileName = computed(() => liveCatalogPath.value.split(/[\\/]/).pop() || "models.json");
+
 const tabs = computed(() => {
   if (creating.value) {
-    const list: { id: "config" | "auth" | "models"; label: string }[] = [
+    const list: { id: "config" | "auth" | "models"; label: string; title?: string }[] = [
       { id: "config", label: "config.toml" },
     ];
     if (isCustom.value) {
-      list.push({ id: "models", label: "models.json" });
+      if (liveCatalogPath.value)
+        list.push({ id: "models", label: catalogFileName.value, title: liveCatalogPath.value });
       list.push({ id: "auth", label: "auth.json" });
-    } else if (selectedPreset.value?.model_values.model_catalog_json) {
-      list.push({ id: "models", label: "models.json" });
+    } else if (liveCatalogPath.value) {
+      list.push({ id: "models", label: catalogFileName.value, title: liveCatalogPath.value });
     }
     return list;
   }
-  const list: { id: "config" | "auth" | "models"; label: string }[] = [
+  const list: { id: "config" | "auth" | "models"; label: string; title?: string }[] = [
     { id: "config", label: "config.toml" },
   ];
   if (hasAuthTab.value) list.push({ id: "auth", label: "auth.json" });
-  if (detail.value?.model_values.model_catalog_json)
-    list.push({ id: "models", label: "models.json" });
+  if (liveCatalogPath.value)
+    list.push({ id: "models", label: catalogFileName.value, title: liveCatalogPath.value });
   return list;
-});
-
-const catalogPath = computed(() => {
-  const raw = creating.value
-    ? selectedPreset.value?.model_values.model_catalog_json
-    : detail.value?.model_values.model_catalog_json;
-  return (raw ?? "").replace(/^["'`]+|["'`]+$/g, "");
 });
 
 const baseFragment = computed(() =>
@@ -333,6 +364,52 @@ async function toggleLongContext(enabled: boolean) {
     message.error(`更新长上下文配置失败：${String(error)}`);
   } finally {
     patchingLongContext.value = false;
+  }
+}
+
+// 格式化按钮随 tab 联动：图标与 tab 栏一致，让用户一眼看出格式化的是哪个文件
+const formatTarget = computed(() => {
+  if (activeTab.value === "config") {
+    return { icon: PhGearSix, label: "config.toml", title: "格式化 config.toml（TOML）" };
+  }
+  if (activeTab.value === "auth") {
+    return { icon: PhBracketsCurly, label: "auth.json", title: "格式化 auth.json（JSON）" };
+  }
+  return { icon: PhBracketsCurly, label: catalogFileName.value, title: `格式化 ${catalogFileName.value}（JSON）` };
+});
+
+async function formatCurrentDocument() {
+  if (formatting.value || saving.value) return;
+  const text =
+    activeTab.value === "config"
+      ? configText.value
+      : activeTab.value === "auth"
+        ? authText.value
+        : catalogText.value;
+  if (!text.trim()) {
+    message.warning("当前文件没有内容");
+    return;
+  }
+
+  formatting.value = true;
+  try {
+    // TOML 走 Rust 侧 taplo（语法错误时跳过错误区间仍可格式化），JSON 用原生
+    const formatted =
+      activeTab.value === "config"
+        ? await api.formatToml(text)
+        : JSON.stringify(JSON.parse(text), null, 2);
+    if (formatted === text) {
+      message.info(`${formatTarget.value.label} 格式无误，无需调整`);
+    } else {
+      if (activeTab.value === "config") configText.value = formatted;
+      else if (activeTab.value === "auth") authText.value = formatted;
+      else catalogText.value = formatted;
+      message.success(`${formatTarget.value.label} 格式化成功（保存后生效）`);
+    }
+  } catch (error) {
+    message.error(`格式化失败：${String(error)}`);
+  } finally {
+    formatting.value = false;
   }
 }
 
@@ -402,7 +479,8 @@ async function openOpenCodeRef() {
 }
 
 async function testConnection() {
-  if (testing.value || creating.value || !props.profile) return;
+  if (testing.value) return;
+  if (!creating.value && !props.profile) return;
   if (!baseUrl.value.trim()) {
     message.warning("请填写调用地址");
     return;
@@ -413,11 +491,14 @@ async function testConnection() {
   }
   testing.value = true;
   try {
-    const result = await api.testProfileConnection(
-      props.profile.id,
-      baseUrl.value.trim(),
-      apiKey.value.trim(),
-    );
+    // 输入框里填什么就测什么：创建态尚无 profile id，直接用表单值测端点
+    const result = creating.value
+      ? await api.testProviderConnection(baseUrl.value.trim(), apiKey.value.trim())
+      : await api.testProfileConnection(
+          props.profile!.id,
+          baseUrl.value.trim(),
+          apiKey.value.trim(),
+        );
     if (result.ok) {
       message.success(
         `连接正常${result.latency_ms != null ? ` · ${result.latency_ms}ms` : ""}`,
@@ -571,7 +652,7 @@ async function save() {
           baseUrl.value.trim() || undefined,
           apiKey.value.trim() || undefined,
           adminUrl.value.trim() || undefined,
-          catalogText.value.trim() ? catalogText.value : null,
+          liveCatalogPath.value && catalogText.value.trim() ? catalogText.value : null,
           authText.value.trim() ? authText.value : null,
         );
         message.success("自定义供应商已添加");
@@ -587,7 +668,7 @@ async function save() {
           await api.updateProfileConfig(
             created.id,
             configText.value,
-            selectedPreset.value?.model_values.model_catalog_json ? catalogText.value || null : null,
+            liveCatalogPath.value ? catalogText.value || null : null,
             null,
           );
         }
@@ -606,9 +687,7 @@ async function save() {
       await api.updateProfileConfig(
         props.profile.id,
         configText.value,
-        detail.value?.model_values.model_catalog_json && catalogDirty.value
-          ? catalogText.value || null
-          : null,
+        liveCatalogPath.value && catalogDirty.value ? catalogText.value || null : null,
         hasAuthTab.value && authDirty.value ? authText.value : null,
       );
       if (isOfficial.value) {
@@ -714,7 +793,6 @@ async function save() {
               获取 API 密钥
             </button>
             <button
-              v-if="!creating"
               type="button"
               class="apple-inline-btn"
               :disabled="!apiKey.trim() || !baseUrl.trim()"
@@ -749,7 +827,7 @@ async function save() {
           v-model:value="boundAccountId"
           :options="accountOptions"
           :render-label="renderAuthOptionLabel"
-          :placeholder="externalAccount ? '桌面端认证' : '跟随 CGswitch 默认'"
+          :placeholder="externalAccount ? '桌面端认证' : '自动选择账号'"
         />
       </div>
       <div v-if="!creating || selectedPreset?.base_url" class="mt-4">
@@ -787,6 +865,7 @@ async function save() {
             class="relative flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] transition-colors"
             :class="activeTab === tab.id ? 'bg-[var(--selection-bg)] font-semibold text-accent' : 'muted hover:bg-black/5 dark:hover:bg-white/8'"
             :aria-pressed="activeTab === tab.id"
+            :title="tab.title"
             @click="activeTab = tab.id"
           >
             <PhGearSix v-if="tab.id === 'config'" class="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
@@ -819,9 +898,11 @@ async function save() {
       <div class="mt-4 flex flex-col pr-1">
         <div v-if="activeTab === 'config'">
           <ConfigTextEditor
+            ref="activeEditor"
             v-model="configText"
             language="toml"
             :placeholder="creating ? '选择供应商后显示配置预览' : '编辑 config.toml 内容，保存后仅写入该供应商；应用时才生效。'"
+            @diagnostics="handleEditorDiagnostics"
           />
         </div>
         <div v-else-if="activeTab === 'auth'">
@@ -829,27 +910,30 @@ async function save() {
             v-if="detail?.provider !== null && !detail?.raw_auth"
             class="muted mb-2 text-xs"
           >
-            该配置未保存自定义认证文件：应用时不会写入 ~/.codex/auth.json，全局认证保持现状。
+            未保存自定义认证：应用此供应商不会改动 ~/.codex/auth.json。
           </p>
           <p v-else-if="detail?.provider === null && !detail?.raw_auth" class="muted mb-2 text-xs">
             当前显示的是全局生效的认证文件（来自订阅账号 / Codex 登录），只展示，未保存到本配置。
           </p>
+          <p v-else-if="detail?.raw_auth" class="muted mb-2 text-xs">
+            已保存自定义认证：清空并保存即可移除，应用时写入 ~/.codex/auth.json。
+          </p>
           <ConfigTextEditor
+            ref="activeEditor"
             v-model="authText"
             language="json"
-            placeholder="认证文件（~/.codex/auth.json）。保存后随该供应商生效；清空内容可移除该供应商的自定义认证。"
+            placeholder="认证文件（~/.codex/auth.json）。保存后仅存入本配置，应用时才写入生效。"
+            @diagnostics="handleEditorDiagnostics"
           />
         </div>
         <div v-else class="flex flex-col text-sm">
-          <div class="flex justify-between gap-4 py-2">
-            <span class="field-label">模型目录</span>
-            <span class="mono">{{ catalogPath }}</span>
-          </div>
           <div>
             <ConfigTextEditor
+              ref="activeEditor"
               v-model="catalogText"
               language="json"
               placeholder="模型目录文件不存在或无法读取；保存后内容将随该供应商生效。"
+              @diagnostics="handleEditorDiagnostics"
             />
           </div>
         </div>
@@ -859,6 +943,33 @@ async function save() {
     </div>
 
     <div class="-mx-8 -mb-7 flex items-center justify-end gap-2 bg-[var(--app-bg)] pl-8 pr-[42px] pt-2 pb-4">
+      <button
+        v-if="editorDiagnostics.count > 0"
+        type="button"
+        class="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-[#ff3b30] transition-opacity hover:opacity-80"
+        title="跳转到第一个错误"
+        aria-live="polite"
+        @click="jumpToFirstDiagnostic"
+      >
+        <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff3b30]" aria-hidden="true" />
+        <span class="truncate">
+          {{ editorDiagnostics.count }} 个错误
+          <template v-if="editorDiagnostics.firstLine !== null">
+            · 第 {{ editorDiagnostics.firstLine }} 行
+          </template>
+        </span>
+      </button>
+      <n-button
+        secondary
+        :disabled="saving"
+        :title="formatTarget.title"
+        @click="formatCurrentDocument"
+      >
+        <template #icon>
+          <component :is="formatTarget.icon" class="h-4 w-4" weight="bold" aria-hidden="true" />
+        </template>
+        格式化
+      </n-button>
       <n-button secondary @click="emit('back')">取消</n-button>
       <n-button type="primary" :loading="saving" :disabled="!canSave" @click="save">
         <template #icon>
