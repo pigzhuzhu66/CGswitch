@@ -255,7 +255,7 @@ async function testConnection() {
             </template>
             <template v-else-if="balanceInfo">
               <span>余额:</span>
-              <span class="chip-success">
+              <span :class="balanceChipClass(null, false, balanceInfo.total_balance)">
                 {{ (balanceInfo.currency === "USD" ? "$" : "¥") + balanceInfo.total_balance + "  " + balanceInfo.currency }}
               </span>
             </template>

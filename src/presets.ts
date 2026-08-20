@@ -13,10 +13,14 @@ export interface BuiltinPreset {
 /** 支持余额/用量查询的供应商（以 provider_id 键控）；加供应商时在这里加一行即可 */
 export const balanceQueryProviders = new Set(["deepseek", "minimax"]);
 
-/** 余额/用量胶囊变色（cc-switch 同款阈值：已用 <70% 绿 / 70-89% 橙 / ≥90% 红；余额恒绿） */
-export function balanceChipClass(usagePercent: number | null, failed: boolean): string {
+/** 余额/用量胶囊变色（cc-switch 同款阈值：已用 <70% 绿 / 70-89% 橙 / ≥90% 红；负余额红色） */
+export function balanceChipClass(
+  usagePercent: number | null,
+  failed: boolean,
+  totalBalance: string | null = null,
+): string {
   if (failed) return "chip-danger";
-  if (usagePercent == null) return "chip-success";
+  if (usagePercent == null) return Number(totalBalance) < 0 ? "chip-danger" : "chip-success";
   if (usagePercent >= 90) return "chip-danger";
   if (usagePercent >= 70) return "chip-warn";
   return "chip-success";
