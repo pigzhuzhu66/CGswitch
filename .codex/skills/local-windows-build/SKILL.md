@@ -56,7 +56,7 @@ Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe", "src-tauri/target/re
 Invoke-Item "src-tauri/target/release/bundle/nsis"
 ```
 
-图标回归检查：256 层 `icon.ico[5]` 的可见范围应接近 `248×248`，且 32/48 层 `icon.ico[0]`、`icon.ico[3]` 应分别为完整 `32×32`、`48×48`；不能只检查 256 层而漏掉桌面/资源管理器使用的小尺寸层。
+图标回归检查：`256x256.png` 的白色容器应接近 `240×240`（约 `+8+8`），且 32/48 层 `icon.ico[0]`、`icon.ico[3]` 应分别为完整 `32×32`、`48×48`；不能只检查透明边界而漏掉桌面/资源管理器使用的实际容器尺寸。
 
 ### Step 4: 按此格式报告
 
