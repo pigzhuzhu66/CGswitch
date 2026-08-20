@@ -200,6 +200,40 @@ textarea::placeholder {
   background: rgb(255 255 255 / 0.1);
 }
 
+/* 设置页分区切换：cc-switch 同款"缓升"——10px 上移 + 淡入，0.3s + framer 默认曲线
+   cubic-bezier(0.25, 0.1, 0.25, 1)（起步端也柔，无突然发力）；出场快速淡出让节奏给进场。
+   纯 CSS 零 JS 运行时；只动 transform + opacity（GPU 合成）。
+   用法：<Transition name="tab-rise" mode="out-in"> */
+.tab-rise-enter-active {
+  transition:
+    opacity 0.3s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.tab-rise-leave-active {
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.tab-rise-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.tab-rise-leave-to {
+  opacity: 0;
+}
+
+/* 减弱动态效果：去掉位移只留快速淡入 */
+@media (prefers-reduced-motion: reduce) {
+  .tab-rise-enter-active {
+    transition: opacity 0.15s ease;
+  }
+
+  .tab-rise-enter-from {
+    transform: none;
+  }
+}
+
 /* 表单字段标签：比输入内容更明确，但不抢过区块标题 */
 .field-label {
   font-size: 13px;

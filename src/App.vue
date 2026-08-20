@@ -21,8 +21,6 @@ import McpIcon from "./components/McpIcon.vue";
 // 快速切换时会命中坏缓存导致页面永久空白——两处隐患一并移除（KeepAlive 也已去掉）
 import McpView from "./views/McpView.vue";
 import SettingsView from "./views/SettingsView.vue";
-import { AnimatePresence, MotionConfig, motion } from "motion-v";
-import { pageVariants } from "./motion";
 
 type View = "profiles" | "mcp" | "settings";
 
@@ -307,21 +305,11 @@ useModalEnterConfirm();
                 <div class="startup-skeleton__list" />
                 <p v-if="loadError" class="muted mt-4 text-sm">{{ loadError }}</p>
               </div>
-              <MotionConfig v-else reduced-motion="user">
-                <AnimatePresence mode="wait" :initial="false">
-                  <motion.section
-                    :key="view"
-                    :variants="pageVariants"
-                    initial="enter"
-                    animate="center"
-                    exit="exit"
-                  >
-                    <ProfilesView v-if="view === 'profiles'" :state="state" :nav-reset="profilesNavReset" @refresh="refresh" />
-                    <McpView v-else-if="view === 'mcp'" :nav-reset="mcpNavReset" />
-                    <SettingsView v-else :state="state" @preview-theme="previewTheme" @refresh="refresh" @saved="saveSettings" @home="goProfiles" />
-                  </motion.section>
-                </AnimatePresence>
-              </MotionConfig>
+              <template v-else>
+                <ProfilesView v-if="view === 'profiles'" :state="state" :nav-reset="profilesNavReset" @refresh="refresh" />
+                <McpView v-else-if="view === 'mcp'" :nav-reset="mcpNavReset" />
+                <SettingsView v-else :state="state" @preview-theme="previewTheme" @refresh="refresh" @saved="saveSettings" @home="goProfiles" />
+              </template>
             </main>
             </div>
           </div>

@@ -18,8 +18,6 @@ import {
 } from "@phosphor-icons/vue";
 
 import McpEdit from "../components/McpEdit.vue";
-import { AnimatePresence, motion } from "motion-v";
-import { pageVariants } from "../motion";
 
 const props = defineProps<{ navReset: number }>();
 
@@ -178,17 +176,9 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
 </script>
 
 <template>
-  <AnimatePresence mode="wait" :initial="false">
-    <motion.section
-      :key="editingServer || creatingServer ? 'edit' : 'list'"
-      :variants="pageVariants"
-      initial="enter"
-      animate="center"
-      exit="exit"
-    >
-    <McpEdit v-if="editingServer" :server="editingServer" @back="closeEdit" />
-    <McpEdit v-else-if="creatingServer" :server="null" create @back="creatingServer = false" />
-    <section v-else class="apple-scroll-page mx-auto w-full max-w-none">
+  <McpEdit v-if="editingServer" :server="editingServer" @back="closeEdit" />
+  <McpEdit v-else-if="creatingServer" :server="null" create @back="creatingServer = false" />
+  <section v-else class="apple-scroll-page mx-auto w-full max-w-none">
     <header class="apple-page-bar flex-wrap justify-between gap-4">
       <div class="flex min-w-0 items-center gap-2.5">
         <span class="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-accent">
@@ -298,7 +288,5 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
       @update:show="syncDialogOpen = $event"
       @apply="onApply"
     />
-    </section>
-    </motion.section>
-  </AnimatePresence>
+  </section>
 </template>

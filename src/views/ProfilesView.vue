@@ -19,8 +19,6 @@ import { PhArrowClockwise, PhCamera, PhPlus } from "@phosphor-icons/vue";
 
 // 编辑页按需加载：只在打开编辑/新建时拉取，避免把 CodeMirror/预设数据带进启动入口
 import ProfileEdit from "../components/ProfileEdit.vue";
-import { AnimatePresence, motion } from "motion-v";
-import { pageVariants } from "../motion";
 
 const props = defineProps<{ state: AppState; navReset: number }>();
 const emit = defineEmits<{ refresh: [] }>();
@@ -327,15 +325,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AnimatePresence mode="wait" :initial="false">
-    <motion.section
-      :key="editingProfile || creatingProfile ? 'edit' : 'list'"
-      :variants="pageVariants"
-      initial="enter"
-      animate="center"
-      exit="exit"
-    >
-    <ProfileEdit
+  <ProfileEdit
       v-if="editingProfile"
       :profile="editingProfile"
       @back="closeEdit"
@@ -448,7 +438,5 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </n-modal>
-    </section>
-    </motion.section>
-  </AnimatePresence>
+  </section>
 </template>

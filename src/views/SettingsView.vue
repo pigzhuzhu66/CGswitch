@@ -38,8 +38,6 @@ import {
   PhUserCircle,
 } from "@phosphor-icons/vue";
 import version from "../../VERSION?raw";
-import { AnimatePresence, motion } from "motion-v";
-import { riseVariants } from "../motion";
 
 const props = defineProps<{ state: AppState }>();
 const emit = defineEmits<{ refresh: []; saved: [settings: Settings]; previewTheme: [theme: Settings["theme"]]; home: [] }>();
@@ -446,8 +444,7 @@ async function openPath(item: PathInfo) {
     </div>
 
     <div class="apple-edit-content">
-      <AnimatePresence mode="wait" :initial="false">
-        <motion.div :key="section" :variants="riseVariants" initial="enter" animate="center" exit="exit">
+      <Transition name="tab-rise" mode="out-in">
       <div v-if="section === 'general'" class="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
       <div class="setting-title mb-2">主题</div>
       <div class="apple-group inline-flex gap-1 p-1">
@@ -689,8 +686,7 @@ async function openPath(item: PathInfo) {
         </div>
       </div>
     </div>
-        </motion.div>
-      </AnimatePresence>
+      </Transition>
     </div>
 
     <n-modal
