@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, h, onActivated, onMounted, ref, watch } from "vue";
+import { h, onMounted, ref, watch } from "vue";
 import { NButton, NEmpty, useDialog, useMessage } from "naive-ui";
 import AppSwitch from "../components/AppSwitch.vue";
 import TrashIcon from "../components/TrashIcon.vue";
@@ -17,8 +17,9 @@ import {
   PhTerminalWindow,
 } from "@phosphor-icons/vue";
 
-// 编辑页按需加载：只在打开编辑/新建时拉取
-const McpEdit = defineAsyncComponent(() => import("../components/McpEdit.vue"));
+import McpEdit from "../components/McpEdit.vue";
+import { AnimatePresence, motion } from "motion-v";
+import { pageVariants } from "../motion";
 
 const props = defineProps<{ navReset: number }>();
 
@@ -67,10 +68,8 @@ async function loadPreview() {
   }
 }
 
+// 视图不再被 KeepAlive 缓存：每次切换都会重挂载，onMounted 即覆盖"返回时刷新"
 onMounted(refresh);
-onActivated(() => {
-  if (loaded.value) void refresh();
-});
 
 type Transport = "http" | "stdio" | "unknown";
 
@@ -179,9 +178,17 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
 </script>
 
 <template>
-  <McpEdit v-if="editingServer" :server="editingServer" @back="closeEdit" />
-  <McpEdit v-else-if="creatingServer" :server="null" create @back="creatingServer = false" />
-  <section v-else class="apple-scroll-page mx-auto w-full max-w-none">
+  <AnimatePresence mode="wait" :initial="false">
+    <motion.section
+      :key="editingServer || creatingServer ? 'edit' : 'list'"
+      :variants="pageVariants"
+      initial="enter"
+      animate="center"
+      exit="exit"
+    >
+    <McpEdit v-if="editingServer" :server="editingServer" @back="closeEdit" />
+    <McpEdit v-else-if="creatingServer" :server="null" create @back="creatingServer = false" />
+    <section v-else class="apple-scroll-page mx-auto w-full max-w-none">
     <header class="apple-page-bar flex-wrap justify-between gap-4">
       <div class="flex min-w-0 items-center gap-2.5">
         <span class="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-accent">
@@ -291,5 +298,7 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
       @update:show="syncDialogOpen = $event"
       @apply="onApply"
     />
-  </section>
+    </section>
+    </motion.section>
+  </AnimatePresence>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, h, onActivated, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, h, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   NButton,
   NEmpty,
@@ -18,7 +18,9 @@ import type { AppState, AuthStatus, ManagedAccount, ProfileSummary, RestartStage
 import { PhArrowClockwise, PhCamera, PhPlus } from "@phosphor-icons/vue";
 
 // 编辑页按需加载：只在打开编辑/新建时拉取，避免把 CodeMirror/预设数据带进启动入口
-const ProfileEdit = defineAsyncComponent(() => import("../components/ProfileEdit.vue"));
+import ProfileEdit from "../components/ProfileEdit.vue";
+import { AnimatePresence, motion } from "motion-v";
+import { pageVariants } from "../motion";
 
 const props = defineProps<{ state: AppState; navReset: number }>();
 const emit = defineEmits<{ refresh: [] }>();
@@ -89,7 +91,6 @@ async function refreshSubscriptionStatus() {
 }
 
 let unlisten: (() => void) | null = null;
-let hasActivated = false;
 
 const progress = computed(() => {
   const values: Record<RestartStage, number> = {
@@ -304,18 +305,12 @@ async function restart(force = false) {
   }
 }
 
+// 视图不再被 KeepAlive 缓存：每次切换都会重挂载，订阅状态在挂载时刷新
 onMounted(async () => {
   unlisten = await api.onRestartProgress((payload) => {
     restartStage.value = payload.stage;
     restartMessage.value = payload.message ?? "";
   });
-});
-
-onActivated(() => {
-  if (!hasActivated) {
-    hasActivated = true;
-    return;
-  }
   void refreshSubscriptionStatus();
 });
 
@@ -332,20 +327,28 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <ProfileEdit
-    v-if="editingProfile"
-    :profile="editingProfile"
-    @back="closeEdit"
-    @changed="emit('refresh')"
-  />
-  <ProfileEdit
-    v-else-if="creatingProfile"
-    :profile="null"
-    create
-    @back="creatingProfile = false"
-    @changed="emit('refresh')"
-  />
-  <section v-else class="apple-scroll-page mx-auto w-full max-w-none">
+  <AnimatePresence mode="wait" :initial="false">
+    <motion.section
+      :key="editingProfile || creatingProfile ? 'edit' : 'list'"
+      :variants="pageVariants"
+      initial="enter"
+      animate="center"
+      exit="exit"
+    >
+    <ProfileEdit
+      v-if="editingProfile"
+      :profile="editingProfile"
+      @back="closeEdit"
+      @changed="emit('refresh')"
+    />
+    <ProfileEdit
+      v-else-if="creatingProfile"
+      :profile="null"
+      create
+      @back="creatingProfile = false"
+      @changed="emit('refresh')"
+    />
+    <section v-else class="apple-scroll-page mx-auto w-full max-w-none">
     <header class="apple-page-bar flex-wrap justify-between gap-4">
       <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors" :class="state.codex.running ? 'border-success/25 bg-success/10 text-[#248a3d] dark:border-success/30 dark:bg-success/10 dark:text-[#6ee7a0]' : 'border-[var(--panel-border)] bg-black/4 text-zinc-500 dark:bg-white/6'">
@@ -445,5 +448,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </n-modal>
-  </section>
+    </section>
+    </motion.section>
+  </AnimatePresence>
 </template>

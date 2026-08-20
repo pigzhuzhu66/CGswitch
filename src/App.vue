@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   NConfigProvider,
   NDialogProvider,
@@ -16,10 +16,13 @@ import { darkThemeOverrides, themeOverrides } from "./theme";
 import type { AppState, Settings } from "./types";
 import { PhGearSix, PhMinus, PhSquare, PhStack, PhX } from "@phosphor-icons/vue";
 import McpIcon from "./components/McpIcon.vue";
-
-// 设置页/MCP 页按需加载：进入时才拉取，不拖累启动入口
-const SettingsView = defineAsyncComponent(() => import("./views/SettingsView.vue"));
-const McpView = defineAsyncComponent(() => import("./views/McpView.vue"));
+// 三个视图同步加载：Tauri 资源走本地磁盘，拆 chunk 无收益；且 defineAsyncComponent
+// （内部是 Suspense）+ KeepAlive 在 Vue 3.5.41 有缓存中毒 bug（vuejs/core#15288），
+// 快速切换时会命中坏缓存导致页面永久空白——两处隐患一并移除（KeepAlive 也已去掉）
+import McpView from "./views/McpView.vue";
+import SettingsView from "./views/SettingsView.vue";
+import { AnimatePresence, MotionConfig, motion } from "motion-v";
+import { pageVariants } from "./motion";
 
 type View = "profiles" | "mcp" | "settings";
 
@@ -296,14 +299,7 @@ useModalEnterConfirm();
             </aside>
 
             <main class="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-[var(--app-bg)] pt-4">
-              <template v-if="state">
-                <KeepAlive>
-                  <ProfilesView v-if="view === 'profiles'" :state="state" :nav-reset="profilesNavReset" @refresh="refresh" />
-                  <McpView v-else-if="view === 'mcp'" :nav-reset="mcpNavReset" />
-                  <SettingsView v-else :state="state" @preview-theme="previewTheme" @refresh="refresh" @saved="saveSettings" @home="goProfiles" />
-                </KeepAlive>
-              </template>
-              <div v-else class="startup-skeleton" aria-busy="true">
+              <div v-if="!state" class="startup-skeleton" aria-busy="true">
                 <div class="startup-skeleton__title" />
                 <div class="startup-skeleton__subtitle" />
                 <div class="startup-skeleton__panel" />
@@ -311,6 +307,21 @@ useModalEnterConfirm();
                 <div class="startup-skeleton__list" />
                 <p v-if="loadError" class="muted mt-4 text-sm">{{ loadError }}</p>
               </div>
+              <MotionConfig v-else reduced-motion="user">
+                <AnimatePresence mode="wait" :initial="false">
+                  <motion.section
+                    :key="view"
+                    :variants="pageVariants"
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                  >
+                    <ProfilesView v-if="view === 'profiles'" :state="state" :nav-reset="profilesNavReset" @refresh="refresh" />
+                    <McpView v-else-if="view === 'mcp'" :nav-reset="mcpNavReset" />
+                    <SettingsView v-else :state="state" @preview-theme="previewTheme" @refresh="refresh" @saved="saveSettings" @home="goProfiles" />
+                  </motion.section>
+                </AnimatePresence>
+              </MotionConfig>
             </main>
             </div>
           </div>
