@@ -30,7 +30,7 @@ const loaded = ref(false);
 const editingServer = ref<McpServerSpec | null>(null);
 const creatingServer = ref(false);
 const togglingName = ref("");
-// 同步差异预览：live 与数据库镜像不一致时横幅提示，弹窗内按明细选择方向
+// 同步差异预览：数据库 MCP 配置与 config.toml 不一致时横幅提示，弹窗内按方向选择覆盖目标
 const syncPreview = ref<McpSyncPreview | null>(null);
 const previewError = ref("");
 const syncDialogOpen = ref(false);
@@ -150,7 +150,7 @@ function openSyncDialog() {
     return;
   }
   if (syncPreview.value && syncPreview.value.entries.length === 0) {
-    message.info("配置文件与数据库镜像一致，无需同步");
+    message.info("数据库中的 MCP 配置与 config.toml 一致，无需处理");
     return;
   }
   syncDialogOpen.value = true;
@@ -162,10 +162,10 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
   try {
     if (direction === "live-to-db") {
       const count = await api.importMcpFromLive();
-      message.success(`已从配置文件导入 ${count} 台服务器到数据库`);
+      message.success(`已用 config.toml 覆盖数据库中的 MCP 配置，共 ${count} 台服务器`);
     } else {
       const count = await api.restoreMcpFromDatabase();
-      message.success(`已恢复 ${count} 台服务器到配置文件`);
+      message.success(`已用数据库中的 MCP 配置覆盖 config.toml，共 ${count} 台服务器`);
     }
     syncDialogOpen.value = false;
     await refresh();
@@ -199,7 +199,7 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
           <template #icon>
             <PhArrowsDownUp class="h-4 w-4" weight="bold" aria-hidden="true" />
           </template>
-          同步配置
+          处理配置差异
         </n-button>
         <n-button type="primary" @click="creatingServer = true">
           <template #icon>
@@ -212,16 +212,16 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
 
     <div class="apple-edit-content">
     <p v-if="loadError" class="muted mt-4 text-sm">
-      {{ loadError }}<span v-if="loaded">配置文件无法解析时，可点「同步配置」用数据库镜像修复。</span>
+      {{ loadError }}<span v-if="loaded">config.toml 无法解析时，可点「处理配置差异」用数据库中的 MCP 配置恢复。</span>
     </p>
 
     <div class="mt-[var(--gap-page)]">
-      <!-- live 与数据库镜像有差异时提示；live 全空但库里有残留行时也要显示，避免空列表误导 -->
+      <!-- 数据库 MCP 配置与 config.toml 有差异时提示；两侧数量不一致也要显示，避免空列表误导 -->
       <div v-if="syncPreview && syncPreview.entries.length" class="apple-list-row mb-2">
         <span class="flex min-w-0 items-center gap-2">
           <span class="apple-chip chip-warn">MCP 差异</span>
           <span class="muted truncate text-sm">
-            配置文件与数据库镜像有 {{ syncPreview.entries.length }} 项不同
+            数据库与 config.toml 有 {{ syncPreview.entries.length }} 项 MCP 配置不同
           </span>
         </span>
         <button type="button" class="apple-inline-btn" @click="openSyncDialog">查看并处理</button>

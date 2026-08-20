@@ -2,7 +2,6 @@
 import { computed, ref, watch } from "vue";
 import { NButton, NModal } from "naive-ui";
 import type { McpSyncDiffEntry, McpSyncPreview } from "../types";
-import { mcpTransportText } from "../utils";
 
 type SyncDirection = "live-to-db" | "db-to-live";
 // 确认文案的一个片段；hl = 高亮 token（路径 / 段名 / 服务器名）
@@ -12,7 +11,7 @@ type ConfirmLine = { segs: ConfirmSeg[]; danger?: boolean };
 const props = defineProps<{
   show: boolean;
   preview: McpSyncPreview | null;
-  /** live 配置无法解析时的错误文本；非空进入“仅可从数据库恢复”降级模式。 */
+  /** live 配置无法解析时的错误文本；非空进入“仅可用数据库恢复”降级模式。 */
   previewError: string;
   busy: boolean;
 }>();
@@ -41,18 +40,18 @@ watch(
 );
 
 const modalTitle = computed(() => {
-  if (step.value !== "confirm" || !pendingDirection.value) return "MCP 同步差异";
+  if (step.value !== "confirm" || !pendingDirection.value) return "MCP 配置不一致";
   if (pendingDirection.value === "db-to-live") {
-    return props.previewError ? "确认：从镜像恢复" : "确认：写回 config.toml";
+    return "确认：数据库 → config.toml";
   }
-  return "确认：更新数据库镜像";
+  return "确认：config.toml → 数据库";
 });
 
 const confirmButtonText = computed(() => {
   if (pendingDirection.value === "db-to-live") {
-    return props.previewError ? "确认从镜像恢复" : "确认写回 config.toml";
+    return "确认覆盖 config.toml";
   }
-  return "确认更新数据库镜像";
+  return "确认覆盖数据库";
 });
 
 // 展开明细的服务器名；预览数据更新后整体收起
@@ -99,8 +98,8 @@ function apply(direction: SyncDirection) {
   const lines: ConfirmLine[] = [];
   const preview = props.preview;
   if (!preview) {
-    // 降级模式（live 无法解析）：只能按镜像整段重建
-    lines.push({ segs: [{ text: "该文件当前无法解析，将按镜像重建整个 MCP 段。" }] });
+    // 降级模式（live 无法解析）：只能用数据库整段重建配置文件
+    lines.push({ segs: [{ text: "该文件当前无法解析，将用数据库中的 MCP 配置重建整个 MCP 段。" }] });
     lines.push(backupLine);
   } else {
     // 按差异类型归组服务器名，确认文案直接点名（比台数更可判读）
@@ -111,19 +110,19 @@ function apply(direction: SyncDirection) {
     const changed = namesOf("changed");
     if (direction === "db-to-live") {
       if (added.length)
-        lines.push({ segs: [{ text: "删除外部新增的服务器：" }, ...nameSegs(added)], danger: true });
+        lines.push({ segs: [{ text: "配置文件有新增，从配置文件中删除：" }, ...nameSegs(added)], danger: true });
       if (missing.length)
-        lines.push({ segs: [{ text: "恢复缺失的服务器：" }, ...nameSegs(missing)] });
+        lines.push({ segs: [{ text: "配置文件缺失，写入配置文件：" }, ...nameSegs(missing)] });
       if (changed.length)
-        lines.push({ segs: [{ text: "恢复被改动的服务器为镜像内容：" }, ...nameSegs(changed)] });
+        lines.push({ segs: [{ text: "配置文件已修改，恢复为数据库内容：" }, ...nameSegs(changed)] });
       lines.push(backupLine);
     } else {
       if (added.length)
-        lines.push({ segs: [{ text: "把外部新增的服务器纳入镜像：" }, ...nameSegs(added)] });
+        lines.push({ segs: [{ text: "数据库新增：" }, ...nameSegs(added)] });
       if (changed.length)
-        lines.push({ segs: [{ text: "用当前值更新被改动的镜像条目：" }, ...nameSegs(changed)] });
+        lines.push({ segs: [{ text: "数据库修改：" }, ...nameSegs(changed)] });
       if (missing.length)
-        lines.push({ segs: [{ text: "删除配置文件中已不存在的镜像条目：" }, ...nameSegs(missing)] });
+        lines.push({ segs: [{ text: "数据库删除：" }, ...nameSegs(missing)] });
     }
   }
   pendingLines.value = lines;
@@ -169,8 +168,8 @@ function fieldValueText(value: unknown) {
   return JSON.stringify(value);
 }
 
-// 差异标签以数据库镜像（静态基准）为基准描述 live 的偏离：
-// 镜像有 live 没有 = 配置文件缺失；live 有镜像没有 = 应用外部新增；其余为内容被外部改动
+// 差异标签描述 config.toml 相对数据库 MCP 配置的偏离：
+// 数据库有 config.toml 没有 = 配置文件缺失；config.toml 有数据库没有 = 外部新增；其余为内容被外部改动
 function kindText(entry: McpSyncDiffEntry) {
   if (entry.kind === "live_only") return "外部新增";
   if (entry.kind === "db_only") return "配置文件缺失";
@@ -184,9 +183,6 @@ function kindChipClass(entry: McpSyncDiffEntry) {
   return "apple-chip chip-danger";
 }
 
-function transportTextOf(entry: McpSyncDiffEntry) {
-  return mcpTransportText(entry.live_spec ?? entry.db_spec);
-}
 </script>
 
 <template>
@@ -200,13 +196,19 @@ function transportTextOf(entry: McpSyncDiffEntry) {
     <!-- 第二步：执行确认——同一弹窗内切换步骤，不另开确认弹窗（避免弹窗叠弹窗） -->
     <div v-if="step === 'confirm'" class="space-y-3">
       <p class="text-sm">
-        <template v-if="pendingDirection === 'db-to-live'"
-          >即将用数据库镜像覆写 <code class="mono code-tok">~/.codex/config.toml</code> 的
-          <code class="mono code-tok">[mcp_servers]</code> 段：</template
-        >
+        <template v-if="pendingDirection === 'db-to-live'">
+          <template v-if="previewError"
+            >config.toml 无法解析，将用数据库中的 MCP 配置重建整个文件：</template
+          >
+          <template v-else
+            >将用数据库中的 MCP 配置完整替换
+            <code class="mono code-tok">~/.codex/config.toml</code> 的
+            <code class="mono code-tok">[mcp_servers]</code> 段；配置文件中的其他配置不受影响：</template
+          >
+        </template>
         <template v-else
-          >即将用 <code class="mono code-tok">~/.codex/config.toml</code> 的
-          <code class="mono code-tok">[mcp_servers]</code> 段覆写数据库镜像：</template
+          >将用 <code class="mono code-tok">~/.codex/config.toml</code> 的
+          <code class="mono code-tok">[mcp_servers]</code> 段完整替换数据库中的 MCP 配置；数据库中的其他数据不受影响：</template
         >
       </p>
       <ul class="space-y-1.5">
@@ -227,21 +229,21 @@ function transportTextOf(entry: McpSyncDiffEntry) {
         </li>
       </ul>
     </div>
-    <!-- 降级模式：live 无法解析，无法对比，只能从数据库镜像恢复 -->
+    <!-- 降级模式：live 无法解析，无法对比，只能用数据库恢复 -->
     <div v-else-if="previewError" class="space-y-3">
       <p class="muted text-sm">{{ previewError }}</p>
       <p class="muted text-sm">
-        配置文件当前无法解析，无法对比差异；可从数据库镜像恢复（写前自动备份原文件）。
+        <code class="mono code-tok">config.toml</code> 当前无法解析，无法对比差异；可用数据库中的 MCP 配置覆盖恢复（写前自动备份原文件）。
       </p>
     </div>
     <!-- 正常模式：body 只放摘要与差异列表（列表自身滚动），操作区固定在卡片 footer -->
     <div v-else-if="preview" class="space-y-3">
       <div class="flex flex-wrap gap-2">
         <span class="apple-chip">
-          配置文件 <span class="font-semibold">{{ preview.live_count }} 台</span>
+          数据库中的 MCP 配置 <span class="font-semibold">{{ preview.db_count }} 台</span>
         </span>
         <span class="apple-chip">
-          数据库镜像 <span class="font-semibold">{{ preview.db_count }} 台</span>
+          config.toml 中的 MCP 配置 <span class="font-semibold">{{ preview.live_count }} 台</span>
         </span>
         <span class="apple-chip">
           差异 <span class="font-semibold">{{ preview.entries.length }} 项</span>
@@ -258,9 +260,6 @@ function transportTextOf(entry: McpSyncDiffEntry) {
             <span class="flex min-w-0 flex-1 items-center gap-2">
               <span :class="kindChipClass(entry)" class="shrink-0">{{ kindText(entry) }}</span>
               <span class="truncate text-[var(--font-size-base)] font-semibold">{{ entry.name }}</span>
-              <span class="shrink-0 rounded-md bg-black/5 px-1.5 py-px text-[10px] font-medium tracking-wide text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
-                {{ transportTextOf(entry) }}
-              </span>
             </span>
             <span class="muted shrink-0 text-xs">{{ expandedNames.has(entry.name) ? "收起" : "查看明细" }}</span>
           </button>
@@ -270,8 +269,8 @@ function transportTextOf(entry: McpSyncDiffEntry) {
           >
             <div v-if="entry.changed_fields.length" class="space-y-1">
               <div v-for="diff in entry.changed_fields" :key="diff.field">
-                {{ fieldLabels[diff.field] ?? diff.field }}：镜像 {{ fieldValueText(diff.db) }} →
-                当前 {{ fieldValueText(diff.live) }}
+                {{ fieldLabels[diff.field] ?? diff.field }}：数据库 {{ fieldValueText(diff.db) }} →
+                config.toml {{ fieldValueText(diff.live) }}
               </div>
             </div>
             <p v-else-if="entry.unmodeled_only">建模字段全部相同，差异只在注释 / 格式 / 未建模键。</p>
@@ -284,10 +283,7 @@ function transportTextOf(entry: McpSyncDiffEntry) {
     <template #footer>
       <div class="space-y-2">
         <p v-if="!previewError && step === 'diff'" class="muted text-xs">
-          差异以数据库镜像为基准，明细中「镜像 X → 当前
-          Y」表示配置文件相对镜像的改动。保留外部改动选「更新数据库」（用 config.toml
-          覆盖镜像）；恢复缺失或被改的服务器选「写回配置文件」（用镜像覆盖
-          config.toml，写前自动备份当前文件）。
+          箭头表示用左侧覆盖右侧；覆盖 config.toml 前会自动备份当前文件。
         </p>
         <div v-if="step === 'confirm'" class="flex items-center justify-end gap-2">
           <n-button :disabled="busy" @click="goBack">
@@ -314,7 +310,7 @@ function transportTextOf(entry: McpSyncDiffEntry) {
             :loading="busy && clickedDirection === 'db-to-live'"
             @click="apply('db-to-live')"
           >
-            写回配置文件
+            数据库 → config.toml
           </n-button>
           <n-button
             type="primary"
@@ -322,7 +318,7 @@ function transportTextOf(entry: McpSyncDiffEntry) {
             :loading="busy && clickedDirection === 'live-to-db'"
             @click="apply(previewError ? 'db-to-live' : 'live-to-db')"
           >
-            {{ previewError ? "从数据库恢复" : "更新数据库" }}
+            {{ previewError ? "数据库 → config.toml" : "config.toml → 数据库" }}
           </n-button>
         </div>
       </div>
