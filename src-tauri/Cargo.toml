@@ -1,6 +1,6 @@
 [package]
 name = "cgswitch"
-version = "0.4.15"
+version = "0.4.17"
 description = "A lightweight Codex model profile switcher"
 authors = ["zeno528"]
 license = "MIT"
@@ -23,6 +23,7 @@ tauri-build = { version = "2.6.3", features = [] }
 tauri = { version = "2.11.5", features = ["tray-icon", "image-png"] }
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-dialog = "2.0.0"
+tauri-plugin-window-state = "2.4.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
