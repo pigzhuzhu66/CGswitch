@@ -2,7 +2,7 @@
   "name": "cgswitch",
   "packageManager": "pnpm@11.9.0",
   "private": true,
-  "version": "0.4.13",
+  "version": "0.4.14",
   "type": "module",
   "scripts": {
     "sync-version": "node scripts/sync-version.mjs",
@@ -29,7 +29,6 @@
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "codemirror": "6.0.2",
-    "motion-v": "^2.4.0",
     "naive-ui": "2.44.1",
     "vue": "3.5.41",
     "vue-codemirror": "6.1.1",
