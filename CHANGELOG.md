@@ -1,4 +1,6 @@
-# CGswitch v0.4.4
+# CHANGELOG
+
+## [0.4.4] - 2026-08-20
 
 ### 新增
 
@@ -23,3 +25,11 @@
 ### 重构
 
 - 引入 AppSwitch 组件替换 n-switch，优化设置界面交互
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v0.4.4-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v0.4.4-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v0.4.4-macOS-x64.dmg`

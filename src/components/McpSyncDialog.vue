@@ -114,13 +114,13 @@ function transportTextOf(entry: McpSyncDiffEntry) {
     <div v-else-if="preview" class="space-y-3">
       <div class="flex flex-wrap gap-2">
         <span class="apple-chip">
-          配置文件 <span class="font-semibold text-accent">{{ preview.live_count }} 台</span>
+          配置文件 <span class="font-semibold">{{ preview.live_count }} 台</span>
         </span>
         <span class="apple-chip">
-          数据库镜像 <span class="font-semibold text-success">{{ preview.db_count }} 台</span>
+          数据库镜像 <span class="font-semibold">{{ preview.db_count }} 台</span>
         </span>
         <span class="apple-chip">
-          差异 <span class="font-semibold text-[var(--warning)]">{{ preview.entries.length }} 项</span>
+          差异 <span class="font-semibold">{{ preview.entries.length }} 项</span>
         </span>
       </div>
       <div class="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
@@ -160,7 +160,7 @@ function transportTextOf(entry: McpSyncDiffEntry) {
     <template #footer>
       <div class="space-y-2">
         <p v-if="!previewError" class="muted text-xs">
-          选择同步方向；写回配置文件以数据库为准，更新数据库以 config.toml 为准，写回前自动备份原文件。
+          请选择要保留的版本：写回配置文件会用数据库镜像覆盖 config.toml；更新数据库会用 config.toml 覆盖数据库镜像。写回配置文件前会自动备份当前文件。
         </p>
         <div class="dialog-actions grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
           <n-button class="shrink-0" :disabled="busy" @click="onShowChange(false)">取消</n-button>

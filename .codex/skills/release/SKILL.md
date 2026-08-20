@@ -21,13 +21,13 @@ description: CGswitch 发版流水线（本地部分）：确定版本号、撰�
 4. 否则执行 `node scripts/bump-version.mjs patch`（用户明说 minor/major 时用对应级别；拿不准时默认 patch 并在汇报里说明）。
 5. 刷新锁文件里的包版本：`cargo update -p cgswitch --manifest-path src-tauri/Cargo.toml`
 
-### Step 2: 撰写发行日志
+### Step 2: 撰写 CHANGELOG
 
 1. 查看自上一 tag 以来的提交：`git log <上一tag>..HEAD --oneline --no-merges`（首个版本用全部历史）。
-2. 写 `docs/release-notes/v<版本>.md`，模板：
+2. 在 `CHANGELOG.md` 顶部（文件头部介绍之后）插入新版本段落，标题格式为 `## [<版本>] - <当天日期 YYYY-MM-DD>`，模板：
 
 ```markdown
-# CGswitch v<版本>
+## [<版本>] - <YYYY-MM-DD>
 
 ### 新增
 - …
@@ -37,14 +37,22 @@ description: CGswitch 发版流水线（本地部分）：确定版本号、撰�
 
 ### 界面与样式
 - …
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v<版本>-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v<版本>-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v<版本>-macOS-x64.dmg`
 ```
 
 3. 写作规则：
    - 用用户视角描述变更（"新增 xxx 功能"），不要照抄 commit 标题。
    - 空分区整节省略；可用分区：新增 / 修复 / 界面与样式 / 性能优化 / 重构 / 移除 / 安全。
    - 版本号 bump、纯 CI/工作流、纯文档类提交不进日志。
-   - 已有 changelog 风格时（查看 `docs/release-notes/` 旧文件），沿用旧格式。
-4. 提交所有发版文件：`git add VERSION package.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json docs/release-notes/`
+   - 已有段落风格时（查看 `CHANGELOG.md` 旧版本段落），沿用旧格式。
+4. 提交所有发版文件：`git add VERSION package.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json CHANGELOG.md`
    提交信息：`chore(release): v<版本>`
 
 ### Step 3: 推送日志并触发工作流（不手动打 tag）
@@ -69,7 +77,7 @@ description: CGswitch 发版流水线（本地部分）：确定版本号、撰�
 2. 用户确认后执行：`gh release edit v<版本> --draft=false --latest`
 3. 变体处理：
    - 用户说"预发布"：加 `--prerelease`，去掉 `--latest`
-   - 用户要改日志：改 `docs/release-notes/v<版本>.md`，执行 `gh release edit v<版本> --notes-file docs/release-notes/v<版本>.md` 更新草稿后再发布
+   - 用户要改日志：改 `CHANGELOG.md` 对应版本段落，提交推送后重新触发工作流（`gh workflow run release.yml --ref main`），工作流会用新段落更新既有草稿后再发布
 4. 发布后告知用户：关注者通知已发出，附 release 页面链接 `https://github.com/zeno528/CGswitch/releases/tag/v<版本>`
 
 ## 示例
@@ -77,7 +85,7 @@ description: CGswitch 发版流水线（本地部分）：确定版本号、撰�
 **场景**：用户说"发版"
 
 1. 最新 tag `v0.4.3`，VERSION 为 0.4.4（已提前 bump）→ 直接用 0.4.4
-2. `git log v0.4.3..HEAD --oneline --no-merges` 起草 `docs/release-notes/v0.4.4.md`，用户确认文案
+2. `git log v0.4.3..HEAD --oneline --no-merges` 起草 `CHANGELOG.md` 顶部的 `## [0.4.4] - <日期>` 段落，用户确认文案
 3. 提交 `chore(release): v0.4.4`，`git push origin main`，`gh workflow run release.yml --ref main`
 4. 后台 `gh run watch` 盯 Release 工作流至全绿（工作流自动建 tag、草稿并上传 4 个资产）
 5. 展示 4 个资产（Windows setup/msi、macOS x64/arm64 dmg）+ 日志全文，等确认
@@ -87,7 +95,7 @@ description: CGswitch 发版流水线（本地部分）：确定版本号、撰�
 
 **工作流未触发**：确认 `gh workflow run release.yml --ref main` 已执行、`.github/workflows/release.yml` 已合入 main；`gh run list --workflow=Release` 查看队列。
 
-**verify 第 0 步失败（VERSION 为空 / 缺发行日志）**：说明版本号或日志没提交。补上 `docs/release-notes/v<版本>.md`（或修正 VERSION），提交推送后重新触发。
+**verify 第 0 步失败（VERSION 为空 / 缺 CHANGELOG 段落）**：说明版本号或日志没提交。补上 `CHANGELOG.md` 中的 `## [<版本>] - <日期>` 段落（或修正 VERSION），提交推送后重新触发。
 
 **草稿已存在（重跑场景）**：工作流会检测到草稿并更新（`gh release edit`），不会重复建。
 
