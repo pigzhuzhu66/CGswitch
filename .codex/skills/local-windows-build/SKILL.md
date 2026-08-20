@@ -30,6 +30,8 @@ foreach ($bmp in @('src-tauri/icons/installer-header.bmp', 'src-tauri/icons/inst
 }
 ```
 
+NSIS 3.11 Modern UI 的官方推荐尺寸是 header `150×57`、welcome/finish sidebar `164×314`。这些是 96-DPI 下的逻辑控件尺寸，不是高 DPI 的 2x 资源规格；CGswitch 为 163-DPI/高 DPI 场景交付 `300×114`、`328×628` 的矢量重采样 BMP，保持相同宽高比。默认 `MUI_*_BITMAP_STRETCH` 为 `FitControl`，高 DPI 或 CJK 字体会让控件变大并触发运行时放大。用户反馈发糊时，先区分“源图低分辨率”和“安装器运行时缩放”，不要仅靠换 BMP 编码判断画质。
+
 ### Step 2: 构建
 
 在项目根目录运行：
@@ -54,6 +56,8 @@ Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe", "src-tauri/target/re
 Invoke-Item "src-tauri/target/release/bundle/nsis"
 ```
 
+图标回归检查：256 层 `icon.ico[5]` 的可见范围应接近 `248×248`，且 32/48 层 `icon.ico[0]`、`icon.ico[3]` 应分别为完整 `32×32`、`48×48`；不能只检查 256 层而漏掉桌面/资源管理器使用的小尺寸层。
+
 ### Step 4: 按此格式报告
 
 | 产物 | 路径 | 说明 |
@@ -71,6 +75,7 @@ Invoke-Item "src-tauri/target/release/bundle/nsis"
 - 产物文件名固定带版本号，重复构建会覆盖同名旧文件
 - 安装新版本会直接覆盖安装旧版本，无需先卸载
 - `Finished 2 bundles at:` 不是唯一成功标准；NSIS `Unsupported format`/`warning 5040` 即使不阻断构建，也必须视为失败
+- 画质排查依据：[NSIS Modern UI 2 文档](https://nsis.sourceforge.io/Docs/Modern%20UI%202/Readme.html)；如需改变高 DPI 缩放行为，必须使用 Tauri 的自定义 NSIS 模板，不要把未验证的 `NoStretch` 选项直接写进生成脚本
 
 ## 常见问题
 
