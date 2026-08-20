@@ -345,8 +345,8 @@ onBeforeUnmount(() => {
     @back="creatingProfile = false"
     @changed="emit('refresh')"
   />
-  <section v-else class="mx-auto w-full max-w-none">
-    <header class="apple-page-bar apple-page-bar--roomy apple-page-bar--sticky flex-wrap justify-between gap-4">
+  <section v-else class="apple-scroll-page mx-auto w-full max-w-none">
+    <header class="apple-page-bar flex-wrap justify-between gap-4">
       <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors" :class="state.codex.running ? 'border-success/25 bg-success/10 text-[#248a3d] dark:border-success/30 dark:bg-success/10 dark:text-[#6ee7a0]' : 'border-[var(--panel-border)] bg-black/4 text-zinc-500 dark:bg-white/6'">
           <span class="relative flex h-2 w-2">
@@ -377,6 +377,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
+    <div class="apple-edit-content">
     <transition :css="false" @enter="onRestartCardEnter" @leave="onRestartCardLeave">
       <div v-if="restartStage !== 'idle'" class="apple-group mt-[var(--gap-page)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
@@ -428,6 +429,8 @@ onBeforeUnmount(() => {
           </template>
         </draggable>
       </template>
+    </div>
+
     </div>
 
     <n-modal v-model:show="modalVisible" preset="card" class="max-w-[460px]" :title="modalMode === 'capture' ? '保存当前配置快照' : '重命名供应商'" @after-leave="blurActiveOnModalLeave">

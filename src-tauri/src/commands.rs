@@ -432,7 +432,7 @@ pub fn delete_mcp_server(name: String, state: State<'_, AppContext>) -> AppResul
     state.delete_mcp_server(&name)
 }
 
-/// 创建表单预填用：当前全局 MCP 段的 TOML 文本（live 无 MCP 返回空串）。
+/// 创建表单预填用：优先数据库 MCP 镜像，首次无镜像时回退 live。
 #[tauri::command]
 pub fn get_mcp_section_toml(state: State<'_, AppContext>) -> AppResult<String> {
     state.mcp_section_toml()

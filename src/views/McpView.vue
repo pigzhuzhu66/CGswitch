@@ -8,7 +8,6 @@ import McpSyncDialog from "../components/McpSyncDialog.vue";
 import { api } from "../api";
 import type { McpServerSpec, McpSyncPreview } from "../types";
 import { mcpTransportText } from "../utils";
-import { useWindowActivation } from "../composables/useWindowActivation";
 import {
   PhArrowsDownUp,
   PhCircleDashed,
@@ -71,12 +70,6 @@ async function loadPreview() {
 onMounted(refresh);
 onActivated(() => {
   if (loaded.value) void refresh();
-});
-// Codex CLI / 桌面版可能在外部改 config.toml，窗口激活时同步一次列表
-useWindowActivation({
-  onActive: () => {
-    if (loaded.value) void refresh();
-  },
 });
 
 type Transport = "http" | "stdio" | "unknown";
@@ -188,8 +181,8 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
 <template>
   <McpEdit v-if="editingServer" :server="editingServer" @back="closeEdit" />
   <McpEdit v-else-if="creatingServer" :server="null" create @back="creatingServer = false" />
-  <section v-else class="mx-auto w-full max-w-none">
-    <header class="apple-page-bar apple-page-bar--roomy apple-page-bar--sticky flex-wrap justify-between gap-4">
+  <section v-else class="apple-scroll-page mx-auto w-full max-w-none">
+    <header class="apple-page-bar flex-wrap justify-between gap-4">
       <div class="flex min-w-0 items-center gap-2.5">
         <span class="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-accent">
           <McpIcon class="h-[22px] w-[22px]" />
@@ -217,6 +210,7 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
       </div>
     </header>
 
+    <div class="apple-edit-content">
     <p v-if="loadError" class="muted mt-4 text-sm">
       {{ loadError }}<span v-if="loaded">配置文件无法解析时，可点「同步配置」用数据库镜像修复。</span>
     </p>
@@ -285,6 +279,8 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
           </div>
         </div>
       </div>
+    </div>
+
     </div>
 
     <McpSyncDialog

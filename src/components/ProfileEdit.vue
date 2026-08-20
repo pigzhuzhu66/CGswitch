@@ -320,7 +320,7 @@ const baseFragment = computed(() =>
     : detail.value?.config_fragment ?? "",
 );
 
-// 创建表单把当前全局 MCP 段直接预填进模板（保存时后端会再合并，保持一致）
+// 创建表单优先预填数据库 MCP 镜像；首次无镜像时由后端回退 live。
 const mcpSection = ref("");
 function withMcpSection(base: string): string {
   return mcpSection.value ? `${base.trimEnd()}\n\n${mcpSection.value.trimEnd()}\n` : base;
@@ -749,7 +749,7 @@ async function save() {
     <div class="apple-edit-content">
       <p v-if="loadError" class="muted mt-4 text-sm">{{ loadError }}</p>
 
-      <div class="apple-group shrink-0 p-0">
+      <div class="apple-group p-0">
         <div v-if="creating" class="apple-panel-section">
       <div class="field-subtitle">选择供应商</div>
       <div class="mt-3 grid gap-2 sm:grid-cols-3 md:grid-cols-6">

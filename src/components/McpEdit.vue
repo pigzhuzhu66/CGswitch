@@ -123,7 +123,7 @@ async function save() {
     </div>
 
     <div class="apple-edit-content">
-      <div class="apple-group shrink-0 p-0">
+      <div class="apple-group p-0">
         <div class="apple-panel-section">
           <div class="grid gap-4 sm:grid-cols-2">
             <div>
