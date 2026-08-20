@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## [0.4.13] - 2026-08-21
+
+### 新增
+
+- Codex 托管条目管理，用户配置与自动管理条目分离
+
+### 修复
+
+- MCP 配置相关提示信息，确保数据库与 config.toml 关系清晰
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v0.4.13-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v0.4.13-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v0.4.13-macOS-x64.dmg`
+
 ## [0.4.8] - 2026-08-20
 
 ### 新增
