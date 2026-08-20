@@ -2,7 +2,7 @@
   <img src="src-tauri/icons/256x256.png" width="112" alt="CGswitch logo" />
 </p>
 
-<h1 align="center">CGSwitch</h1>
+<h1 align="center">CGswitch</h1>
 
 <p align="center">
   用档案管理 Codex / ChatGPT 的模型与供应商配置，随时切换，安全应用。
@@ -22,9 +22,9 @@
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-555?style=flat-square" alt="Windows and macOS" />
 </p>
 
-## CGSwitch 是什么？
+## CGswitch 是什么？
 
-CGSwitch 是一个面向 Codex / ChatGPT 桌面应用的配置管理工具。
+CGswitch 是一个面向 Codex / ChatGPT 桌面应用的配置管理工具。
 
 它把不同模型、API 供应商和 ChatGPT 订阅账号保存为独立的“配置档案”。需要切换时，选择档案并点击应用即可；应用会更新 `~/.codex` 下的相关文件，并可按设置自动重启 Codex。
 
@@ -132,7 +132,7 @@ API Key、OAuth 凭据和其他敏感内容只保存在本机。请不要将 `.c
 
 ### 3. 应用配置
 
-选择目标档案，点击“应用”。CGSwitch 会在写入前备份相关文件，完成后按设置决定是否重启 Codex。
+选择目标档案，点击“应用”。CGswitch 会在写入前备份相关文件，完成后按设置决定是否重启 Codex。
 
 ## 开发
 
