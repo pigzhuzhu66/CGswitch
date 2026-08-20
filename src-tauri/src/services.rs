@@ -554,6 +554,7 @@ impl AppContext {
             },
             settings,
             paths: self.path_info(),
+            auth_status: Default::default(),
             balance_cache: self.load_balance_cache(),
         })
     }

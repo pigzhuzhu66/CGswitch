@@ -80,7 +80,7 @@ pub struct ManagedAccount {
 }
 
 /// 认证状态摘要
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct AuthStatus {
     pub authenticated: bool,
     pub default_account_id: Option<String>,

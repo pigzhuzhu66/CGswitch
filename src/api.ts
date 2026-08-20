@@ -251,6 +251,7 @@ function webState(): AppState {
     },
     settings: { ...webSettings },
     paths: webPaths,
+    auth_status: { authenticated: false, default_account_id: null, accounts: [], external: null },
     balance_cache: { ...webBalanceCache },
   };
 }

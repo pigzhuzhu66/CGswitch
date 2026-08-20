@@ -14,7 +14,7 @@ import ProfileCard from "../components/ProfileCard.vue";
 import TrashIcon from "../components/TrashIcon.vue";
 import draggable from "vuedraggable";
 import { api } from "../api";
-import type { AppState, ManagedAccount, ProfileSummary, RestartStage } from "../types";
+import type { AppState, AuthStatus, ManagedAccount, ProfileSummary, RestartStage } from "../types";
 import { PhArrowClockwise, PhCamera, PhPlus } from "@phosphor-icons/vue";
 
 // 编辑页按需加载：只在打开编辑/新建时拉取，避免把 CodeMirror/预设数据带进启动入口
@@ -34,9 +34,25 @@ const profileName = ref("");
 const editingProfile = ref<ProfileSummary | null>(null);
 const creatingProfile = ref(false);
 const modalProfile = ref<ProfileSummary | null>(null);
-const subscriptionAuthed = ref(false);
+const subscriptionAuthed = ref(props.state.auth_status.authenticated);
 const subscriptionAccount = ref<string | null>(null);
 const subscriptionSource = ref<"desktop" | "oauth" | null>(null);
+const authAccounts = ref<ManagedAccount[]>(props.state.auth_status.accounts);
+
+function applyAuthStatus(status: AuthStatus) {
+  subscriptionAuthed.value = status.authenticated;
+  authAccounts.value = status.accounts;
+  subscriptionSource.value = status.external ? "desktop" : status.accounts.length ? "oauth" : null;
+  // 桌面端认证优先；未绑定配置自动使用账号列表中的当前账号。
+  subscriptionAccount.value = status.external?.login ?? status.accounts[0]?.login ?? null;
+}
+
+applyAuthStatus(props.state.auth_status);
+
+watch(
+  () => props.state.auth_status,
+  (status) => applyAuthStatus(status),
+);
 
 watch(
   () => props.navReset,
@@ -63,33 +79,17 @@ async function persistOrder() {
     document.body.classList.remove("drag-active");
   }
 }
-const authAccounts = ref<ManagedAccount[]>([]);
-let subscriptionStatusLoaded = false;
-
 async function refreshSubscriptionStatus() {
   try {
     const status = await api.authGetStatus();
-    subscriptionAuthed.value = status.authenticated;
-    authAccounts.value = status.accounts;
-    subscriptionSource.value = status.external ? "desktop" : status.accounts.length ? "oauth" : null;
-    // 桌面端认证优先；未绑定配置自动使用账号列表中的当前账号。
-    subscriptionAccount.value =
-      status.external?.login ??
-      status.accounts[0]?.login ??
-      null;
+    applyAuthStatus(status);
   } catch {
-    if (!subscriptionStatusLoaded) {
-      subscriptionAuthed.value = false;
-      subscriptionAccount.value = null;
-      subscriptionSource.value = null;
-      authAccounts.value = [];
-    }
-  } finally {
-    subscriptionStatusLoaded = true;
+    // 后台刷新失败时保留 get_state 提供的当前快照。
   }
 }
 
 let unlisten: (() => void) | null = null;
+let hasActivated = false;
 
 const progress = computed(() => {
   const values: Record<RestartStage, number> = {
@@ -309,11 +309,14 @@ onMounted(async () => {
     restartStage.value = payload.stage;
     restartMessage.value = payload.message ?? "";
   });
-  await refreshSubscriptionStatus();
 });
 
 onActivated(() => {
-  if (subscriptionStatusLoaded) void refreshSubscriptionStatus();
+  if (!hasActivated) {
+    hasActivated = true;
+    return;
+  }
+  void refreshSubscriptionStatus();
 });
 
 function boundAccountLogin(profile: ProfileSummary): string | null {

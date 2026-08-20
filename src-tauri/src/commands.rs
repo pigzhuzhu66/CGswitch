@@ -529,10 +529,16 @@ pub async fn auth_get_status(
 ) -> Result<AuthStatus, String> {
     let mut status = oauth.0.read().await.get_status().await;
     // 只把不属于 CGswitch 管理列表的 auth.json 识别为 Codex 官方外部认证。
-    if let Some(external) = unmanaged_external_codex_auth(&app, &oauth)
-        .await
+    let external = app
+        .external_codex_auth()
         .map_err(|error| error.to_string())?
-    {
+        .filter(|external| {
+            !status
+                .accounts
+                .iter()
+                .any(|account| account.id == external.id)
+        });
+    if let Some(external) = external {
         status.external = Some(external);
         status.authenticated = true;
     }

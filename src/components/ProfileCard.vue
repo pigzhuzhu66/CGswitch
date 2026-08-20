@@ -257,7 +257,7 @@ async function testConnection() {
               <span>余额:</span>
               <span>
                 <span :class="balanceChipClass(null, false, balanceInfo.total_balance)">
-                  {{ (balanceInfo.currency === "USD" ? "$" : "¥") + balanceInfo.total_balance }}
+                  {{ balanceInfo.total_balance.startsWith("-") ? "-" : "" }}{{ balanceInfo.currency === "USD" ? "$" : "¥" }}{{ balanceInfo.total_balance.replace(/^-/, "") }}
                 </span>
                 {{ "  " + balanceInfo.currency }}
               </span>

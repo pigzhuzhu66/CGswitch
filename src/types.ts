@@ -178,6 +178,7 @@ export interface AppState {
   codex: CodexAppStatus;
   settings: Settings;
   paths: PathInfo[];
+  auth_status: AuthStatus;
   /** 供应商级余额/用量缓存（上次成功查询结果），保证卡片静默显示不闪烁。 */
   balance_cache: Record<string, ProfileBalanceInfo>;
 }

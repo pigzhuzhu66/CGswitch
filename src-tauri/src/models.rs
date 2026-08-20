@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+use crate::auth::codex_oauth::AuthStatus;
+
 /// 供应商类型：官方订阅（ChatGPT）或第三方供应商（Codex 协议）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -248,6 +250,7 @@ pub struct AppState {
     pub codex: CodexAppStatus,
     pub settings: Settings,
     pub paths: Vec<PathInfo>,
+    pub auth_status: AuthStatus,
     /// 供应商级余额缓存（上次成功查询结果），保证卡片静默显示、切换不闪烁。
     pub balance_cache: std::collections::BTreeMap<String, ProfileBalanceInfo>,
 }

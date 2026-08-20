@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { NButton, NTag, useDialog, useMessage } from "naive-ui";
 import { api } from "../api";
 import type { AuthStatus, DeviceCodeResponse } from "../types";
@@ -15,7 +15,8 @@ import {
 
 const message = useMessage();
 const dialog = useDialog();
-const status = ref<AuthStatus | null>(null);
+const props = defineProps<{ initialStatus: AuthStatus }>();
+const status = ref<AuthStatus>(props.initialStatus);
 const loadError = ref("");
 const busy = ref(false);
 const login = ref<DeviceCodeResponse | null>(null);
@@ -28,6 +29,13 @@ async function refreshStatus() {
     loadError.value = String(error);
   }
 }
+
+watch(
+  () => props.initialStatus,
+  (next) => {
+    status.value = next;
+  },
+);
 
 async function startLogin() {
   if (busy.value) return;
@@ -166,7 +174,7 @@ onMounted(refreshStatus);
       </div>
     </div>
 
-    <div v-else-if="status?.authenticated" class="space-y-4">
+    <div v-else-if="status.authenticated" class="space-y-4">
       <div class="rounded-[var(--radius-card)] flex items-start justify-between gap-3 bg-success/10 p-3 shadow-[0_0_0_1px_rgba(52,199,89,0.16)]">
         <div class="flex min-w-0 items-start gap-3">
           <PhCheckCircle class="mt-2 h-6 w-6 shrink-0 text-success" weight="bold" aria-hidden="true" />

@@ -130,10 +130,22 @@ function goMcp() {
 
 async function refresh() {
   try {
-    state.value = await api.getState();
+    const nextState = await api.getState();
+    state.value = state.value
+      ? { ...nextState, auth_status: state.value.auth_status }
+      : nextState;
     loadError.value = "";
   } catch (error) {
     loadError.value = String(error);
+  }
+}
+
+async function refreshAuthStatus() {
+  try {
+    const auth_status = await api.authGetStatus();
+    if (state.value) state.value = { ...state.value, auth_status };
+  } catch {
+    // 首屏已经显示，后台认证刷新失败时保留当前状态。
   }
 }
 
@@ -192,8 +204,14 @@ onMounted(async () => {
   await refresh();
   // 首帧渲染完成后再显示窗口，避免启动时出现空白/残影帧；静默启动保持不显示
   if (isTauri && !state.value?.settings.silent_start) {
-    void appWindow?.show();
+    try {
+      await appWindow?.show();
+    } catch {
+      // 窗口显示失败不阻塞应用内容初始化。
+    }
   }
+  // 认证文件读取和解析放到窗口显示之后，不进入首屏关键路径。
+  window.setTimeout(() => void refreshAuthStatus(), 0);
   syncCodexPolling();
 });
 
@@ -206,6 +224,7 @@ onBeforeUnmount(() => {
 useWindowActivation({
   onActive: () => {
     void refresh();
+    void refreshAuthStatus();
     syncCodexPolling();
   },
   onInactive: () => stopCodexPolling(),

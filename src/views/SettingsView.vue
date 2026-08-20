@@ -640,7 +640,7 @@ async function openPath(item: PathInfo) {
         <h2 class="text-[15px] font-semibold tracking-tight">ChatGPT 账号</h2>
       </div>
       <div class="mt-4">
-        <ChatGPTAccount />
+        <ChatGPTAccount :initial-status="state.auth_status" />
       </div>
     </div>
 
