@@ -207,7 +207,7 @@ async function testConnection() {
           <h3 class="cursor-pointer truncate text-[16px] font-semibold tracking-tight transition-colors hover:text-accent" title="点击重命名" @click.stop="emit('rename')">{{ profile.name }}</h3>
           <span v-if="active" class="inline-flex items-center rounded-full bg-success px-2 py-0.5 text-xs font-semibold leading-none text-white">活动</span>
           <n-tag
-            v-if="profile.provider === null"
+            v-if="profile.provider === null && subscriptionAuthed"
             :type="subscriptionAuthed ? 'info' : 'warning'"
             size="small"
             class="max-w-[min(42vw,280px)]"

@@ -144,8 +144,8 @@ jobs:
       - name: 整理发行资产名称
         run: |
           mkdir -p release-assets
-          cp artifacts/bundle-windows-x64/*.exe "release-assets/CGswitch-v$VERSION-Windows-setup.exe"
-          cp artifacts/bundle-windows-x64/*.msi "release-assets/CGswitch-v$VERSION-Windows.msi"
+          cp artifacts/bundle-windows-x64/nsis/*.exe "release-assets/CGswitch-v$VERSION-Windows-setup.exe"
+          cp artifacts/bundle-windows-x64/msi/*.msi "release-assets/CGswitch-v$VERSION-Windows.msi"
           cp artifacts/bundle-macos-x64/*.dmg "release-assets/CGswitch-v$VERSION-macOS-x64.dmg"
           cp artifacts/bundle-macos-arm64/*.dmg "release-assets/CGswitch-v$VERSION-macOS-arm64.dmg"
           find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
