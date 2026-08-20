@@ -29,7 +29,7 @@ const selected = ref<string | null>(props.icon);
     </div>
 
     <div class="apple-edit-content">
-      <div class="apple-group shrink-0 p-[var(--gap-card)]">
+      <div class="apple-group p-[var(--gap-card)]">
       <div class="grid grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
         <button
           v-for="icon in providerIcons"

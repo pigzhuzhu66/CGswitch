@@ -218,15 +218,6 @@ textarea::placeholder {
   line-height: 1.35;
 }
 
-.settings-tab-bar {
-  box-sizing: border-box;
-  height: 2.5rem;
-  min-height: 2.5rem;
-  margin-inline: calc(-1 * var(--gap-main));
-  padding-inline: var(--gap-main);
-  background: var(--app-bg);
-}
-
 /* 设置项说明：与标题形成稳定的字号、字重和对比度层级 */
 .setting-description {
   color: color-mix(in srgb, var(--text-secondary) 82%, #1c1c1e 18%);
@@ -325,20 +316,32 @@ main:has(.apple-edit-toolbar) {
   overflow-y: hidden;
 }
 
-/* 设置页采用编辑页的滚动模型：复用 .apple-edit-content 作为内部滚动容器，
-   关闭 main 滚动避免双滚动容器共存 */
-main:has(.settings-page) {
-  overflow-y: hidden;
+/* 独立滚动页面：main 变 flex 列、页面 flex-1 填满实际可用高度。
+   overflow hidden 确保窗口级只有 .apple-edit-content 一根滚动条，
+   页面栏固定、不受滚动影响 */
+main:has(.settings-page),
+main:has(.apple-scroll-page) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.apple-scroll-page {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .apple-edit-page {
   height: calc(100vh - var(--window-chrome-height) - var(--edit-page-offset));
 }
 
-/* 设置页高度限制，与 .apple-edit-page 同款公式。不合并进 .apple-edit-page 选择器列表，
-   保持编辑页样式声明独立可控（编辑页滚动条逻辑是权威） */
+/* 设置页占满 main 剩余高度：flex 填充而非 100vh 换算——换算值在 DPI 缩放/取整下
+   可能比 main 实际高度多出亚像素，溢出后窗口级会多出一根滚动条 */
 .settings-page {
-  height: calc(100vh - var(--window-chrome-height) - var(--edit-page-offset));
+  flex: 1;
+  min-height: 0;
 }
 
 .apple-window-chrome,
@@ -694,6 +697,14 @@ body.drag-active * {
   padding-top: var(--gap-page);
   position: relative;
   scrollbar-gutter: stable;
+  /* 滚到边界不向 main/窗口传导（滚动链阻断），窗口级滚动条不会被动触发 */
+  overscroll-behavior: contain;
+}
+
+/* 滚动容器的直接子项永不压缩：overflow:hidden 的卡片 flex 自动最小高度为 0，
+   默认 shrink 会让超高内容被压扁裁切、容器永不溢出——表现就是"滚不动" */
+.apple-edit-content > * {
+  flex-shrink: 0;
 }
 
 .apple-edit-content > .apple-group {

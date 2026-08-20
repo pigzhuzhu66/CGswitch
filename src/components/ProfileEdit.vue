@@ -749,7 +749,7 @@ async function save() {
     <div class="apple-edit-content">
       <p v-if="loadError" class="muted mt-4 text-sm">{{ loadError }}</p>
 
-      <div class="apple-group shrink-0 p-0">
+      <div class="apple-group p-0">
         <div v-if="creating" class="apple-panel-section">
       <div class="field-subtitle">选择供应商</div>
       <div class="mt-3 grid gap-2 sm:grid-cols-3 md:grid-cols-6">
