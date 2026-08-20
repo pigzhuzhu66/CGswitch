@@ -56,7 +56,9 @@ Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe", "src-tauri/target/re
 Invoke-Item "src-tauri/target/release/bundle/nsis"
 ```
 
-图标回归检查：`256x256.png` 的白色容器应接近 `240×240`（约 `+8+8`），且 32/48 层 `icon.ico[0]`、`icon.ico[3]` 应分别为完整 `32×32`、`48×48`；不能只检查透明边界而漏掉桌面/资源管理器使用的实际容器尺寸。
+图标回归检查：`256x256.png` 的白色容器应接近 `254×254`（约 `+1+1`），且 32/48 层 `icon.ico[0]`、`icon.ico[3]` 应分别为完整 `32×32`、`48×48`；不能只检查透明边界而漏掉桌面/资源管理器使用的实际容器尺寸。
+
+如果本次改动包含 `src-tauri/icons`，先运行 `cargo clean --manifest-path src-tauri/Cargo.toml` 再构建；Tauri/Rust 增量构建可能保留旧的 EXE 图标资源，即使工作区的 `icon.ico` 已更新。
 
 ### Step 4: 按此格式报告
 
