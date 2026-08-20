@@ -245,7 +245,18 @@ fn set_table_value(document: &mut DocumentMut, key: &str, value: &str) {
 // live config.toml 是 MCP 的唯一事实源：读取只取建模字段子集，
 // 写入就地编辑，未建模键（tools.*、cwd、注释等）原样保留。
 
-/// 读取 [mcp_servers.*] 下全部服务器（按文件顺序）；段缺失返回空列表。
+/// Codex 官方应用自动管理的 MCP 条目（桌面版内置 Computer-Use/Browser 运行时）：
+/// Codex 自行写入 config.toml、删除后自动重建（openai/codex#28556），且每次
+/// 应用更新都会改写其中的版本哈希路径（openai/codex#26011）。这类条目不属于
+/// 用户配置——列表/差异对比/数据库镜像全部跳过，重建 MCP 段时原样保留。
+pub const MANAGED_MCP_SERVERS: &[&str] = &["node_repl"];
+
+/// 名称是否为 Codex 官方应用托管的 MCP 条目。
+pub fn is_managed_mcp_name(name: &str) -> bool {
+    MANAGED_MCP_SERVERS.contains(&name)
+}
+
+/// 读取 [mcp_servers.*] 下全部服务器（按文件顺序，跳过 Codex 托管条目）；段缺失返回空列表。
 pub fn mcp_servers_from_document(document: &DocumentMut) -> Vec<McpServerSpec> {
     let Some(servers) = document
         .as_table()
@@ -257,6 +268,7 @@ pub fn mcp_servers_from_document(document: &DocumentMut) -> Vec<McpServerSpec> {
     servers
         .iter()
         .filter_map(|(name, item)| item.as_table().map(|table| (name, table)))
+        .filter(|(name, _)| !is_managed_mcp_name(name))
         .map(|(name, table)| McpServerSpec {
             name: name.to_string(),
             enabled: boolean_of(table, "enabled"),
@@ -447,7 +459,8 @@ pub fn consolidate_mcp_blocks(text: &str) -> String {
 }
 
 /// 提取 [mcp_servers.*] 每个服务器的独立片段（含 [mcp_servers.<名称>] 表头、注释、子表，
-/// 往返无损），(名称, 片段) 按文件顺序。数据库镜像与创建表单预填共用。
+/// 往返无损；跳过 Codex 托管条目——镜像里不该有它们），(名称, 片段) 按文件顺序。
+/// 数据库镜像与创建表单预填共用。
 pub fn mcp_server_fragments_from_document(document: &DocumentMut) -> Vec<(String, String)> {
     let Some(servers) = document
         .as_table()
@@ -468,6 +481,7 @@ pub fn mcp_server_fragments_from_document(document: &DocumentMut) -> Vec<(String
                 .insert("mcp_servers", Item::Table(section));
             Some((name.to_string(), piece.to_string()))
         })
+        .filter(|(name, _)| !is_managed_mcp_name(name))
         .collect()
 }
 
@@ -480,13 +494,29 @@ pub fn spec_from_fragment(name: &str, fragment: &str) -> Option<McpServerSpec> {
         .find(|spec| spec.name == name)
 }
 
-/// 用片段按序重建 [mcp_servers] 段（数据库备份恢复写回 live 用）；解析失败的片段跳过。
+/// 用片段按序重建 [mcp_servers] 段（数据库备份恢复写回 live 用）；
+/// 解析失败的片段跳过。Codex 托管条目（node_repl 等）不进片段、也不随重建删除：
+/// live 已有的托管条目原样保留——删了 Codex 下次启动也会自动写回（openai/codex#28556）。
 pub fn replace_mcp_section_from_fragments(
     document: &mut DocumentMut,
     fragments: &[(String, String)],
 ) {
     let mut section = Table::new();
+    if let Some(existing) = document
+        .as_table()
+        .get("mcp_servers")
+        .and_then(Item::as_table)
+    {
+        for (name, item) in existing.iter() {
+            if is_managed_mcp_name(name) {
+                section.insert(name, item.clone());
+            }
+        }
+    }
     for (name, fragment) in fragments {
+        if is_managed_mcp_name(name) {
+            continue;
+        }
         let parsed = parse_document(fragment).ok().and_then(|doc| {
             doc.as_table()
                 .get("mcp_servers")
@@ -796,12 +826,12 @@ model_reasoning_effort = "high""#;
     #[test]
     fn mcp_servers_parses_stdio_http_and_inline_subtables() {
         let source = r#"
-[mcp_servers.node_repl]
+[mcp_servers.local_repl]
 command = 'C:\bin\node_repl.exe'
 args = ["--a", "--b"]
 startup_timeout_sec = 120
 
-[mcp_servers.node_repl.env]
+[mcp_servers.local_repl.env]
 CODEX_HOME = 'C:\.codex'
 
 [mcp_servers.tavily]
@@ -818,7 +848,7 @@ env_http_headers = { "x-api-key" = "EXA_API_KEY" }
         let servers = mcp_servers_from_document(&parse_document(source).unwrap());
 
         assert_eq!(servers.len(), 3);
-        assert_eq!(servers[0].name, "node_repl");
+        assert_eq!(servers[0].name, "local_repl");
         assert_eq!(servers[0].command.as_deref(), Some(r"C:\bin\node_repl.exe"));
         assert_eq!(servers[0].args, ["--a", "--b"]);
         assert_eq!(servers[0].startup_timeout_sec, Some(120));
@@ -1055,6 +1085,31 @@ url = "https://mcp.tavily.com/mcp"
         assert!(text.contains("[mcp_servers.github.env]"), "{text}");
         assert!(text.contains("[mcp_servers.tavily]"), "{text}");
         assert!(!text.contains("stale"), "{text}");
+    }
+
+    #[test]
+    fn managed_mcp_entries_are_skipped_but_preserved() {
+        // node_repl 由 Codex 桌面版自动写入（openai/codex#28556）：提取时跳过，重建段时保留
+        let source = "[mcp_servers.node_repl]\ncommand = \"node_repl.exe\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n";
+        let document = parse_document(source).unwrap();
+
+        assert_eq!(
+            mcp_servers_from_document(&document)
+                .into_iter()
+                .map(|spec| spec.name)
+                .collect::<Vec<_>>(),
+            ["github"]
+        );
+        let fragments = mcp_server_fragments_from_document(&document);
+        assert_eq!(fragments.len(), 1);
+        assert_eq!(fragments[0].0, "github");
+
+        // 空片段重建（镜像清零场景）：托管条目仍在，用户条目被移除
+        let mut target = document.clone();
+        replace_mcp_section_from_fragments(&mut target, &[]);
+        let text = target.to_string();
+        assert!(text.contains("[mcp_servers.node_repl]"), "{text}");
+        assert!(!text.contains("mcp_servers.github"), "{text}");
     }
 
     #[test]

@@ -187,6 +187,19 @@ textarea::placeholder {
   font-family: Consolas, "Cascadia Mono", monospace;
 }
 
+/* 行内代码 token：文案中把路径/段名/服务器名等关键变量从正文里分出来。
+   搭配 .mono 使用：class="mono code-tok" */
+.code-tok {
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.05);
+  padding: 1px 5px;
+  font-size: 12px;
+}
+
+:root.dark .code-tok {
+  background: rgb(255 255 255 / 0.1);
+}
+
 /* 表单字段标签：比输入内容更明确，但不抢过区块标题 */
 .field-label {
   font-size: 13px;

@@ -1454,11 +1454,15 @@ impl AppContext {
         Ok(())
     }
 
-    /// 新供应商使用数据库镜像；首次尚无镜像时才读取 live MCP 段。
+    /// 新供应商使用数据库镜像；首次尚无镜像时才读取 live MCP 段（同样滤除托管条目）。
     fn mcp_document_for_new_profile(&self) -> AppResult<toml_edit::DocumentMut> {
         let fragments = self.database.mcp_server_fragments()?;
         if fragments.is_empty() {
-            return codex_config::parse_document(&self.read_live_config()?);
+            let live = codex_config::parse_document(&self.read_live_config()?)?;
+            let live_fragments = codex_config::mcp_server_fragments_from_document(&live);
+            let mut document = toml_edit::DocumentMut::new();
+            codex_config::replace_mcp_section_from_fragments(&mut document, &live_fragments);
+            return Ok(document);
         }
         let mut document = toml_edit::DocumentMut::new();
         codex_config::replace_mcp_section_from_fragments(&mut document, &fragments);
@@ -1507,7 +1511,13 @@ impl AppContext {
             .map_err(|_| app_err!("操作锁已损坏"))?;
         let document = codex_config::parse_document(&self.read_live_config()?)?;
         let live_fragments = codex_config::mcp_server_fragments_from_document(&document);
-        let db_fragments = self.database.mcp_server_fragments()?;
+        // 旧镜像可能残留 Codex 托管条目（node_repl）的片段：过滤掉，避免误报“仅数据库有”
+        let db_fragments: Vec<(String, String)> = self
+            .database
+            .mcp_server_fragments()?
+            .into_iter()
+            .filter(|(name, _)| !codex_config::is_managed_mcp_name(name))
+            .collect();
         let db_map: BTreeMap<&str, &str> = db_fragments
             .iter()
             .map(|(name, toml)| (name.as_str(), toml.as_str()))
@@ -1676,6 +1686,12 @@ impl AppContext {
             // 点号会让 [mcp_servers.a.b] 变成嵌套表，空格/引号等也会破坏键名
             return Err(app_err!("MCP 名称只能包含字母、数字、下划线和连字符"));
         }
+        if codex_config::is_managed_mcp_name(&name) {
+            // Codex 官方应用自动写入并维护（路径带版本哈希，每次更新都会变），编辑必被覆盖
+            return Err(app_err!(
+                "「{name}」由 Codex 官方应用自动管理，不能在本应用中创建或编辑"
+            ));
+        }
         if spec.startup_timeout_sec.is_some_and(|timeout| timeout <= 0) {
             return Err(app_err!("启动超时必须为正数（秒）"));
         }
@@ -1734,6 +1750,11 @@ impl AppContext {
             .operation
             .lock()
             .map_err(|_| app_err!("操作锁已损坏"))?;
+        if codex_config::is_managed_mcp_name(name) {
+            return Err(app_err!(
+                "「{name}」由 Codex 官方应用自动管理，删除后 Codex 会自动重建"
+            ));
+        }
         let mut document = codex_config::parse_document(&self.read_live_config()?)?;
         codex_config::remove_mcp_server(&mut document, name)?;
         let config_path = self.paths.codex_config();
@@ -3169,23 +3190,23 @@ experimental_bearer_token = "secret"
     #[test]
     fn mcp_save_edit_preserves_unmodeled_keys_and_subtables() {
         let (context, _home) = mcp_test_context(
-            r#"[mcp_servers.node_repl]
+            r#"[mcp_servers.dev_repl]
 command = "node_repl.exe"
 args = []
 startup_timeout_sec = 120
 cwd = "C:\\bin"
 
 # 勿动：桌面版自动维护
-[mcp_servers.node_repl.env]
+[mcp_servers.dev_repl.env]
 CODEX_HOME = "C:\\.codex"
 "#,
         );
 
         context
             .save_mcp_server(
-                Some("node_repl"),
+                Some("dev_repl"),
                 McpServerSpec {
-                    name: "node_repl".into(),
+                    name: "dev_repl".into(),
                     command: Some("node_repl.exe".into()),
                     args: vec!["--verbose".into()],
                     env: BTreeMap::from([("CODEX_HOME".into(), "C:\\.codex".into())]),
@@ -3280,6 +3301,56 @@ CODEX_HOME = "C:\\.codex"
                 }
             )
             .is_err());
+    }
+
+    #[test]
+    fn mcp_managed_entry_hidden_and_untouchable() {
+        // node_repl 由 Codex 桌面版自动写入/更新，本应用完全跳过且不许碰
+        let (context, _home) = mcp_test_context(
+            "[mcp_servers.node_repl]\ncommand = \"node_repl.exe\"\nargs = []\n\n[mcp_servers.github]\nurl = \"https://x/mcp\"\n",
+        );
+
+        // 列表不显示托管条目
+        let servers = context.list_mcp_servers().unwrap();
+        let names: Vec<&str> = servers.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["github"]);
+
+        // 正常导入一次保证镜像与 live 一致，再往镜像塞入残留的 node_repl 片段
+        context.import_mcp_from_live().unwrap();
+        let mut fragments = context.database.mcp_server_fragments().unwrap();
+        fragments.push((
+            "node_repl".into(),
+            "[mcp_servers.node_repl]\ncommand = \"stale.exe\"\n".into(),
+        ));
+        context
+            .database
+            .replace_mcp_server_fragments(&fragments, "2")
+            .unwrap();
+
+        // 差异对比对两侧的托管条目都视而不见：无差异
+        let preview = context.mcp_sync_preview().unwrap();
+        assert!(preview.entries.is_empty(), "{:?}", preview.entries.len());
+
+        // 不能以托管名创建/编辑，也不能删除
+        assert!(context
+            .save_mcp_server(
+                None,
+                McpServerSpec {
+                    name: "node_repl".into(),
+                    command: Some("x".into()),
+                    ..Default::default()
+                }
+            )
+            .is_err());
+        assert!(context.delete_mcp_server("node_repl").is_err());
+
+        // 镜像写回 live：托管条目原样保留（不被 stale 片段覆盖、也不被删除）
+        context.restore_mcp_from_database().unwrap();
+        let config = read_config_text(&context);
+        assert!(config.contains("[mcp_servers.node_repl]"), "{config}");
+        assert!(config.contains("node_repl.exe"), "{config}");
+        assert!(!config.contains("stale.exe"), "{config}");
+        assert!(config.contains("[mcp_servers.github]"), "{config}");
     }
 
     #[test]
