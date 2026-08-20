@@ -218,6 +218,15 @@ textarea::placeholder {
   line-height: 1.35;
 }
 
+.settings-tab-bar {
+  box-sizing: border-box;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  margin-inline: calc(-1 * var(--gap-main));
+  padding-inline: var(--gap-main);
+  background: var(--app-bg);
+}
+
 /* 设置项说明：与标题形成稳定的字号、字重和对比度层级 */
 .setting-description {
   color: color-mix(in srgb, var(--text-secondary) 82%, #1c1c1e 18%);
@@ -316,7 +325,19 @@ main:has(.apple-edit-toolbar) {
   overflow-y: hidden;
 }
 
+/* 设置页采用编辑页的滚动模型：复用 .apple-edit-content 作为内部滚动容器，
+   关闭 main 滚动避免双滚动容器共存 */
+main:has(.settings-page) {
+  overflow-y: hidden;
+}
+
 .apple-edit-page {
+  height: calc(100vh - var(--window-chrome-height) - var(--edit-page-offset));
+}
+
+/* 设置页高度限制，与 .apple-edit-page 同款公式。不合并进 .apple-edit-page 选择器列表，
+   保持编辑页样式声明独立可控（编辑页滚动条逻辑是权威） */
+.settings-page {
   height: calc(100vh - var(--window-chrome-height) - var(--edit-page-offset));
 }
 

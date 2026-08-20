@@ -768,7 +768,7 @@ export const api = {
   reorderProfiles: (ids: string[]) => call<void>("reorder_profiles", { ids }),
   applyProfile: (id: string) => call<void>("apply_profile", { id }),
   listMcpServers: () => call<McpServerSpec[]>("list_mcp_servers"),
-  // 创建表单预填用：当前全局 MCP 段的 TOML 文本（无 MCP 返回空串）
+  // 创建表单预填用：优先数据库 MCP 镜像，首次无镜像时回退 live
   getMcpSectionToml: () => call<string>("get_mcp_section_toml"),
   // 显式恢复：数据库镜像写回 live config.toml，返回恢复数量
   restoreMcpFromDatabase: () => call<number>("restore_mcp_from_database"),

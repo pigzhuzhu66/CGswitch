@@ -320,7 +320,7 @@ const baseFragment = computed(() =>
     : detail.value?.config_fragment ?? "",
 );
 
-// 创建表单把当前全局 MCP 段直接预填进模板（保存时后端会再合并，保持一致）
+// 创建表单优先预填数据库 MCP 镜像；首次无镜像时由后端回退 live。
 const mcpSection = ref("");
 function withMcpSection(base: string): string {
   return mcpSection.value ? `${base.trimEnd()}\n\n${mcpSection.value.trimEnd()}\n` : base;

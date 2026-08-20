@@ -8,7 +8,6 @@ import McpSyncDialog from "../components/McpSyncDialog.vue";
 import { api } from "../api";
 import type { McpServerSpec, McpSyncPreview } from "../types";
 import { mcpTransportText } from "../utils";
-import { useWindowActivation } from "../composables/useWindowActivation";
 import {
   PhArrowsDownUp,
   PhCircleDashed,
@@ -71,12 +70,6 @@ async function loadPreview() {
 onMounted(refresh);
 onActivated(() => {
   if (loaded.value) void refresh();
-});
-// Codex CLI / 桌面版可能在外部改 config.toml，窗口激活时同步一次列表
-useWindowActivation({
-  onActive: () => {
-    if (loaded.value) void refresh();
-  },
 });
 
 type Transport = "http" | "stdio" | "unknown";

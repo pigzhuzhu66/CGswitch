@@ -364,7 +364,7 @@ async function openPath(item: PathInfo) {
 </script>
 
 <template>
-  <section class="settings-page mx-auto w-full max-w-none">
+  <section class="settings-page mx-auto flex w-full max-w-none flex-col">
     <div class="apple-page-bar apple-page-bar--sticky">
       <button
         type="button"
@@ -440,7 +440,8 @@ async function openPath(item: PathInfo) {
       </button>
     </div>
 
-    <div v-if="section === 'general'" class="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
+    <div class="apple-edit-content">
+      <div v-if="section === 'general'" class="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
       <div class="setting-title mb-2">主题</div>
       <div class="apple-group inline-flex gap-1 p-1">
         <button
@@ -680,6 +681,7 @@ async function openPath(item: PathInfo) {
           </button>
         </div>
       </div>
+    </div>
     </div>
 
     <n-modal

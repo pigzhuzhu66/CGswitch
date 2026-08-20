@@ -618,9 +618,11 @@ impl AppContext {
         let mut payload =
             codex_config::capture_from_document(&codex_config::parse_document(text)?)?;
         payload.builtin = Some(template.kind.to_string());
-        // 快照直接并入当前全局 MCP 段：编辑器打开即见，应用时随 live 携带保持一致
-        let live = codex_config::parse_document(&self.read_live_config()?)?;
-        payload.raw_config = Some(codex_config::merge_mcp_section(text, &live));
+        // 快照优先并入数据库 MCP 镜像；首次使用时镜像为空才回退 live。
+        payload.raw_config = Some(codex_config::merge_mcp_section(
+            text,
+            &self.mcp_document_for_new_profile()?,
+        ));
         if let Some(admin_url) = admin_url.map(str::trim).filter(|value| !value.is_empty()) {
             payload.admin_url = Some(admin_url.to_string());
         }
@@ -686,11 +688,10 @@ impl AppContext {
             payload.provider_body =
                 Some(codex_config::update_provider_body(body, base_url, api_key)?);
         }
-        // 快照直接并入当前全局 MCP 段：编辑器打开即见，应用时随 live 携带保持一致
-        let live = codex_config::parse_document(&self.read_live_config()?)?;
+        // 快照优先并入数据库 MCP 镜像；首次使用时镜像为空才回退 live。
         payload.raw_config = Some(codex_config::merge_mcp_section(
             config_text.trim_end(),
-            &live,
+            &self.mcp_document_for_new_profile()?,
         ));
         if let Some(text) = catalog_text {
             let text = text.trim();
@@ -1453,23 +1454,15 @@ impl AppContext {
         Ok(())
     }
 
-    /// 吸收外部改动进数据库镜像：只增改不删——live 缺失的条目保留为“仅数据库”差异，
-    /// 由 mcp_sync_preview 交用户裁决。live 侧内容与库中一致时跳过写库
-    /// （列表刷新挂在窗口激活上，避免每次激活都产生数据库写入）。
-    fn absorb_mcp_mirror(&self, fragments: &[(String, String)]) -> AppResult<()> {
-        let stored = self.database.mcp_server_fragments()?;
-        let existing: BTreeMap<&str, &str> = stored
-            .iter()
-            .map(|(name, toml)| (name.as_str(), toml.as_str()))
-            .collect();
-        let changed = fragments
-            .iter()
-            .any(|(name, toml)| existing.get(name.as_str()) != Some(&toml.as_str()));
-        if changed {
-            self.database
-                .upsert_mcp_server_fragments(fragments, &now_ms().to_string())?;
+    /// 新供应商使用数据库镜像；首次尚无镜像时才读取 live MCP 段。
+    fn mcp_document_for_new_profile(&self) -> AppResult<toml_edit::DocumentMut> {
+        let fragments = self.database.mcp_server_fragments()?;
+        if fragments.is_empty() {
+            return codex_config::parse_document(&self.read_live_config()?);
         }
-        Ok(())
+        let mut document = toml_edit::DocumentMut::new();
+        codex_config::replace_mcp_section_from_fragments(&mut document, &fragments);
+        Ok(document)
     }
 
     /// 把数据库镜像的 MCP 段写进 live config.toml。
@@ -1499,13 +1492,9 @@ impl AppContext {
         self.write_mcp_section_to_live(&fragments)
     }
 
-    /// 读取 live config.toml 中的全部 MCP 服务器（全局唯一事实源，不随供应商切换）。
+    /// 读取 live config.toml 中的全部 MCP 服务器（只读，不随供应商切换）。
     pub fn list_mcp_servers(&self) -> AppResult<Vec<McpServerSpec>> {
         let document = codex_config::parse_document(&self.read_live_config()?)?;
-        // 吸收外部改动（codex mcp add 等）进数据库；外部删除的条目保留为“仅数据库”
-        // 差异，由 mcp_sync_preview 交用户裁决，不在这里静默清除
-        let fragments = codex_config::mcp_server_fragments_from_document(&document);
-        self.absorb_mcp_mirror(&fragments)?;
         Ok(codex_config::mcp_servers_from_document(&document))
     }
 
@@ -1651,13 +1640,14 @@ impl AppContext {
         Ok(count)
     }
 
-    /// 创建表单预填用：当前全局 MCP 段的 TOML 文本（live 无 MCP 返回空串）。
+    /// 创建表单预填用：优先数据库 MCP 镜像，首次无镜像时回退 live。
     pub fn mcp_section_toml(&self) -> AppResult<String> {
-        let document = codex_config::parse_document(&self.read_live_config()?)?;
-        Ok(codex_config::mcp_server_fragments_from_document(&document)
-            .into_iter()
-            .map(|(_, toml)| toml)
-            .collect())
+        Ok(
+            codex_config::mcp_server_fragments_from_document(&self.mcp_document_for_new_profile()?)
+                .into_iter()
+                .map(|(_, toml)| toml)
+                .collect(),
+        )
     }
 
     /// 新增/编辑/重命名一个 MCP 服务器：就地修改 live config.toml，未建模键与注释原样保留；
@@ -3326,7 +3316,7 @@ CODEX_HOME = "C:\\.codex"
     }
 
     #[test]
-    fn mcp_list_mirrors_into_database_for_backup() {
+    fn mcp_list_does_not_write_database_mirror() {
         let (context, _home) = mcp_test_context(concat!(
             "[mcp_servers.github]\n",
             "# 手动维护\n",
@@ -3337,29 +3327,16 @@ CODEX_HOME = "C:\\.codex"
         let servers = context.list_mcp_servers().unwrap();
         assert_eq!(servers.len(), 1);
 
-        // 镜像无损：注释与未建模键都进了数据库，随备份导出携带
-        let fragments = context.database.mcp_server_fragments().unwrap();
-        assert_eq!(fragments.len(), 1);
-        assert_eq!(fragments[0].0, "github");
-        assert!(
-            fragments[0].1.contains("# 手动维护"),
-            "{:?}",
-            fragments[0].1
-        );
-        assert!(
-            fragments[0].1.contains("cwd = \"/srv\""),
-            "{:?}",
-            fragments[0].1
-        );
+        assert!(context.database.mcp_server_fragments().unwrap().is_empty());
     }
 
     #[test]
     fn restore_database_writes_mcp_back_to_live() {
-        // 机器 A：有 MCP，镜像入库并导出备份
+        // 机器 A：显式导入 MCP 镜像后导出备份
         let (source_context, _home_a) =
             mcp_test_context("[mcp_servers.tavily]\nurl = \"https://mcp.tavily.com/mcp\"\n");
         context_with_profile(&source_context);
-        source_context.list_mcp_servers().unwrap();
+        source_context.import_mcp_from_live().unwrap();
         let exported = source_context.export_database().unwrap();
         let backup_name = exported.file_name().unwrap().to_string_lossy().into_owned();
 
@@ -3386,9 +3363,15 @@ CODEX_HOME = "C:\\.codex"
     }
 
     #[test]
-    fn created_profiles_snapshot_includes_global_mcp() {
+    fn created_profiles_snapshot_prefers_database_mcp_mirror() {
         let (context, _home) =
-            mcp_test_context("[mcp_servers.tavily]\nurl = \"https://mcp.tavily.com/mcp\"\n");
+            mcp_test_context("[mcp_servers.mirrored]\nurl = \"https://mirror/mcp\"\n");
+        context.import_mcp_from_live().unwrap();
+        std::fs::write(
+            context.paths.codex_config(),
+            "[mcp_servers.live]\nurl = \"https://live/mcp\"\n",
+        )
+        .unwrap();
 
         // 自定义供应商：粘贴的配置没有 MCP，保存后快照带上全局段（编辑器打开即见）
         let raw = "model = \"glm-5.3\"\nmodel_provider = \"ZAI\"\n\n[model_providers.ZAI]\nname = \"ZAI\"\nbase_url = \"https://api.z.ai\"\nwire_api = \"responses\"\n";
@@ -3397,7 +3380,8 @@ CODEX_HOME = "C:\\.codex"
             .unwrap();
         let detail = context.get_profile(&custom.id).unwrap();
         let stored = detail.raw_config.expect("自定义快照应有 raw_config");
-        assert!(stored.contains("mcp_servers.tavily"), "{stored}");
+        assert!(stored.contains("mcp_servers.mirrored"), "{stored}");
+        assert!(!stored.contains("mcp_servers.live"), "{stored}");
 
         // 内置供应商：快照同样带上全局段
         let builtin = context
@@ -3405,37 +3389,30 @@ CODEX_HOME = "C:\\.codex"
             .unwrap();
         let detail = context.get_profile(&builtin.id).unwrap();
         let stored = detail.raw_config.expect("内置快照应有 raw_config");
-        assert!(stored.contains("mcp_servers.tavily"), "{stored}");
+        assert!(stored.contains("mcp_servers.mirrored"), "{stored}");
+        assert!(!stored.contains("mcp_servers.live"), "{stored}");
     }
 
     #[test]
-    fn mcp_absorb_keeps_database_when_live_section_lost() {
+    fn created_profiles_fall_back_to_live_mcp_when_mirror_empty() {
         let (context, _home) =
             mcp_test_context("[mcp_servers.tavily]\nurl = \"https://mcp.tavily.com/mcp\"\n");
-        context.list_mcp_servers().unwrap();
-        assert_eq!(context.database.mcp_server_fragments().unwrap().len(), 1);
+        let raw = "model = \"glm-5.3\"\nmodel_provider = \"ZAI\"\n\n[model_providers.ZAI]\nname = \"ZAI\"\nbase_url = \"https://api.z.ai\"\nwire_api = \"responses\"\n";
+        let custom = context
+            .add_custom_profile("智谱", raw, None, None, None, None, None)
+            .unwrap();
+        let builtin = context
+            .add_builtin_profile("chatgpt", None, None, None, None)
+            .unwrap();
 
-        // live 段整个消失（配置被重置/误删）：吸收只增改不删，镜像保留为“仅数据库”差异
-        std::fs::write(context.paths.codex_config(), "model = \"gpt-5.6\"\n").unwrap();
-        let servers = context.list_mcp_servers().unwrap();
-        assert!(servers.is_empty());
-        assert_eq!(
-            context.database.mcp_server_fragments().unwrap().len(),
-            1,
-            "整段消失不应清空数据库镜像"
-        );
-
-        // 预览把它呈现为“仅数据库”差异，由用户裁决（不再静默保留/清除）
-        let preview = context.mcp_sync_preview().unwrap();
-        assert_eq!(preview.entries.len(), 1);
-        assert_eq!(preview.entries[0].kind, McpSyncEntryKind::DbOnly);
-        assert_eq!(preview.entries[0].name, "tavily");
-
-        // 一键恢复：镜像写回 live
-        let count = context.restore_mcp_from_database().unwrap();
-        assert_eq!(count, 1);
-        let config = read_config_text(&context);
-        assert!(config.contains("mcp_servers.tavily"), "{config}");
+        for profile in [custom, builtin] {
+            let stored = context
+                .get_profile(&profile.id)
+                .unwrap()
+                .raw_config
+                .unwrap();
+            assert!(stored.contains("mcp_servers.tavily"), "{stored}");
+        }
     }
 
     #[test]
@@ -3447,7 +3424,7 @@ CODEX_HOME = "C:\\.codex"
         context.delete_mcp_server("tavily").unwrap();
         assert!(context.database.mcp_server_fragments().unwrap().is_empty());
 
-        // 应用内的保存/删除持续整表对齐镜像（外部改动的增改吸收与差异裁决另见 upsert 语义）
+        // 应用内的保存/删除持续整表对齐镜像。
         context
             .save_mcp_server(
                 None,
@@ -3478,7 +3455,7 @@ CODEX_HOME = "C:\\.codex"
     fn mcp_import_from_live_forces_mirror() {
         let (context, _home) =
             mcp_test_context("[mcp_servers.tavily]\nurl = \"https://mcp.tavily.com/mcp\"\n");
-        context.list_mcp_servers().unwrap();
+        context.import_mcp_from_live().unwrap();
 
         // 外部清空 live 后，显式「从配置导入」让数据库接受空态（放弃保留的镜像）
         std::fs::write(context.paths.codex_config(), "model = \"gpt-5.6\"\n").unwrap();
@@ -3492,7 +3469,7 @@ CODEX_HOME = "C:\\.codex"
     fn restore_mcp_rebuilds_corrupt_config() {
         let (context, _home) =
             mcp_test_context("[mcp_servers.tavily]\nurl = \"https://mcp.tavily.com/mcp\"\n");
-        context.list_mcp_servers().unwrap();
+        context.import_mcp_from_live().unwrap();
 
         // 配置文件彻底损坏（无法解析）：恢复按镜像重建整个文件，原文件已自动备份
         std::fs::write(context.paths.codex_config(), "not [ valid").unwrap();
@@ -3504,19 +3481,19 @@ CODEX_HOME = "C:\\.codex"
     }
 
     #[test]
-    fn mcp_list_absorb_keeps_externally_deleted_rows() {
+    fn mcp_list_does_not_absorb_externally_deleted_rows() {
         let (context, _home) = mcp_test_context(
             "[mcp_servers.a]\nurl = \"https://a/mcp\"\n\n[mcp_servers.b]\nurl = \"https://b/mcp\"\n",
         );
-        context.list_mcp_servers().unwrap();
+        context.import_mcp_from_live().unwrap();
 
-        // 外部（codex mcp remove）删掉 a：吸收只增改不删，a 保留为“仅数据库”差异
+        // 外部（codex mcp remove）删掉 a：列表只读，a 保留为“仅数据库”差异
         std::fs::write(
             context.paths.codex_config(),
             "[mcp_servers.b]\nurl = \"https://b/mcp\"\n",
         )
         .unwrap();
-        context.list_mcp_servers().unwrap();
+        assert_eq!(context.list_mcp_servers().unwrap().len(), 1);
         assert_eq!(context.database.mcp_server_fragments().unwrap().len(), 2);
 
         // 显式“以配置文件为准”才收敛：a 从数据库清除，预览归零
@@ -3532,7 +3509,7 @@ CODEX_HOME = "C:\\.codex"
     #[test]
     fn mcp_preview_flags_live_only_db_only_and_changed() {
         let (context, _home) = mcp_test_context("[mcp_servers.a]\nurl = \"https://a/mcp\"\n");
-        context.list_mcp_servers().unwrap();
+        context.import_mcp_from_live().unwrap();
 
         // 外部改 a 的 url、新增 b，且不再触发 list：预览应报“内容不同”与“仅配置文件”
         std::fs::write(
@@ -3588,7 +3565,7 @@ CODEX_HOME = "C:\\.codex"
     #[test]
     fn mcp_preview_marks_comment_only_difference_unmodeled() {
         let (context, _home) = mcp_test_context("[mcp_servers.a]\nurl = \"https://a/mcp\"\n");
-        context.list_mcp_servers().unwrap();
+        context.import_mcp_from_live().unwrap();
 
         // 只在条目内加一行注释：建模字段全等，差异标记为“仅格式差异”
         std::fs::write(
@@ -3607,7 +3584,7 @@ CODEX_HOME = "C:\\.codex"
     #[test]
     fn mcp_preview_empty_when_mirror_matches_live() {
         let (context, _home) = mcp_test_context("[mcp_servers.a]\nurl = \"https://a/mcp\"\n");
-        context.list_mcp_servers().unwrap();
+        context.import_mcp_from_live().unwrap();
 
         let preview = context.mcp_sync_preview().unwrap();
         assert!(preview.entries.is_empty(), "{:?}", preview.entries);
@@ -3618,7 +3595,7 @@ CODEX_HOME = "C:\\.codex"
     #[test]
     fn mcp_preview_fails_when_live_unparseable() {
         let (context, _home) = mcp_test_context("[mcp_servers.a]\nurl = \"https://a/mcp\"\n");
-        context.list_mcp_servers().unwrap();
+        context.import_mcp_from_live().unwrap();
 
         // live 无法解析：预览报错，前端进入“仅可从数据库恢复”降级模式
         std::fs::write(context.paths.codex_config(), "not [ valid").unwrap();
