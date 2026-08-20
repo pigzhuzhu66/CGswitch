@@ -308,9 +308,9 @@ const tabs = computed(() => {
   const list: { id: "config" | "auth" | "models"; label: string; title?: string }[] = [
     { id: "config", label: "config.toml" },
   ];
-  if (hasAuthTab.value) list.push({ id: "auth", label: "auth.json" });
   if (liveCatalogPath.value)
     list.push({ id: "models", label: catalogFileName.value, title: liveCatalogPath.value });
+  if (hasAuthTab.value) list.push({ id: "auth", label: "auth.json" });
   return list;
 });
 
