@@ -112,31 +112,37 @@ function transportTextOf(entry: McpSyncDiffEntry) {
     </div>
     <!-- 正常模式：body 只放摘要与差异列表（列表自身滚动），操作区固定在卡片 footer -->
     <div v-else-if="preview" class="space-y-3">
-      <p class="muted text-sm">
-        配置文件 <span class="font-semibold text-accent">{{ preview.live_count }}</span> 台 ·
-        数据库镜像 <span class="font-semibold text-success">{{ preview.db_count }}</span> 台 ·
-        <span class="font-semibold text-[var(--warning)]">{{ preview.entries.length }}</span>
-        项差异
-      </p>
-      <div class="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-        <div v-for="entry in preview.entries" :key="entry.name">
+      <div class="flex flex-wrap gap-2">
+        <span class="apple-chip">
+          配置文件 <span class="font-semibold text-accent">{{ preview.live_count }} 台</span>
+        </span>
+        <span class="apple-chip">
+          数据库镜像 <span class="font-semibold text-success">{{ preview.db_count }} 台</span>
+        </span>
+        <span class="apple-chip">
+          差异 <span class="font-semibold text-[var(--warning)]">{{ preview.entries.length }} 项</span>
+        </span>
+      </div>
+      <div class="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+        <div v-for="entry in preview.entries" :key="entry.name" class="apple-group">
           <button
             type="button"
-            class="apple-list-row apple-list-row--outlined w-full text-left transition-colors hover:bg-black/4 dark:hover:bg-white/6"
+            class="flex w-full items-center gap-2 bg-black/4 px-3 py-2.5 text-left transition-colors hover:bg-black/4 dark:bg-white/6 dark:hover:bg-white/6"
+            :aria-expanded="expandedNames.has(entry.name)"
             @click="toggleExpand(entry.name)"
           >
-            <span class="flex min-w-0 items-center gap-2">
+            <span class="flex min-w-0 flex-1 items-center gap-2">
               <span :class="kindChipClass(entry)" class="shrink-0">{{ kindText(entry) }}</span>
               <span class="truncate text-[var(--font-size-base)] font-semibold">{{ entry.name }}</span>
               <span class="shrink-0 rounded-md bg-black/5 px-1.5 py-px text-[10px] font-medium tracking-wide text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
                 {{ transportTextOf(entry) }}
               </span>
             </span>
-            <span class="muted shrink-0 text-xs">{{ expandedNames.has(entry.name) ? "收起" : "明细" }}</span>
+            <span class="muted shrink-0 text-xs">{{ expandedNames.has(entry.name) ? "收起" : "查看明细" }}</span>
           </button>
           <div
             v-if="expandedNames.has(entry.name)"
-            class="mono mt-1 space-y-1 rounded-[var(--radius-control-sm)] bg-black/4 p-3 text-[11px] leading-relaxed break-all dark:bg-white/6"
+            class="mono space-y-1 border-t border-[var(--panel-divider)] bg-black/4 p-3 text-[11px] leading-relaxed break-all dark:bg-white/6"
           >
             <div v-if="entry.changed_fields.length" class="space-y-1">
               <div v-for="diff in entry.changed_fields" :key="diff.field">
@@ -154,7 +160,7 @@ function transportTextOf(entry: McpSyncDiffEntry) {
     <template #footer>
       <div class="space-y-2">
         <p v-if="!previewError" class="muted text-xs">
-          选择一种方向覆盖另一侧；写回配置文件以数据库为准，更新数据库以 config.toml 为准，写回前会自动备份原文件。
+          选择同步方向；写回配置文件以数据库为准，更新数据库以 config.toml 为准，写回前自动备份原文件。
         </p>
         <div class="dialog-actions grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
           <n-button class="shrink-0" :disabled="busy" @click="onShowChange(false)">取消</n-button>
