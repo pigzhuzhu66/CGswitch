@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [0.4.7] - 2026-08-20
+## [0.4.8] - 2026-08-20
 
 ### 新增
 
@@ -12,14 +12,19 @@
 
 - 优化 MCP 同步对话框的差异展示与交互体验
 - 优化多个组件的布局与样式
+- 调整配置编辑器文件标签顺序，将模型目录文件放在第二位
+
+### 修复
+
+- 启动时不再显示多余的“未认证”账号胶囊，避免认证状态加载时出现颜色闪烁
 
 ### 如何选择安装包
 
-**Windows**：默认下载 `CGswitch-v0.4.7-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+**Windows**：默认下载 `CGswitch-v0.4.8-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
 
 **macOS**：
-- Apple 芯片（M 系列）→ `CGswitch-v0.4.7-macOS-arm64.dmg`
-- Intel 芯片 → `CGswitch-v0.4.7-macOS-x64.dmg`
+- Apple 芯片（M 系列）→ `CGswitch-v0.4.8-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v0.4.8-macOS-x64.dmg`
 
 ## [0.4.4] - 2026-08-20
 
