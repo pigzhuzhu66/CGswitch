@@ -319,6 +319,9 @@ async function saveGeneral() {
       database_backup_keep_count: form.database_backup_keep_count,
     });
     emit("saved", settings);
+    if (settings.database_backup_keep_count !== previous.database_backup_keep_count) {
+      await loadBackups();
+    }
   } catch (error) {
     form.theme = previous.theme;
     form.auto_restart = previous.auto_restart;

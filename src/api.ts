@@ -600,6 +600,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       return undefined as T;
     case "save_settings":
       webSettings = { ...(args?.settings as Settings) };
+      webBackups = webBackups.slice(0, webSettings.database_backup_keep_count);
       return { ...webSettings } as T;
     // Web 调试模式无 Rust 侧解析器，TOML 校验一律视为通过（与既有 mock 桩风格一致）
     case "validate_toml":
