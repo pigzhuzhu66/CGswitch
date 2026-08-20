@@ -15,12 +15,32 @@ description: 快速本地编译 CGSwitch 的 Windows 安装包（NSIS exe / MSI�
 
 Rust 侧不用预检——`pnpm tauri build` 本身会编译，有错会当场报。
 
+如果 `src-tauri/icons/installer-header.bmp` 或 `installer-sidebar.bmp` 存在，先确认它们是 NSIS 可读的经典 BMP：`BITMAPINFOHEADER`（DIB 大小 40）、24-bit、`BI_RGB` 无压缩。不要把 ImageMagick 默认生成的 BMP V4/V5 直接交给 NSIS：
+
+```powershell
+foreach ($bmp in @('src-tauri/icons/installer-header.bmp', 'src-tauri/icons/installer-sidebar.bmp')) {
+  if (-not (Test-Path -LiteralPath $bmp)) { continue }
+  $bytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $bmp))
+  $dib = [BitConverter]::ToUInt32($bytes, 14)
+  $bpp = [BitConverter]::ToUInt16($bytes, 28)
+  $compression = [BitConverter]::ToUInt32($bytes, 30)
+  if ($bytes.Length -lt 54 -or $bytes[0] -ne 0x42 -or $bytes[1] -ne 0x4d -or $dib -ne 40 -or $bpp -ne 24 -or $compression -ne 0) {
+    throw "NSIS installer image is not classic 24-bit BI_RGB BMP: $bmp"
+  }
+}
+```
+
 ### Step 2: 构建
 
 在项目根目录运行：
 
 ```powershell
-pnpm tauri build
+$buildLog = Join-Path $env:TEMP "cgswitch-tauri-build-$PID.log"
+pnpm tauri build 2>&1 | Tee-Object -FilePath $buildLog
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if (Select-String -LiteralPath $buildLog -Pattern 'Unsupported format|warning 5040' -Quiet) {
+  throw "NSIS rejected an installer image; inspect $buildLog and fix the BMP format before distributing the package."
+}
 ```
 
 - 用 PowerShell 工具执行，timeout 设 600000（10 分钟）
@@ -50,6 +70,7 @@ Invoke-Item "src-tauri/target/release/bundle/nsis"
 - 本地只出 Windows 包；macOS 包仍走 GitHub Actions 的 Release 工作流
 - 产物文件名固定带版本号，重复构建会覆盖同名旧文件
 - 安装新版本会直接覆盖安装旧版本，无需先卸载
+- `Finished 2 bundles at:` 不是唯一成功标准；NSIS `Unsupported format`/`warning 5040` 即使不阻断构建，也必须视为失败
 
 ## 常见问题
 
