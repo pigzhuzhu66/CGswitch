@@ -24,7 +24,8 @@ description: CGswitch 发版流水线（本地部分）：确定版本号、撰�
 ### Step 2: 撰写 CHANGELOG
 
 1. 查看自上一 tag 以来的提交：`git log <上一tag>..HEAD --oneline --no-merges`（首个版本用全部历史）。
-2. 在 `CHANGELOG.md` 顶部（文件头部介绍之后）插入新版本段落，标题格式为 `## [<版本>] - <当天日期 YYYY-MM-DD>`，模板：
+2. **草案先给用户确认，再写入文件**。把新版本段落以代码块贴出来，附上"哪些 commit 进、哪些不进及理由"，等用户明确"OK/确认/就这样"后才能编辑 `CHANGELOG.md`。**禁止先把内容写进文件再让用户事后改。**
+3. 在 `CHANGELOG.md` 顶部（文件头部介绍之后）插入新版本段落，标题格式为 `## [<版本>] - <当天日期 YYYY-MM-DD>`，模板：
 
 ```markdown
 ## [<版本>] - <YYYY-MM-DD>
@@ -47,12 +48,19 @@ description: CGswitch 发版流水线（本地部分）：确定版本号、撰�
 - Intel 芯片 → `CGswitch-v<版本>-macOS-x64.dmg`
 ```
 
-3. 写作规则：
+> ⚠️ `### 如何选择安装包` 是**强制固定模板**，每次发版必填，**不允许省略**，用户已确认这是下载指引必须保留。
+
+4. 写作规则：
    - 用用户视角描述变更（"新增 xxx 功能"），不要照抄 commit 标题。
-   - 空分区整节省略；可用分区：新增 / 修复 / 界面与样式 / 性能优化 / 重构 / 移除 / 安全。
-   - 版本号 bump、纯 CI/工作流、纯文档类提交不进日志。
+   - 标题与"如何选择安装包"之外的空分区整节省略；可用分区：新增 / 修复 / 界面与样式 / 性能优化 / 重构 / 移除 / 安全。
+   - **不进入 CHANGELOG 的提交**（无用户可见影响）：
+     - 纯版本号 bump（`chore(release): vX.Y.Z`）
+     - 纯 CI / 工作流变更
+     - 纯文档类提交
+     - 纯文案 / 按钮 / 标签 / 提示语等措辞小改（不影响功能）
+     - 纯图标 / 品牌资源更新（不影响功能）
    - 已有段落风格时（查看 `CHANGELOG.md` 旧版本段落），沿用旧格式。
-4. 提交所有发版文件：`git add VERSION package.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json CHANGELOG.md`
+5. 提交所有发版文件：`git add VERSION package.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json CHANGELOG.md`
    提交信息：`chore(release): v<版本>`
 
 ### Step 3: 推送日志并触发工作流（不手动打 tag）
