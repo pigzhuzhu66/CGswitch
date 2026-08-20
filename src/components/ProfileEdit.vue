@@ -357,8 +357,8 @@ const canSave = computed(() => {
 
 function hasLongContextOverride(text: string): boolean {
   return (
-    /^\s*model_context_window\s*=\s*(?:1000000|1_000_000)\s*(?:#.*)?$/m.test(text) &&
-    /^\s*model_auto_compact_token_limit\s*=\s*(?:900000|900_000)\s*(?:#.*)?$/m.test(text)
+    /^\s*model_context_window\s*=/m.test(text) &&
+    /^\s*model_auto_compact_token_limit\s*=/m.test(text)
   );
 }
 
@@ -569,8 +569,13 @@ watch(configText, (text) => {
   if (creating.value && text !== liveConfigFragment.value) {
     configTouched.value = true;
   }
-  if (!patchingLongContext.value && showLongContextOverride.value) {
-    longContextEnabled.value = hasLongContextOverride(text);
+  const hasOverride = hasLongContextOverride(text);
+  if (
+    !patchingLongContext.value &&
+    showLongContextOverride.value &&
+    hasOverride !== longContextEnabled.value
+  ) {
+    longContextEnabled.value = hasOverride;
   }
 });
 
