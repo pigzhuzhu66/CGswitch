@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn embedded_catalogs_keep_original_size_and_line_endings() {
-        assert_eq!(DEEPSEEK_MODELS.len(), 76215);
+        assert_eq!(DEEPSEEK_MODELS.len(), 76217);
         assert_eq!(count(DEEPSEEK_MODELS, b"\r\n"), 137);
         assert_eq!(ZHIPU_MODELS.len(), 2543);
         assert_eq!(count(ZHIPU_MODELS, b"\r\n"), 72);
@@ -166,6 +166,23 @@ mod tests {
         assert_eq!(count(MINIMAX_CATALOG, b"\r\n"), 25);
         // OpenAI Code 无官方模板：models.json 保留为空入口
         assert_eq!(template(KIND_OPENCODE).unwrap().catalog.unwrap().1.len(), 0);
+    }
+
+    #[test]
+    fn deepseek_catalog_disables_search_tool() {
+        let catalog: serde_json::Value = serde_json::from_slice(DEEPSEEK_MODELS).unwrap();
+        let models = catalog["models"].as_array().unwrap();
+        assert!(!models.is_empty());
+        for model in models {
+            assert_eq!(
+                model
+                    .get("supports_search_tool")
+                    .and_then(serde_json::Value::as_bool),
+                Some(false),
+                "DeepSeek catalog must disable supports_search_tool for {:?}",
+                model.get("slug"),
+            );
+        }
     }
 
     #[test]

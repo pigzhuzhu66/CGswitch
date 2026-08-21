@@ -43,6 +43,8 @@ yandex_results.png
 
 # 代码图谱工具（graphify）生成的可再生缓存
 graphify-out/
+.codex/hooks.json
+.codex/skills/graphify/
 docs/mcp-module-design.md
 .codex/skills/release/SKILL.md
 .codex/skills/local-windows-build/SKILL.md
