@@ -349,7 +349,7 @@ async function save() {
       <button
         v-if="editorDiagnostics.count > 0"
         type="button"
-        class="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-[var(--danger)] transition-opacity hover:opacity-80"
+        class="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg border border-[var(--danger)]/20 bg-[var(--danger)]/10 px-2.5 py-1 text-xs chip-danger transition-opacity hover:opacity-80"
         title="跳转到第一个错误"
         aria-live="polite"
         @click="jumpToFirstDiagnostic"
