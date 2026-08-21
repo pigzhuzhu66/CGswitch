@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, h, nextTick, onMounted, ref, watch } from "vue";
-import { NButton, NCheckbox, NInput, NSelect, useMessage } from "naive-ui";
-import type { SelectOption } from "naive-ui";
-import AppSwitch from "./AppSwitch.vue";
-import LoadingSpinner from "./LoadingSpinner.vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { NButton, useMessage } from "naive-ui";
+import ProfileEditDocuments, {
+  type ProfileEditTab,
+  type ProfileEditTabOption,
+} from "./profile-edit/ProfileEditDocuments.vue";
+import ProfileEditProviderSection from "./profile-edit/ProfileEditProviderSection.vue";
 import ProfileIconEdit from "./ProfileIconEdit.vue";
-import ProfileIconTile from "./ProfileIconTile.vue";
 import { api } from "../api";
 import {
   balanceQueryProviders,
@@ -14,140 +15,23 @@ import {
   customCatalogTemplate,
   customConfigTemplate,
 } from "../presets";
+import {
+  patchProviderFields,
+  readProviderFields,
+  withMcpSection as appendMcpSection,
+} from "./profile-edit/profileEditText";
 import type {
   EditorDiagnosticSummary,
   ManagedAccount,
   ProfileDetail,
   ProfileSummary,
 } from "../types";
-import {
-  PhActivity,
-  PhArrowLeft,
-  PhArrowSquareOut,
-  PhBracketsCurly,
-  PhCheck,
-  PhFloppyDisk,
-  PhGearSix,
-  PhInfo,
-  PhKey,
-  PhMonitor,
-  PhPencilSimple,
-} from "@phosphor-icons/vue";
-
-// CodeMirror 编辑器按需加载：只在打开编辑弹窗时拉取，不影响应用启动
-const ConfigTextEditor = defineAsyncComponent(() => import("./ConfigTextEditor.vue"));
+import { PhArrowLeft, PhBracketsCurly, PhFloppyDisk, PhGearSix } from "@phosphor-icons/vue";
 
 const props = defineProps<{
   profile: ProfileSummary | null;
   create?: boolean;
 }>();
-
-// 读取 [model_providers.*] 段里的 base_url / 密钥，供编辑器回填表单
-function readProviderFields(text: string): {
-  base_url: string;
-  experimental_bearer_token: string;
-  found: boolean;
-} {
-  const values = { base_url: "", experimental_bearer_token: "", found: false };
-  const lines = text.split("\n");
-  let providerId: string | null = null;
-  for (const line of lines) {
-    const m = /^model_provider\s*=\s*"([^"]+)"/.exec(line.trim());
-    if (m) {
-      providerId = m[1];
-      break;
-    }
-  }
-  let inProvider = false;
-  let done = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^\[.+\]$/.test(trimmed)) {
-      const section = /^\[model_providers\.(.+)\]$/.exec(trimmed);
-      if (section && !done) {
-        // 只处理 model_provider 指向的段；无 model_provider 时退化为第一段
-        inProvider = providerId === null || section[1] === providerId;
-        if (inProvider) {
-          done = true;
-          values.found = true;
-        }
-      } else {
-        inProvider = false;
-      }
-      continue;
-    }
-    if (!inProvider) continue;
-    const m =
-      /^(base_url|experimental_bearer_token)\s*=\s*(?:(['"])(.*?)\2|([^\s]+))/.exec(trimmed);
-    if (!m) continue;
-    const field = m[1] as "base_url" | "experimental_bearer_token";
-    values[field] = m[3] ?? m[4] ?? "";
-  }
-  return values;
-}
-
-// 把表单里的地址/密钥写回编辑器 provider 段；缺失的行在段尾补上
-function patchProviderFields(text: string, baseUrl: string, apiKey: string): string {
-  const escape = (value: string, quote: string) =>
-    value.replace(/\\/g, "\\\\").replace(new RegExp(quote, "g"), "\\" + quote);
-  const base = baseUrl.trim();
-  const key = apiKey.trim();
-  const lines = text.split("\n");
-  let providerId: string | null = null;
-  for (const line of lines) {
-    const m = /^model_provider\s*=\s*"([^"]+)"/.exec(line.trim());
-    if (m) {
-      providerId = m[1];
-      break;
-    }
-  }
-  let inProvider = false;
-  let done = false;
-  let replacedBase = false;
-  let replacedKey = false;
-  const out: string[] = [];
-  const flushMissing = () => {
-    if (!inProvider) return;
-    if (base && !replacedBase) out.push(`base_url = "${escape(base, '"')}"`);
-    if (key && !replacedKey) out.push(`experimental_bearer_token = "${escape(key, '"')}"`);
-    inProvider = false;
-  };
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^\[.+\]$/.test(trimmed)) {
-      flushMissing();
-      const section = /^\[model_providers\.(.+)\]$/.exec(trimmed);
-      if (section && !done) {
-        inProvider = providerId === null || section[1] === providerId;
-        if (inProvider) done = true;
-      } else {
-        inProvider = false;
-      }
-      replacedBase = false;
-      replacedKey = false;
-      out.push(line);
-      continue;
-    }
-    if (!inProvider) {
-      out.push(line);
-      continue;
-    }
-    const m = /^(base_url|experimental_bearer_token)\s*=\s*(['"]?)(.*?)\2\s*$/.exec(trimmed);
-    if (!m) {
-      out.push(line);
-      continue;
-    }
-    const field = m[1];
-    const quote = m[2] || '"';
-    const value = field === "base_url" ? base : key;
-    const indent = line.slice(0, line.length - line.trimStart().length);
-    if (field === "base_url") replacedBase = true;
-    else replacedKey = true;
-    out.push(`${indent}${field} = ${quote}${escape(value, quote)}${quote}`);
-  }
-  flushMissing();
-  return out.join("\n");
-}
 
 const emit = defineEmits<{
   back: [];
@@ -169,7 +53,7 @@ const authAccounts = ref<ManagedAccount[]>([]);
 const externalAccount = ref<ManagedAccount | null>(null);
 const boundAccountId = ref<string | null>(null);
 const selectedIcon = ref<string | null>(props.profile?.icon ?? null);
-const activeTab = ref<"config" | "auth" | "models">("config");
+const activeTab = ref<ProfileEditTab>("config");
 const presetKind = ref("");
 const configText = ref("");
 const configTouched = ref(false);
@@ -228,7 +112,6 @@ const isCustom = computed(() => creating.value && presetKind.value === "custom")
 const showLongContextOverride = computed(() => isOfficial.value);
 
 watch(activeTab, () => {
-  activeEditor.value = null;
   editorDiagnostics.value = { count: 0, firstLine: null };
 });
 
@@ -258,24 +141,6 @@ const accountOptions = computed(() => [
   })),
 ]);
 
-function renderAuthOptionLabel(option: SelectOption) {
-  const source = option.source === "desktop" ? "桌面端认证" : "OAuth 认证";
-  const Icon = option.source === "desktop" ? PhMonitor : PhKey;
-  return h(
-    "span",
-    { class: "inline-flex min-w-0 items-center gap-2" },
-    [
-      h(Icon, {
-        class: "h-3.5 w-3.5 shrink-0 text-accent",
-        weight: "bold",
-        "aria-hidden": "true",
-      }),
-      h("span", { class: "shrink-0 text-xs font-medium text-[var(--text-secondary)]" }, source),
-      h("span", { class: "text-[var(--text-tertiary)]" }, "·"),
-      h("span", { class: "truncate" }, option.label as string),
-    ],
-  );
-}
 // 编辑态所有供应商都显示认证文件组件：第三方可保存自己的 auth.json 随应用写入
 const hasAuthTab = computed(() => !creating.value);
 
@@ -293,7 +158,7 @@ const catalogFileName = computed(() => liveCatalogPath.value.split(/[\\/]/).pop(
 
 const tabs = computed(() => {
   if (creating.value) {
-    const list: { id: "config" | "auth" | "models"; label: string; title?: string }[] = [
+    const list: ProfileEditTabOption[] = [
       { id: "config", label: "config.toml" },
     ];
     if (isCustom.value) {
@@ -322,9 +187,7 @@ const baseFragment = computed(() =>
 
 // 创建表单优先预填数据库 MCP 镜像；首次无镜像时由后端回退 live。
 const mcpSection = ref("");
-function withMcpSection(base: string): string {
-  return mcpSection.value ? `${base.trimEnd()}\n\n${mcpSection.value.trimEnd()}\n` : base;
-}
+const addMcpSection = (base: string) => appendMcpSection(base, mcpSection.value);
 
 const liveConfigFragment = computed(() => {
   if (!baseFragment.value) return "";
@@ -332,7 +195,7 @@ const liveConfigFragment = computed(() => {
     base_url: baseUrl.value.trim(),
     experimental_bearer_token: apiKey.value.trim(),
   };
-  return withMcpSection(
+  return addMcpSection(
     baseFragment.value
       .split("\n")
       .map((line) => {
@@ -430,7 +293,7 @@ function selectPreset(kind: string) {
     apiKey.value = "";
     adminUrl.value = "";
     selectedIcon.value = "custom";
-    configText.value = withMcpSection(customConfigTemplate);
+    configText.value = addMcpSection(customConfigTemplate);
     catalogText.value = customCatalogTemplate;
     authText.value = customAuthTemplate;
     configInitial.value = configText.value;
@@ -450,7 +313,7 @@ function selectPreset(kind: string) {
   baseUrl.value = preset.base_url;
   adminUrl.value = preset.admin_url ?? "";
   apiKey.value = "";
-  configText.value = withMcpSection(
+  configText.value = addMcpSection(
     patchProviderFields(preset.fragment, baseUrl.value, apiKey.value),
   );
   configInitial.value = configText.value;
@@ -755,213 +618,61 @@ async function save() {
       <p v-if="loadError" class="muted mt-4 text-sm">{{ loadError }}</p>
 
       <div class="apple-group p-0">
-        <div v-if="creating" class="apple-panel-section">
-      <div class="field-subtitle">选择供应商</div>
-      <div class="mt-3 grid gap-2 sm:grid-cols-3 md:grid-cols-6">
-        <button
-          v-for="preset in builtinPresets"
-          :key="preset.kind"
-          type="button"
-          class="flex items-center gap-2.5 rounded-xl p-2.5 text-left transition-colors"
-          :class="presetKind === preset.kind ? 'shadow-[0_0_0_1px_var(--accent)] bg-[var(--selection-bg)]' : 'shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4'"
-          :aria-pressed="presetKind === preset.kind"
-          @click="selectPreset(preset.kind)"
-        >
-          <ProfileIconTile :name="preset.name" :icon="preset.icon" size="xs" />
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-xs font-semibold tracking-tight">{{ preset.name }}</span>
-            <span class="muted block truncate text-[11px]">{{ preset.model }}{{ preset.base_url ? "" : (preset.kind === "chatgpt" ? " · 认证登录" : " · 无需密钥") }}</span>
-          </span>
-          <PhCheck v-if="presetKind === preset.kind" class="h-4 w-4 shrink-0 text-accent" weight="bold" aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-
-      <div class="apple-panel-section">
-      <div class="flex items-center gap-4">
-        <button
-          type="button"
-          class="relative grid h-[61px] w-[61px] shrink-0 place-items-center rounded-[16px] transition-opacity hover:opacity-80"
-          title="点击更换图标"
-          :aria-label="'更换图标'"
-          @click="pickingIcon = true"
-        >
-          <span class="relative grid h-full w-full place-items-center">
-            <ProfileIconTile :name="detail?.name ?? name" :icon="selectedIcon" size="fill" />
-            <span class="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-white shadow" aria-hidden="true">
-              <PhPencilSimple class="h-2.5 w-2.5" weight="bold" aria-hidden="true" />
-            </span>
-          </span>
-        </button>
-        <div class="min-w-0 flex-1">
-          <div class="field-label mb-1.5">名称</div>
-          <n-input v-model:value="name" :bordered="false" class="underline-input" maxlength="50" placeholder="供应商名称" />
-        </div>
-      </div>
-      <div v-if="showProviderFields" class="mt-4">
-        <div class="field-label mb-1.5">请求地址</div>
-        <n-input v-model:value="baseUrl" placeholder="https://api.example.com/v1" />
-      </div>
-      <div v-if="showProviderFields" class="mt-4">
-        <div class="mb-1.5 flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <span class="field-label">API 密钥</span>
-            <button
-              v-if="isOpenCode && creating"
-              type="button"
-              class="apple-inline-btn"
-              @click="openOpenCodeRef"
-            >
-              <PhArrowSquareOut class="h-3 w-3" weight="bold" aria-hidden="true" />
-              获取 API 密钥
-            </button>
-            <button
-              type="button"
-              class="apple-inline-btn"
-              :disabled="!apiKey.trim() || !baseUrl.trim()"
-              @click="testConnection"
-            >
-              <LoadingSpinner v-if="testing" />
-              <PhActivity v-else class="h-3 w-3" weight="bold" aria-hidden="true" />
-              测试连通
-            </button>
-          </div>
-        </div>
-        <n-input v-model:value="apiKey" type="password" show-password-on="click" placeholder="请输入 API 密钥" />
-        <p v-if="isOpenCode && creating" class="muted mt-2 flex items-start gap-1.5 text-xs">
-          <PhInfo class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" weight="bold" aria-hidden="true" />
-          使用此链接订阅 OpenCode Go，首月只需 $5，并可获得额外的 $5 额度！
-        </p>
-      </div>
-      <div v-if="isOfficial" class="mt-4">
-        <div class="field-subtitle mb-1.5">认证来源</div>
-        <div
-          v-if="hasProfileAuthOverride"
-          class="flex items-center justify-between gap-3 rounded-xl border border-[var(--panel-ring)] bg-black/3 px-3 py-2.5 dark:bg-white/4"
-        >
-          <div class="min-w-0">
-            <div class="text-sm font-medium">配置内 auth.json</div>
-            <div class="muted mt-0.5 text-xs">应用时优先使用当前档案的认证文件</div>
-          </div>
-          <span class="shrink-0 text-xs font-medium text-accent">优先使用</span>
-        </div>
-        <n-select
-          v-else
-          v-model:value="boundAccountId"
-          :options="accountOptions"
-          :render-label="renderAuthOptionLabel"
-          :placeholder="externalAccount ? '桌面端认证' : '自动选择账号'"
+        <ProfileEditProviderSection
+          :creating="creating"
+          :preset-kind="presetKind"
+          :selected-preset="selectedPreset"
+          :detail="detail"
+          :name="name"
+          :base-url="baseUrl"
+          :api-key="apiKey"
+          :admin-url="adminUrl"
+          :selected-icon="selectedIcon"
+          :bound-account-id="boundAccountId"
+          :show-provider-fields="showProviderFields"
+          :is-open-code="isOpenCode"
+          :is-official="isOfficial"
+          :has-profile-auth-override="hasProfileAuthOverride"
+          :external-account="externalAccount"
+          :account-options="accountOptions"
+          :supports-balance="supportsBalance"
+          :show-balance="showBalance"
+          :testing="testing"
+          @select-preset="selectPreset"
+          @pick-icon="pickingIcon = true"
+          @update:name="name = $event"
+          @update:base-url="baseUrl = $event"
+          @update:api-key="apiKey = $event"
+          @update:admin-url="adminUrl = $event"
+          @update:bound-account-id="boundAccountId = $event"
+          @open-open-code-ref="openOpenCodeRef"
+          @test-connection="testConnection"
+          @open-admin-url="openAdminUrl"
+          @toggle-balance="toggleBalance"
         />
-      </div>
-      <div v-if="!creating || selectedPreset?.base_url" class="mt-4">
-        <div class="mb-1.5 flex items-center gap-1">
-          <span class="field-label">官网地址</span>
-          <button
-            type="button"
-            class="grid h-4 w-4 cursor-pointer place-items-center rounded-full text-accent transition-colors hover:bg-accent/10 disabled:cursor-default disabled:opacity-40"
-            title="打开官网"
-            aria-label="打开官网"
-            :disabled="!adminUrl.trim()"
-            @click="openAdminUrl"
-          >
-            <PhArrowSquareOut class="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
-          </button>
-        </div>
-        <n-input v-model:value="adminUrl" placeholder="https://console.example.com（可选）" />
-      </div>
-      <div v-if="!creating && supportsBalance" class="mt-4 flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <div class="text-sm font-semibold">余额/用量查询</div>
-          <div class="muted mt-0.5 text-xs">窗口激活时自动刷新，点击数字手动刷新</div>
-        </div>
-        <AppSwitch :value="showBalance" @update:value="toggleBalance" />
-      </div>
-    </div>
-
-      <div class="apple-panel-section flex flex-col">
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex gap-1">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            type="button"
-            class="relative flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] transition-colors"
-            :class="activeTab === tab.id ? 'bg-[var(--selection-bg)] font-semibold text-accent' : 'muted hover:bg-black/5 dark:hover:bg-white/8'"
-            :aria-pressed="activeTab === tab.id"
-            :title="tab.title"
-            @click="activeTab = tab.id"
-          >
-            <PhGearSix v-if="tab.id === 'config'" class="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
-            <PhBracketsCurly v-else class="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
-            <span class="relative inline-grid">
-              <span class="invisible font-semibold" aria-hidden="true">{{ tab.label }}</span>
-              <span class="absolute inset-0 whitespace-nowrap">{{ tab.label }}</span>
-            </span>
-            <span
-              v-if="(tab.id === 'config' && configDirty) || (tab.id === 'models' && catalogDirty) || (tab.id === 'auth' && authDirty)"
-              class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent"
-              aria-label="有未保存的改动"
-            />
-          </button>
-        </div>
-        <n-checkbox
-          v-if="showLongContextOverride && activeTab === 'config'"
-          size="small"
-          :checked="longContextEnabled"
-          :disabled="patchingLongContext || saving"
-          class="rounded-[10px] border px-2.5 py-1 transition-colors"
-          :class="longContextEnabled ? 'border-accent/30 bg-accent/10 text-accent' : 'border-[var(--panel-ring)] hover:bg-black/4 dark:hover:bg-white/6'"
-          title="上下文窗口：1000000 tokens；自动压缩阈值：900000 tokens"
-          @update:checked="toggleLongContext"
-        >
-          <span class="whitespace-nowrap font-medium">1M 上下文窗口</span>
-        </n-checkbox>
-      </div>
-
-      <div class="mt-4 flex flex-col pr-1">
-        <div v-if="activeTab === 'config'">
-          <ConfigTextEditor
-            ref="activeEditor"
-            v-model="configText"
-            language="toml"
-            :placeholder="creating ? '选择供应商后显示配置预览' : '编辑 config.toml 内容，保存后仅写入该供应商；应用时才生效。'"
-            @diagnostics="handleEditorDiagnostics"
-          />
-        </div>
-        <div v-else-if="activeTab === 'auth'">
-          <p
-            v-if="detail?.provider !== null && !detail?.raw_auth"
-            class="muted mb-2 text-xs"
-          >
-            未保存自定义认证：应用此供应商不会改动 ~/.codex/auth.json。
-          </p>
-          <p v-else-if="detail?.provider === null && !detail?.raw_auth" class="muted mb-2 text-xs">
-            当前显示的是全局生效的认证文件（来自订阅账号 / Codex 登录），只展示，未保存到本配置。
-          </p>
-          <p v-else-if="detail?.raw_auth" class="muted mb-2 text-xs">
-            已保存自定义认证：清空并保存即可移除，应用时写入 ~/.codex/auth.json。
-          </p>
-          <ConfigTextEditor
-            ref="activeEditor"
-            v-model="authText"
-            language="json"
-            placeholder="认证文件（~/.codex/auth.json）。保存后仅存入本配置，应用时才写入生效。"
-            @diagnostics="handleEditorDiagnostics"
-          />
-        </div>
-        <div v-else class="flex flex-col text-sm">
-          <div>
-            <ConfigTextEditor
-              ref="activeEditor"
-              v-model="catalogText"
-              language="json"
-              placeholder="模型目录文件不存在或无法读取；保存后内容将随该供应商生效。"
-              @diagnostics="handleEditorDiagnostics"
-            />
-          </div>
-        </div>
-      </div>
-      </div>
+        <ProfileEditDocuments
+          ref="activeEditor"
+          :creating="creating"
+          :detail="detail"
+          :active-tab="activeTab"
+          :tabs="tabs"
+          :config-dirty="configDirty"
+          :catalog-dirty="catalogDirty"
+          :auth-dirty="authDirty"
+          :show-long-context-override="showLongContextOverride"
+          :long-context-enabled="longContextEnabled"
+          :patching-long-context="patchingLongContext"
+          :saving="saving"
+          :config-text="configText"
+          :catalog-text="catalogText"
+          :auth-text="authText"
+          @update:active-tab="activeTab = $event"
+          @update:config-text="configText = $event"
+          @update:catalog-text="catalogText = $event"
+          @update:auth-text="authText = $event"
+          @diagnostics="handleEditorDiagnostics"
+          @toggle-long-context="toggleLongContext"
+        />
       </div>
     </div>
 

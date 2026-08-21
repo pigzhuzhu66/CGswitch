@@ -235,7 +235,7 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
         >
           <button
             type="button"
-            class="group flex min-w-0 items-center gap-2.5 text-left"
+            class="group flex min-w-0 cursor-pointer items-center gap-2.5 text-left"
             :aria-label="`编辑 ${server.name}`"
             title="点击编辑"
             @click="editingServer = server"

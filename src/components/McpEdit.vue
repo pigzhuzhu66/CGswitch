@@ -259,7 +259,6 @@ async function save() {
             <div>
               <div class="field-label mb-1.5">名称</div>
               <n-input v-model:value="name" maxlength="64" placeholder="例如：context7" />
-              <p class="muted mt-1.5 text-xs">写入 config.toml 的 [mcp_servers.名称]，仅限字母、数字、下划线和连字符。</p>
             </div>
             <div>
               <div class="field-label mb-1.5">传输类型</div>
