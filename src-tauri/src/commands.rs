@@ -4,6 +4,7 @@ use crate::auth::codex_oauth::{
     parse_external_auth_json, AuthStatus, CodexOAuthError, CodexOAuthManager, CodexOAuthState,
     DeviceCodeResponse, ManagedAccount,
 };
+use crate::codex::config as codex_config;
 use crate::error::{app_err, AppResult};
 use crate::models::{
     AppState, CodexAppStatus, McpServerSpec, McpSyncPreview, ProfileBalanceInfo, ProfileDetail,
@@ -422,9 +423,10 @@ pub fn list_mcp_servers(state: State<'_, AppContext>) -> AppResult<Vec<McpServer
 pub fn save_mcp_server(
     original_name: Option<String>,
     spec: McpServerSpec,
+    fragment: Option<String>,
     state: State<'_, AppContext>,
 ) -> AppResult<()> {
-    state.save_mcp_server(original_name.as_deref(), spec)
+    state.save_mcp_server_with_fragment(original_name.as_deref(), spec, fragment.as_deref())
 }
 
 #[tauri::command]
@@ -454,6 +456,27 @@ pub fn import_mcp_from_live(state: State<'_, AppContext>) -> AppResult<usize> {
 #[tauri::command]
 pub fn mcp_sync_preview(state: State<'_, AppContext>) -> AppResult<McpSyncPreview> {
     state.mcp_sync_preview()
+}
+
+/// MCP 编辑页初始化：读取 live 中指定服务器的原始片段（含未建模键与注释）。
+#[tauri::command]
+pub fn get_mcp_server_toml(
+    name: String,
+    state: State<'_, AppContext>,
+) -> AppResult<Option<String>> {
+    state.mcp_server_toml(&name)
+}
+
+/// MCP 编辑页实时同步：把表单建模字段写进单服务器片段（表单 → 编辑器）。
+#[tauri::command]
+pub fn patch_mcp_fragment(toml: String, spec: McpServerSpec) -> AppResult<String> {
+    codex_config::patch_mcp_fragment(&toml, &spec)
+}
+
+/// MCP 编辑页实时同步：单服务器片段解析为建模字段（编辑器 → 表单）。
+#[tauri::command]
+pub fn parse_mcp_fragment(toml: String) -> AppResult<McpServerSpec> {
+    codex_config::parse_mcp_fragment(&toml)
 }
 
 #[tauri::command]

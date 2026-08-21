@@ -12,7 +12,6 @@ import {
   PhArrowsDownUp,
   PhCircleDashed,
   PhGlobe,
-  PhNotePencil,
   PhPlus,
   PhTerminalWindow,
 } from "@phosphor-icons/vue";
@@ -234,20 +233,28 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
           :key="server.name"
           class="apple-list-row"
         >
-          <div class="flex min-w-0 items-center gap-2.5">
-            <span class="settings-icon-tile grid h-8 w-8 shrink-0 place-items-center rounded-lg text-accent">
+          <button
+            type="button"
+            class="group flex min-w-0 items-center gap-2.5 text-left"
+            :aria-label="`编辑 ${server.name}`"
+            title="点击编辑"
+            @click="editingServer = server"
+          >
+            <span class="settings-icon-tile grid h-8 w-8 shrink-0 place-items-center rounded-lg text-accent transition-colors group-hover:bg-[var(--selection-bg)]">
               <component :is="transportIconOf(server)" class="h-4 w-4" weight="bold" aria-hidden="true" />
             </span>
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <span class="truncate text-[var(--font-size-base)] font-semibold">{{ server.name }}</span>
+                <span class="min-w-0 truncate text-[var(--font-size-base)] font-semibold transition-colors group-hover:text-accent">
+                  {{ server.name }}
+                </span>
                 <span class="shrink-0 rounded-md bg-black/5 px-1.5 py-px text-[10px] font-medium tracking-wide text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
                   {{ mcpTransportText(server) }}
                 </span>
               </div>
               <div class="mono muted truncate text-[11px]">{{ metaOf(server) }}</div>
             </div>
-          </div>
+          </button>
           <div class="flex shrink-0 items-center gap-1.5">
             <AppSwitch
               size="small"
@@ -255,15 +262,6 @@ async function onApply(direction: "live-to-db" | "db-to-live") {
               :aria-label="`启用 ${server.name}`"
               @update:value="toggleEnabled(server, $event)"
             />
-            <button
-              type="button"
-              class="apple-icon-button text-zinc-600 hover:bg-[var(--sidebar-bg)] hover:text-accent dark:text-zinc-300"
-              title="编辑"
-              :aria-label="'编辑 ' + server.name"
-              @click="editingServer = server"
-            >
-              <PhNotePencil class="h-4 w-4" weight="bold" aria-hidden="true" />
-            </button>
             <button
               type="button"
               class="apple-icon-button text-[var(--danger)]/70 hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]"

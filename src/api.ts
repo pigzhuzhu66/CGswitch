@@ -256,10 +256,28 @@ function webState(): AppState {
   };
 }
 
+// MCP 单服务器片段的 web 调试渲染（仅建模字段；真实渲染在 Rust 侧 toml_edit）
+function renderMcpFragmentWeb(spec: McpServerSpec): string {
+  const lines = [`[mcp_servers.${spec.name}]`];
+  if (spec.command) lines.push(`command = "${spec.command}"`);
+  if (spec.args.length) {
+    lines.push(`args = [${spec.args.map((arg) => `"${arg}"`).join(", ")}]`);
+  }
+  if (spec.url) lines.push(`url = "${spec.url}"`);
+  if (spec.bearer_token_env_var) {
+    lines.push(`bearer_token_env_var = "${spec.bearer_token_env_var}"`);
+  }
+  const env = Object.entries(spec.env);
+  if (env.length) {
+    lines.push(`[mcp_servers.${spec.name}.env]`);
+    for (const [key, value] of env) lines.push(`${key} = "${value}"`);
+  }
+  return lines.join("\n") + "\n";
+}
+
 async function webInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   await new Promise((resolve) => setTimeout(resolve, 120));
-  switch (command) {
-    case "get_state":
+  switch (command) {    case "get_state":
     case "get_settings":
       return webState() as T;
     case "get_codex_status":
@@ -609,25 +627,7 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       return [...webMcpServers] as T;
     case "get_mcp_section_toml": {
       // 创建表单预填用：把 mock 列表渲染成 config.toml 片段
-      const lines: string[] = [];
-      for (const server of webMcpServers) {
-        lines.push(`[mcp_servers.${server.name}]`);
-        if (server.command) lines.push(`command = "${server.command}"`);
-        if (server.args.length) {
-          lines.push(`args = [${server.args.map((arg) => `"${arg}"`).join(", ")}]`);
-        }
-        if (server.url) lines.push(`url = "${server.url}"`);
-        if (server.bearer_token_env_var) {
-          lines.push(`bearer_token_env_var = "${server.bearer_token_env_var}"`);
-        }
-        const env = Object.entries(server.env);
-        if (env.length) {
-          lines.push(`[mcp_servers.${server.name}.env]`);
-          for (const [key, value] of env) lines.push(`${key} = "${value}"`);
-        }
-        lines.push("");
-      }
-      return lines.join("\n") as T;
+      return webMcpServers.map(renderMcpFragmentWeb).join("\n") as T;
     }
     case "restore_mcp_from_database":
       return webMcpServers.length as T;
@@ -685,6 +685,55 @@ async function webInvoke<T>(command: string, args?: Record<string, unknown>): Pr
       webMcpServers = webMcpServers.filter((server) => server.name !== (original ?? spec.name));
       webMcpServers.push(spec);
       return undefined as T;
+    }
+    // —— MCP 编辑页双向同步的 web 调试桩（精度有限：仅渲染/解析建模字段，
+    //    未建模键与注释不保留；真实保真逻辑在 Rust 侧 toml_edit）——
+    case "get_mcp_server_toml": {
+      const server = webMcpServers.find((item) => item.name === args?.name);
+      return (server ? renderMcpFragmentWeb(server) : null) as unknown as T;
+    }
+    case "patch_mcp_fragment":
+      return renderMcpFragmentWeb(args?.spec as McpServerSpec) as unknown as T;
+    case "parse_mcp_fragment": {
+      const text = String(args?.toml ?? "");
+      const spec: McpServerSpec = {
+        name: "",
+        enabled: null,
+        startup_timeout_sec: null,
+        tool_timeout_sec: null,
+        command: null,
+        args: [],
+        env: {},
+        url: null,
+        bearer_token_env_var: null,
+        http_headers: {},
+        env_http_headers: {},
+      };
+      for (const raw of text.split("\n")) {
+        const line = raw.trim();
+        const header = /^\[mcp_servers\.([A-Za-z0-9_-]+)\]$/.exec(line);
+        if (header) {
+          spec.name = header[1];
+          continue;
+        }
+        const match = /^(command|url|bearer_token_env_var|args)\s*=\s*(.+)$/.exec(line);
+        if (!match) continue;
+        const value = match[2].trim();
+        if (match[1] === "args") {
+          try {
+            spec.args = (JSON.parse(value.replace(/'/g, '"')) as unknown[]).map(String);
+          } catch {
+            // 输入进行中的中间态，忽略
+          }
+        } else {
+          const str = value.replace(/^"|"$/g, "");
+          if (match[1] === "command") spec.command = str;
+          else if (match[1] === "url") spec.url = str;
+          else spec.bearer_token_env_var = str;
+        }
+      }
+      if (!spec.name) throw new Error("Web 调试模式：片段中没有服务器");
+      return spec as T;
     }
     case "delete_mcp_server":
       webMcpServers = webMcpServers.filter((server) => server.name !== args?.name);
@@ -777,8 +826,15 @@ export const api = {
   importMcpFromLive: () => call<number>("import_mcp_from_live"),
   // 同步预览：对比 live 与数据库镜像的 MCP 差异（只读），供同步前人工裁决
   mcpSyncPreview: () => call<McpSyncPreview>("mcp_sync_preview"),
-  saveMcpServer: (originalName: string | null, spec: McpServerSpec) =>
-    call<void>("save_mcp_server", { originalName, spec }),
+  saveMcpServer: (originalName: string | null, spec: McpServerSpec, fragment?: string) =>
+    call<void>("save_mcp_server", { originalName, spec, fragment }),
+  // MCP 编辑页：读取 live 原始片段（含未建模键与注释），初始化编辑器用
+  getMcpServerToml: (name: string) => call<string | null>("get_mcp_server_toml", { name }),
+  // MCP 编辑页实时同步：表单建模字段写进片段（表单 → 编辑器）
+  patchMcpFragment: (toml: string, spec: McpServerSpec) =>
+    call<string>("patch_mcp_fragment", { toml, spec }),
+  // MCP 编辑页实时同步：片段解析回建模字段（编辑器 → 表单）
+  parseMcpFragment: (toml: string) => call<McpServerSpec>("parse_mcp_fragment", { toml }),
   deleteMcpServer: (name: string) => call<void>("delete_mcp_server", { name }),
   restartCodex: () => call<void>("restart_codex"),
   setWindowTheme: (dark: boolean) => call<void>("set_window_theme", { dark }),

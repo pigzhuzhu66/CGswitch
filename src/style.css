@@ -872,7 +872,7 @@ body.drag-active * {
 
 .apple-editor-shell {
   overflow: hidden;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: rgb(0 0 0 / 0.04);
   box-shadow: 0 0 0 1px var(--panel-ring);
 }
@@ -969,11 +969,16 @@ body.drag-active * {
   transition: opacity 240ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-/* 模态框遮罩背景虚化：Apple 经典手法——弹窗打开时背景模糊 + 压暗，
-   内容弹出更有层级感；系统关闭透明度时退回纯遮罩 */
+/* 模态框遮罩背景虚化：参考轻灰色半透明遮罩 + 中等模糊，保留背景布局但压住细节；
+   系统关闭透明度时退回纯遮罩 */
 .n-modal-container .n-modal-mask {
-  -webkit-backdrop-filter: blur(8px) saturate(160%);
-  backdrop-filter: blur(8px) saturate(160%);
+  background: rgb(0 0 0 / 0.1);
+  -webkit-backdrop-filter: blur(6px) saturate(100%);
+  backdrop-filter: blur(6px) saturate(100%);
+}
+
+:root.dark .n-modal-container .n-modal-mask {
+  background: rgb(0 0 0 / 0.34);
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -1084,6 +1089,10 @@ button:focus-visible {
   transition:
     top 160ms cubic-bezier(0.22, 1, 0.36, 1),
     left 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.apple-sidebar-indicator--instant {
+  transition: none;
 }
 
 /* 设置页标签栏下划线指示条：与侧边栏指示条同一动画曲线 */

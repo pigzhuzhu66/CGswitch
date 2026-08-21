@@ -36,6 +36,7 @@ const settingsNavBtn = ref<HTMLElement | null>(null);
 const sidebarNavRef = ref<HTMLElement | null>(null);
 const indicatorTop = ref(8);
 const indicatorLeft = ref(0);
+const indicatorInstant = ref(false);
 const state = ref<AppState | null>(null);
 const loadError = ref("");
 const systemDark = ref(window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -108,7 +109,13 @@ function updateSidebarIndicator() {
   }
 }
 
-watch(view, updateSidebarIndicator);
+watch(view, (nextView, previousView) => {
+  indicatorInstant.value = nextView === "settings" || previousView === "settings";
+  updateSidebarIndicator();
+  requestAnimationFrame(() => {
+    indicatorInstant.value = false;
+  });
+});
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value;
@@ -274,7 +281,7 @@ useModalEnterConfirm();
             <div class="flex min-h-0 flex-1">
             <aside class="apple-sidebar relative h-full shrink-0" :class="isSidebarCollapsed ? 'apple-sidebar--collapsed' : ''">
               <nav ref="sidebarNavRef" class="relative mx-1.5 mt-3 space-y-1">
-                <span class="apple-sidebar-indicator" :style="{ top: `${indicatorTop}px`, left: `${indicatorLeft}px` }" aria-hidden="true" />
+                <span class="apple-sidebar-indicator" :class="{ 'apple-sidebar-indicator--instant': indicatorInstant }" :style="{ top: `${indicatorTop}px`, left: `${indicatorLeft}px` }" aria-hidden="true" />
                 <button ref="profilesNavBtn" type="button" class="apple-sidebar-nav-button" :class="view === 'profiles' ? 'bg-[var(--selection-bg)] font-semibold text-accent' : 'font-normal hover:bg-black/5 dark:hover:bg-white/8'" aria-label="供应商配置" @click="goProfiles" @mouseenter="sidebarFlyoutArmed = true">
                   <PhStack weight="bold" aria-hidden="true" />
                   <span class="apple-sidebar-label" :aria-hidden="isSidebarCollapsed">供应商配置</span>

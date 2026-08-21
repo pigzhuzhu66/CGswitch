@@ -14,6 +14,7 @@ use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
+use tauri_plugin_window_state::{Builder as WindowStateBuilder, StateFlags};
 
 use crate::services::AppContext;
 
@@ -29,6 +30,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            WindowStateBuilder::default()
+                .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
+                .build(),
+        )
         .manage(context)
         .manage(oauth_state)
         .invoke_handler(tauri::generate_handler![
@@ -70,6 +76,9 @@ pub fn run() {
             commands::restore_mcp_from_database,
             commands::import_mcp_from_live,
             commands::mcp_sync_preview,
+            commands::get_mcp_server_toml,
+            commands::patch_mcp_fragment,
+            commands::parse_mcp_fragment,
             commands::restart_codex,
             commands::set_window_theme,
             commands::auth_start_login,

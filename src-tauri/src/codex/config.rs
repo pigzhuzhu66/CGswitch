@@ -537,6 +537,45 @@ pub fn replace_mcp_section_from_fragments(
     }
 }
 
+/// 把表单建模字段写进单服务器片段文本（编辑页"表单 → 编辑器"实时同步用）。
+/// 复用保存路径的 upsert：未建模键、注释、格式原样保留；
+/// 段内现有服务器名与 spec.name 不同时按重命名处理（删旧建新）。
+pub fn patch_mcp_fragment(toml: &str, spec: &McpServerSpec) -> AppResult<String> {
+    let mut document = parse_document(toml)?;
+    let existing = document
+        .as_table()
+        .get("mcp_servers")
+        .and_then(Item::as_table)
+        .and_then(|servers| servers.iter().next())
+        .map(|(name, _)| name.to_string());
+    if let Some(old) = existing {
+        if old != spec.name {
+            // 原位重命名：整表搬到新键名（未建模键、注释随表保留），不能删了重建
+            if let Some(servers) = document
+                .as_table_mut()
+                .get_mut("mcp_servers")
+                .and_then(Item::as_table_mut)
+            {
+                if let Some(item) = servers.remove(&old) {
+                    servers.insert(spec.name.as_str(), item);
+                }
+            }
+        }
+    }
+    upsert_mcp_server(&mut document, spec)?;
+    Ok(document.to_string())
+}
+
+/// 解析单服务器片段为建模字段（编辑页"编辑器 → 表单"实时回填用）。
+/// 片段里没有服务器或语法不完整时返回 Err，由前端忽略（等待输入完成）。
+pub fn parse_mcp_fragment(toml: &str) -> AppResult<McpServerSpec> {
+    let document = parse_document(toml)?;
+    mcp_servers_from_document(&document)
+        .into_iter()
+        .next()
+        .ok_or_else(|| app_err!("片段中没有 MCP 服务器"))
+}
+
 fn string_of(table: &Table, key: &str) -> Option<String> {
     table.get(key).and_then(Item::as_str).map(str::to_string)
 }
@@ -1110,6 +1149,35 @@ url = "https://mcp.tavily.com/mcp"
         let text = target.to_string();
         assert!(text.contains("[mcp_servers.node_repl]"), "{text}");
         assert!(!text.contains("mcp_servers.github"), "{text}");
+    }
+
+    #[test]
+    fn mcp_fragment_patch_and_parse_round_trip() {
+        // 表单 → 片段：重命名删旧建新；未建模键与注释原样保留
+        let base = "[mcp_servers.old]\n# 手动维护\ncwd = \"/srv\"\ncommand = \"npx\"\n";
+        let spec = McpServerSpec {
+            name: "fresh".into(),
+            command: Some("node".into()),
+            args: vec!["-y".into()],
+            ..Default::default()
+        };
+        let patched = patch_mcp_fragment(base, &spec).unwrap();
+        assert!(patched.contains("[mcp_servers.fresh]"), "{patched}");
+        assert!(!patched.contains("mcp_servers.old"), "{patched}");
+        assert!(patched.contains("# 手动维护"), "{patched}");
+        assert!(patched.contains("cwd = \"/srv\""), "{patched}");
+        assert!(patched.contains("command = \"node\""), "{patched}");
+        assert!(patched.contains("\"-y\""), "{patched}");
+
+        // 片段 → 表单：解析回建模字段
+        let parsed = parse_mcp_fragment(&patched).unwrap();
+        assert_eq!(parsed.name, "fresh");
+        assert_eq!(parsed.command.as_deref(), Some("node"));
+        assert_eq!(parsed.args, ["-y"]);
+
+        // 语法不完整 / 无服务器：Err，由前端忽略
+        assert!(parse_mcp_fragment("[mcp_servers.x]\ncommand = \"un").is_err());
+        assert!(parse_mcp_fragment("model = \"gpt\"\n").is_err());
     }
 
     #[test]

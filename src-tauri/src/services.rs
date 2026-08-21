@@ -1502,6 +1502,15 @@ impl AppContext {
         Ok(codex_config::mcp_servers_from_document(&document))
     }
 
+    /// 读取指定 MCP 服务器的原始片段（含未建模键与注释；编辑页初始化编辑器用）。
+    pub fn mcp_server_toml(&self, name: &str) -> AppResult<Option<String>> {
+        let document = codex_config::parse_document(&self.read_live_config()?)?;
+        Ok(codex_config::mcp_server_fragments_from_document(&document)
+            .into_iter()
+            .find(|(fragment_name, _)| fragment_name == name)
+            .map(|(_, toml)| toml))
+    }
+
     /// 对比 live config.toml 与数据库镜像的 MCP 差异（只读，不写任何一侧），
     /// 供同步前人工裁决。live 无法解析时返回错误，前端进入“仅可从数据库恢复”降级模式。
     pub fn mcp_sync_preview(&self) -> AppResult<McpSyncPreview> {
@@ -1667,6 +1676,18 @@ impl AppContext {
         original_name: Option<&str>,
         spec: McpServerSpec,
     ) -> AppResult<()> {
+        self.save_mcp_server_with_fragment(original_name, spec, None)
+    }
+
+    /// 编辑页保存：fragment = 编辑器当前片段。有片段时以它整表替换 live 里的该服务器
+    /// （未建模键、注释与编辑器所见一致——所见即所得），建模字段先按 spec 补齐兜底；
+    /// 无片段（纯表单路径）退回就地 upsert。
+    pub fn save_mcp_server_with_fragment(
+        &self,
+        original_name: Option<&str>,
+        spec: McpServerSpec,
+        fragment: Option<&str>,
+    ) -> AppResult<()> {
         let _guard = self
             .operation
             .lock()
@@ -1733,7 +1754,26 @@ impl AppContext {
             return Err(app_err!("已存在同名 MCP 服务器"));
         }
 
-        codex_config::upsert_mcp_server(&mut document, &spec)?;
+        if let Some(fragment) = fragment {
+            // 片段路径：把建模字段补进片段后整表搬进 live，编辑器所见 = 保存所写
+            let patched = codex_config::patch_mcp_fragment(fragment, &spec)?;
+            let mut fragment_doc = codex_config::parse_document(&patched)?;
+            let table = fragment_doc
+                .as_table_mut()
+                .get_mut("mcp_servers")
+                .and_then(toml_edit::Item::as_table_mut)
+                .and_then(|servers| servers.remove(spec.name.as_str()))
+                .ok_or_else(|| app_err!("片段中没有可保存的服务器 {}", spec.name))?;
+            document
+                .as_table_mut()
+                .entry("mcp_servers")
+                .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+                .as_table_mut()
+                .ok_or_else(|| app_err!("mcp_servers 不是 TOML table"))?
+                .insert(spec.name.as_str(), table);
+        } else {
+            codex_config::upsert_mcp_server(&mut document, &spec)?;
+        }
         let config_path = self.paths.codex_config();
         backup_file(&config_path, &self.paths.config_backup, "config")?;
         atomic_write(
@@ -3351,6 +3391,33 @@ CODEX_HOME = "C:\\.codex"
         assert!(config.contains("node_repl.exe"), "{config}");
         assert!(!config.contains("stale.exe"), "{config}");
         assert!(config.contains("[mcp_servers.github]"), "{config}");
+    }
+
+    #[test]
+    fn mcp_save_with_fragment_is_wysiwyg() {
+        // 片段路径保存：编辑器新增的未建模键/注释保留，片段里删掉的键（cwd）随之消失，
+        // 片段缺失的建模字段（url）按 spec 补齐
+        let (context, _home) =
+            mcp_test_context("[mcp_servers.a]\nurl = \"https://a/mcp\"\ncwd = \"/old\"\n");
+        let fragment = "[mcp_servers.a]\n# 手动维护\ntools = [\"x\"]\n";
+        context
+            .save_mcp_server_with_fragment(
+                Some("a"),
+                McpServerSpec {
+                    name: "a".into(),
+                    url: Some("https://a/mcp".into()),
+                    ..Default::default()
+                },
+                Some(fragment),
+            )
+            .unwrap();
+
+        let config = read_config_text(&context);
+        assert!(config.contains("[mcp_servers.a]"), "{config}");
+        assert!(config.contains("# 手动维护"), "{config}");
+        assert!(config.contains("tools = [\"x\"]"), "{config}");
+        assert!(config.contains("url = \"https://a/mcp\""), "{config}");
+        assert!(!config.contains("cwd"), "{config}");
     }
 
     #[test]
