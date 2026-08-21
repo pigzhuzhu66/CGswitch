@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## [0.5.0] - 2026-08-21
+
+### 新增
+
+- MCP 编辑页实时同步：表单与 TOML 片段双向更新
+
+### 修复
+
+- DeepSeek 模型配置调整，禁用搜索工具支持
+
+### 界面与样式
+
+- 优化按钮样式，增强错误提示的可视化效果
+
+### 重构
+
+- 后端 `services.rs`（4448 行单体）拆分为 9 个聚焦模块：`accounts` / `apply` / `connections` / `mcp` / `profile_config` / `profiles` / `settings` / `storage` + `mod.rs`
+- 前端 `ProfileEdit.vue` 拆分为 `ProfileEditDocuments` / `ProfileEditProviderSection` 子组件与 `profileEditText` 工具函数；`McpEdit` / `McpView` 同步适配
+- 移除 `motion-v` 动画库并优化视图切换效果
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v0.5.0-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v0.5.0-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v0.5.0-macOS-x64.dmg`
+
 ## [0.4.13] - 2026-08-21
 
 ### 新增
