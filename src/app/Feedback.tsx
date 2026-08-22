@@ -1,6 +1,6 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Toast from "@radix-ui/react-toast";
-import { CircleCheck, CircleX, Info, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleX, Info, Trash2, TriangleAlert } from "lucide-react";
 import { createContext, useCallback, useContext, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 type ToastTone = "success" | "error" | "warning" | "info";
@@ -44,11 +44,6 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   const confirmActionRef = useRef<HTMLButtonElement>(null);
   const nextToastId = useRef(0);
 
-  const showToast = useCallback((tone: ToastTone, message: string) => {
-    const id = ++nextToastId.current;
-    setToasts((current) => [...current, { id, tone, message, open: true }].slice(-MAX_TOASTS));
-  }, []);
-
   const removeToast = useCallback((id: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
@@ -57,6 +52,12 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     setToasts((current) => current.map((toast) => toast.id === id ? { ...toast, open: false } : toast));
     window.setTimeout(() => removeToast(id), 220);
   }, [removeToast]);
+
+  const showToast = useCallback((tone: ToastTone, message: string) => {
+    const id = ++nextToastId.current;
+    setToasts((current) => [...current, { id, tone, message, open: true }].slice(-MAX_TOASTS));
+    window.setTimeout(() => closeToast(id), 3000);
+  }, [closeToast]);
 
   const confirm = useCallback((options: ConfirmOptions) => {
     return new Promise<boolean>((resolve) => setConfirmation({ ...options, resolve }));
@@ -105,7 +106,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
               key={toast.id}
               forceMount
               open={toast.open}
-              duration={3000}
+              duration={Infinity}
               onOpenChange={(open) => {
                 if (!open) closeToast(toast.id);
               }}
@@ -150,7 +151,10 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
               (document.activeElement as HTMLElement | null)?.blur();
             }}
           >
-            <AlertDialog.Title className="app-dialog-title">{confirmation?.title}</AlertDialog.Title>
+            <AlertDialog.Title className="app-dialog-title">
+              {confirmation?.destructive ? <Trash2 className="mr-1.5 inline-block text-[var(--danger)]" size={18} strokeWidth={2} aria-hidden="true" /> : null}
+              {confirmation?.title}
+            </AlertDialog.Title>
             <AlertDialog.Description className="app-dialog-description">
               {confirmation?.description}
             </AlertDialog.Description>

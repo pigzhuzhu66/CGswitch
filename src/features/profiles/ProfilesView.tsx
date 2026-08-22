@@ -1,7 +1,7 @@
 import { Camera, Plus, RefreshCw } from "lucide-react";
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { AppDialog } from "../../components/AppDialog";
@@ -28,53 +28,37 @@ interface RestartProgressCardProps {
 }
 
 function ProfileDragPreview({ profile, width }: { profile: ProfileSummary; width: number | null }) {
-  return <div className="drag-dragging profile-drag-preview" style={{ width: width ? `${width}px` : undefined }}><div className="flex items-center gap-3 px-5 py-[var(--gap-card)]"><ProfileIconTile name={profile.name} icon={profile.icon} /><div className="min-w-0"><div className="truncate text-[16px] font-semibold tracking-tight">{profile.name}</div><div className="muted mt-1 flex items-center gap-1"><span className="apple-chip">{profile.model ?? "未设置"}</span>{profile.provider ? <span className="apple-chip">{profile.provider}</span> : null}<span className="apple-chip">{profile.reasoning_effort ?? "默认"}</span></div></div></div></div>;
+  return <div className="drag-dragging profile-drag-preview" style={{ width: width ? `${width}px` : undefined }}><div className="flex items-center gap-3 px-5 py-4.5"><ProfileIconTile name={profile.name} icon={profile.icon} /><div className="min-w-0"><div className="title-md truncate">{profile.name}</div><div className="muted mt-1 flex items-center gap-1"><span className="apple-chip">{profile.model ?? "未设置"}</span>{profile.provider ? <span className="apple-chip">{profile.provider}</span> : null}<span className="apple-chip">{profile.reasoning_effort ?? "默认"}</span></div></div></div></div>;
 }
 
 function RestartProgressCard({ stage, message, visible, onHidden }: RestartProgressCardProps) {
-  const cardRef = useRef<HTMLDivElement>(null);
+  const revealRef = useRef<HTMLDivElement>(null);
 
-  useLayoutEffect(() => {
-    const node = cardRef.current;
-    if (!node) return;
+  // 出场：grid 收起过渡结束后卸载；transitionend 丢失时用定时器兜底
+  useEffect(() => {
+    if (visible) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      if (!visible) onHidden();
+      onHidden();
       return;
     }
-
-    const natural = node.scrollHeight;
-    const styles = getComputedStyle(node);
-    const margin = parseFloat(styles.marginTop) || 24;
-    const padTop = parseFloat(styles.paddingTop) || 0;
-    const padBottom = parseFloat(styles.paddingBottom) || 0;
-    const fromHeight = visible ? 0 : natural;
-    const toHeight = visible ? natural : 0;
-    const fromMargin = visible ? 0 : margin;
-    const toMargin = visible ? margin : 0;
-    node.style.overflow = "hidden";
-    node.style.opacity = visible ? "0" : "1";
-    const start = performance.now();
-    let frame = 0;
-    const tick = (now: number) => {
-      const progress = Math.min(1, (now - start) / RESTART_CARD_DURATION);
-      const eased = 1 - (1 - progress) ** 4;
-      node.style.height = `${Math.round(fromHeight + (toHeight - fromHeight) * eased)}px`;
-      node.style.marginTop = `${Math.round(fromMargin + (toMargin - fromMargin) * eased)}px`;
-      node.style.paddingTop = `${Math.round(padTop * (visible ? eased : 1 - eased))}px`;
-      node.style.paddingBottom = `${Math.round(padBottom * (visible ? eased : 1 - eased))}px`;
-      node.style.opacity = `${visible ? eased : 1 - eased}`;
-      if (progress < 1) {
-        frame = requestAnimationFrame(tick);
-        return;
-      }
-      if (visible) node.style.cssText = "";
-      else onHidden();
+    const node = revealRef.current;
+    if (!node) {
+      onHidden();
+      return;
+    }
+    const finish = (event?: TransitionEvent) => {
+      if (event && (event.target !== node || event.propertyName !== "grid-template-rows")) return;
+      onHidden();
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [onHidden, visible]);
+    node.addEventListener("transitionend", finish as EventListener);
+    const timer = window.setTimeout(() => finish(), RESTART_CARD_DURATION + 80);
+    return () => {
+      node.removeEventListener("transitionend", finish as EventListener);
+      window.clearTimeout(timer);
+    };
+  }, [visible, onHidden]);
 
-  return <div ref={cardRef} className="apple-group mt-[var(--gap-page)] px-4 py-3"><div className="flex items-center justify-between gap-3"><div className="font-semibold">重启进度</div><span className={`apple-chip ${stage === "error" ? "chip-danger" : stage === "success" ? "chip-success" : ""}`}>{textByStage[stage]}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-black/8 dark:bg-white/8"><div className={`h-full rounded-full transition-[width] duration-300 ${stage === "error" ? "bg-danger" : stage === "success" ? "bg-success" : "bg-accent"}`} style={{ width: `${progressByStage[stage]}%` }} /></div>{message ? <p className="muted mt-3 text-sm">{message}</p> : null}</div>;
+  return <div ref={revealRef} className={`restart-card-reveal${visible ? " restart-card-reveal--open" : ""}`} aria-hidden={!visible}><div className="restart-card-reveal__inner"><div className="apple-group mb-[var(--gap-page)] px-4 py-3"><div className="flex items-center justify-between gap-3"><div className="font-semibold">重启进度</div><span className={`apple-chip ${stage === "error" ? "chip-danger" : stage === "success" ? "chip-success" : ""}`}>{textByStage[stage]}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-black/8 dark:bg-white/8"><div className={`h-full rounded-full transition-[width] duration-300 ${stage === "error" ? "bg-danger" : stage === "success" ? "bg-success" : "bg-accent"}`} style={{ width: `${progressByStage[stage]}%` }} /></div>{message ? <p className="muted mt-3 text-sm">{message}</p> : null}</div></div></div>;
 }
 
 export default function ProfilesView({ state, activationEpoch, onRefresh }: ProfilesViewProps) {
@@ -290,12 +274,12 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
   return (
     <section className="apple-scroll-page mx-auto w-full max-w-none">
       <header className="apple-page-bar flex-wrap justify-between gap-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm"><span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${state.codex.running ? "border-success/25 bg-success/10 text-[#248a3d] dark:border-success/30 dark:bg-success/10 dark:text-[#6ee7a0]" : "border-[var(--panel-border)] bg-black/4 text-zinc-500 dark:bg-white/6"}`}><span className="relative flex h-2 w-2"><span className={`relative inline-flex h-2 w-2 rounded-full ${state.codex.running ? "bg-success shadow-[0_0_6px_1px_rgba(52,199,89,0.45)]" : "bg-zinc-400"}`} /></span>Codex {state.codex.running ? "运行中" : "未运行"}</span></div>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm"><span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${state.codex.running ? "border-success/25 bg-success/10 text-[var(--success-text)] dark:border-success/30 dark:bg-success/10" : "border-[var(--panel-border)] bg-black/4 muted dark:bg-white/6"}`}><span className="relative flex h-2 w-2"><span className={`relative inline-flex h-2 w-2 rounded-full ${state.codex.running ? "bg-success shadow-[0_0_6px_1px_rgba(52,199,89,0.45)]" : "bg-black/40 dark:bg-white/40"}`} /></span>Codex {state.codex.running ? "运行中" : "未运行"}</span></div>
         <div className="flex flex-wrap items-center gap-2"><button type="button" className="apple-action-button apple-action-button--quaternary" disabled={busy || (restartStage !== "idle" && restartStage !== "success" && restartStage !== "error")} title="重启 Codex" onClick={() => void restart(false)}><RefreshCw className="h-4 w-4" strokeWidth={2} />重启 Codex</button><button type="button" className="apple-icon-button text-accent hover:bg-[var(--sidebar-bg)]" disabled={busy} title="捕获当前配置" aria-label="捕获当前配置" onClick={openCapture}><Camera className="h-4 w-4" strokeWidth={2} /></button><button type="button" className="apple-action-button app-button--primary" disabled={busy} onClick={() => setCreatingProfile(true)}><Plus className="h-4 w-4" strokeWidth={2} />添加供应商</button></div>
       </header>
       <div className="apple-edit-content">
         {restartCardMounted ? <RestartProgressCard stage={restartCardStage} message={restartMessage} visible={restartCardVisible} onHidden={onRestartCardHidden} /> : null}
-        <div className="mt-[var(--gap-page)]">{items.length === 0 ? <div className="apple-group py-14 text-center"><p className="muted">还没有供应商配置。可以添加内置官方供应商，或先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。</p></div> : <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragCancel={onDragCancel} onDragEnd={onDragEnd}><SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}><div className="profile-list apple-group relative will-change-transform">{items.map((profile) => <ProfileCard key={profile.id} profile={profile} active={profile.id === state.active_profile_id} busy={busy} activationEpoch={activationEpoch} subscriptionAuthed={authStatus.authenticated} subscriptionAccount={subscriptionAccount} subscriptionSource={subscriptionSource} boundAccount={boundAccountLogin(profile)} balanceCache={state.balance_cache} onApply={() => void applyProfile(profile)} onRename={() => openRename(profile)} onEdit={() => setEditingProfile(profile)} onRemove={() => void removeProfile(profile)} onDuplicate={() => void duplicateProfile(profile)} />)}</div></SortableContext><DragOverlay dropAnimation={null}>{draggedProfile ? <ProfileDragPreview profile={draggedProfile} width={draggedProfileWidth} /> : null}</DragOverlay></DndContext>}</div>
+        <div>{items.length === 0 ? <div className="apple-group py-14 text-center"><p className="muted">还没有供应商配置。可以添加内置官方供应商，或先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。</p></div> : <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragCancel={onDragCancel} onDragEnd={onDragEnd}><SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}><div className="profile-list apple-group relative will-change-transform">{items.map((profile) => <ProfileCard key={profile.id} profile={profile} active={profile.id === state.active_profile_id} busy={busy} activationEpoch={activationEpoch} subscriptionAuthed={authStatus.authenticated} subscriptionAccount={subscriptionAccount} subscriptionSource={subscriptionSource} boundAccount={boundAccountLogin(profile)} balanceCache={state.balance_cache} onApply={() => void applyProfile(profile)} onRename={() => openRename(profile)} onEdit={() => setEditingProfile(profile)} onRemove={() => void removeProfile(profile)} onDuplicate={() => void duplicateProfile(profile)} />)}</div></SortableContext><DragOverlay dropAnimation={null}>{draggedProfile ? <ProfileDragPreview profile={draggedProfile} width={draggedProfileWidth} /> : null}</DragOverlay></DndContext>}</div>
       </div>
       <AppDialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null); }} title={modal === "capture" ? "保存当前配置快照" : "重命名供应商"} initialFocusRef={nameInput} footer={<><button type="button" className="apple-action-button" onClick={() => setModal(null)}>取消</button><button type="button" className="apple-action-button app-button--primary" disabled={busy || !profileName.trim()} onClick={() => void submitModal()}>保存</button></>}>
         <div className="space-y-4"><p className="muted text-sm">{modal === "capture" ? "为当前 Codex 配置创建快照，切换供应商后可一键恢复。" : "输入新的供应商名称。"}</p><input ref={nameInput} className="app-input" maxLength={50} placeholder="例如：DeepSeek 日常" value={profileName} onChange={(event) => setProfileName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) void submitModal(); }} /></div>
