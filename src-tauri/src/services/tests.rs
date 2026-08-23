@@ -336,6 +336,35 @@ fn active_chatgpt_profile_reads_live_auth_without_empty_override() {
 }
 
 #[test]
+fn update_profile_config_clears_active_live_auth_when_editor_is_empty() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = crate::paths::from_home(home.path()).unwrap();
+    paths.ensure().unwrap();
+    std::fs::create_dir_all(&paths.codex_home).unwrap();
+    std::fs::write(paths.codex_config(), "model = \"gpt-5.6\"\n").unwrap();
+    std::fs::write(
+        paths.codex_home.join("auth.json"),
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"live"}}"#,
+    )
+    .unwrap();
+
+    let context = AppContext::new(paths).unwrap();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+    context.apply_profile(&profile.id).unwrap();
+    let detail = context.get_profile(&profile.id).unwrap();
+
+    let updated = context
+        .update_profile_config(&profile.id, &detail.config_fragment, None, Some(""))
+        .unwrap();
+
+    assert_eq!(updated.raw_auth, None);
+    assert_eq!(updated.auth_content, None);
+    assert!(!context.paths.codex_home.join("auth.json").exists());
+}
+
+#[test]
 fn update_profile_writes_back_to_active_live_config() {
     let home = tempfile::tempdir().unwrap();
     let paths = crate::paths::from_home(home.path()).unwrap();

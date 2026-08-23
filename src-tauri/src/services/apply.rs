@@ -156,6 +156,18 @@ impl AppContext {
         Ok(())
     }
 
+    /// 删除供应商编辑器显式清空的 live auth.json（删除前保留备份）。
+    pub(super) fn remove_raw_auth(&self) -> AppResult<()> {
+        let destination = self.paths.codex_home.join("auth.json");
+        if !destination.exists() {
+            return Ok(());
+        }
+        backup_file(&destination, &self.paths.codex_files_backup, "auth")?;
+        std::fs::remove_file(&destination)
+            .map_err(|error| app_err!("无法删除 {}: {error}", destination.display()))?;
+        Ok(())
+    }
+
     /// 解析 model_catalog_json 指向的路径：支持绝对路径、~/ 开头、以及相对 ~/.codex 的路径。
     pub(super) fn resolve_codex_path(&self, raw: &str) -> Option<PathBuf> {
         let path = raw.trim().trim_matches('"');

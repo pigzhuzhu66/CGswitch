@@ -506,8 +506,12 @@ impl AppContext {
             if catalog_text.is_some() {
                 self.write_raw_catalog(&payload)?;
             }
-            if auth_text.is_some() && payload.raw_auth.is_some() {
-                self.write_raw_auth(&payload)?;
+            if auth_text.is_some() {
+                if payload.raw_auth.is_some() {
+                    self.write_raw_auth(&payload)?;
+                } else {
+                    self.remove_raw_auth()?;
+                }
             }
         }
         self.get_profile(id)

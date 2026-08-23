@@ -464,7 +464,7 @@ main:has(.apple-scroll-page) {
   height: 1rem;
 }
 
-:root.dark .window-control-button:hover {
+:root.dark .window-control-button:not(.window-control-button--close):hover {
   background: rgb(255 255 255 / 0.1);
 }
 
