@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [0.7.2] - 2026-08-24
+
+### 修复
+
+- 供应商编辑器清空 `auth` 字段后，会同步删除活动 live `auth.json`（删除前自动备份到 `codex_files_backup`），避免残留凭据与编辑器状态不一致
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v0.7.2-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v0.7.2-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v0.7.2-macOS-x64.dmg`
+
 ## [0.7.1] - 2026-08-24
 
 ### 新增
