@@ -48,6 +48,9 @@ pub struct ProfilePayload {
     /// 供应商自己保存的 auth.json 原文（编辑后随供应商应用写入 ~/.codex/auth.json）。
     #[serde(default)]
     pub raw_auth: Option<String>,
+    /// None = 未明确设置；Some(true) = 跟随 live auth 自动同步；Some(false) = 用户手动接管。
+    #[serde(default)]
+    pub auth_auto_sync: Option<bool>,
     /// 模型提供方的管理后台网址（卡片显示跳转按钮）。
     #[serde(default)]
     pub admin_url: Option<String>,

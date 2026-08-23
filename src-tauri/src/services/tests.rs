@@ -1,5 +1,15 @@
 use super::*;
 
+fn chatgpt_test_context() -> (tempfile::TempDir, AppContext) {
+    let home = tempfile::tempdir().unwrap();
+    let paths = crate::paths::from_home(home.path()).unwrap();
+    paths.ensure().unwrap();
+    std::fs::create_dir_all(&paths.codex_home).unwrap();
+    std::fs::write(paths.codex_config(), "model = \"gpt-5.6\"\n").unwrap();
+    let context = AppContext::new(paths).unwrap();
+    (home, context)
+}
+
 #[test]
 fn live_codex_auth_is_available_for_matching_account_only() {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -192,15 +202,9 @@ new_field = "accumulated"
 
 #[test]
 fn apply_profile_snapshots_active_official_live_auth_before_switching() {
-    let home = tempfile::tempdir().unwrap();
-    let paths = crate::paths::from_home(home.path()).unwrap();
-    paths.ensure().unwrap();
-    std::fs::create_dir_all(&paths.codex_home).unwrap();
-    std::fs::write(paths.codex_config(), "model = \"gpt-5.6\"\n").unwrap();
     let account_one_auth = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1"}}"#;
-    std::fs::write(paths.codex_home.join("auth.json"), account_one_auth).unwrap();
-
-    let context = AppContext::new(paths).unwrap();
+    let (_home, context) = chatgpt_test_context();
+    std::fs::write(context.paths.codex_home.join("auth.json"), account_one_auth).unwrap();
     let profile_one = context
         .add_builtin_profile("chatgpt", None, None, None, None)
         .unwrap();
@@ -232,6 +236,124 @@ fn apply_profile_snapshots_active_official_live_auth_before_switching() {
         std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
         account_one_auth
     );
+}
+
+#[test]
+fn get_state_syncs_active_official_live_auth_after_focus_refresh() {
+    let (_home, context) = chatgpt_test_context();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+    context.apply_profile(&profile.id).unwrap();
+
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1"}}"#,
+    )
+    .unwrap();
+    context.get_state().unwrap();
+
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1-refreshed"}}"#,
+    )
+    .unwrap();
+    context.get_state().unwrap();
+
+    let stored = context.database.profile(&profile.id).unwrap();
+    assert_eq!(stored.payload.auth_auto_sync, Some(true));
+    assert_eq!(
+        stored.payload.raw_auth.as_deref(),
+        Some(r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1-refreshed"}}"#)
+    );
+}
+
+#[test]
+fn focus_refresh_does_not_cross_sync_bound_auth_accounts() {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+    let (_home, context) = chatgpt_test_context();
+    context
+        .database
+        .upsert_account(&crate::database::StoredAccount {
+            id: "account-1".into(),
+            email: Some("one@example.com".into()),
+            id_token: Some("id-token".into()),
+            refresh_token: "refresh-token".into(),
+            auth_json: None,
+            authenticated_at: 0,
+        })
+        .unwrap();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, Some("account-1"))
+        .unwrap();
+    context.apply_profile(&profile.id).unwrap();
+    let id_token = |account_id: &str| {
+        let payload = URL_SAFE_NO_PAD
+            .encode(format!(r#"{{"chatgpt_account_id":"{account_id}"}}"#).as_bytes());
+        format!("e30.{payload}.sig")
+    };
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        format!(
+            r#"{{"auth_mode":"chatgpt","tokens":{{"id_token":"{}","access_token":"account-1"}}}}"#,
+            id_token("account-1")
+        ),
+    )
+    .unwrap();
+    context.get_state().unwrap();
+
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        format!(
+            r#"{{"auth_mode":"chatgpt","tokens":{{"id_token":"{}","access_token":"account-2"}}}}"#,
+            id_token("account-2")
+        ),
+    )
+    .unwrap();
+    context.get_state().unwrap();
+
+    let stored = context.database.profile(&profile.id).unwrap();
+    assert!(stored
+        .payload
+        .raw_auth
+        .as_deref()
+        .is_some_and(|auth| auth.contains("account-1")));
+    assert!(!stored
+        .payload
+        .raw_auth
+        .as_deref()
+        .is_some_and(|auth| auth.contains("account-2")));
+}
+
+#[test]
+fn manual_auth_clear_is_not_repopulated_by_focus_refresh() {
+    let (_home, context) = chatgpt_test_context();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+    context.apply_profile(&profile.id).unwrap();
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"manual-source"}}"#,
+    )
+    .unwrap();
+    context.get_state().unwrap();
+
+    let config = std::fs::read_to_string(context.paths.codex_config()).unwrap();
+    context
+        .update_profile_config(&profile.id, &config, None, Some(""))
+        .unwrap();
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"should-not-repopulate"}}"#,
+    )
+    .unwrap();
+    context.get_state().unwrap();
+
+    let stored = context.database.profile(&profile.id).unwrap();
+    assert_eq!(stored.payload.auth_auto_sync, Some(false));
+    assert_eq!(stored.payload.raw_auth, None);
 }
 
 #[test]

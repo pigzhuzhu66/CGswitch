@@ -39,6 +39,8 @@ impl AppContext {
         if let Some(document) = live.as_ref() {
             let _ = self.sync_active_profile_document(document);
         }
+        // 窗口启动/聚焦会刷新状态：同时把 Codex 可能刚刚轮换的 live auth 保存到活动档案。
+        let _ = self.sync_active_profile_auth();
         let settings = self.settings()?;
         let profiles = self.database.profiles()?;
         // 激活状态只来自手动应用/捕获（显式状态或应用事件），不做 live 配置推断，
@@ -491,6 +493,8 @@ impl AppContext {
         }
         if auth_text.is_some() {
             payload.raw_auth = auth_override.clone();
+            // 只要编辑器提交了 auth（包括清空），就明确切换为手动控制。
+            payload.auth_auto_sync = Some(false);
         }
         self.database
             .update_profile(id, &stored.name, &payload, &now_ms().to_string())?;

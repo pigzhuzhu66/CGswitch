@@ -1,7 +1,8 @@
 use super::profile_config::{is_builtin_placeholder, provider_api_key};
 use super::{
     app_err, atomic_write, backup_file, builtin, codex_config, normalize_auth_override, now_ms,
-    read_optional_text, AppContext, AppResult, Path, PathBuf, ProfileKind, ProfilePayload,
+    parse_external_auth_json, read_optional_text, AppContext, AppResult, Path, PathBuf,
+    ProfileKind, ProfilePayload,
 };
 
 impl AppContext {
@@ -224,6 +225,7 @@ impl AppContext {
             .and_then(|file| read_optional_text(&file))
             .or_else(|| profile.payload.raw_catalog.clone());
         live.raw_auth = normalize_auth_override(profile.payload.raw_auth.as_deref());
+        live.auth_auto_sync = profile.payload.auth_auto_sync;
         // 快照跟随当前 live 完整文本，保证供应商是完整状态（所见即所得，不掩码密钥）
         live.raw_config = Some(document.to_string());
         if live == profile.payload {
@@ -262,27 +264,52 @@ impl AppContext {
         Ok(())
     }
 
-    /// 切换离开官方订阅档案时，把当前 live auth 固化为档案快照，避免下一个账号覆盖后无法恢复。
-    fn sync_active_profile_auth(&self) -> AppResult<()> {
+    /// 把当前 live auth 保存到正在使用的官方档案，供切换和窗口聚焦时更新最新凭据。
+    pub(super) fn sync_active_profile_auth(&self) -> AppResult<()> {
         let Some(active_id) = self.active_profile_state()? else {
             return Ok(());
         };
         let profile = self.database.profile(&active_id)?;
-        if profile.kind != ProfileKind::Official
-            || normalize_auth_override(profile.payload.raw_auth.as_deref()).is_some()
+        if profile.kind != ProfileKind::Official {
+            return Ok(());
+        }
+        // 用户在编辑器明确填写或清空 auth 后，保持手动控制，不被聚焦同步覆盖。
+        if profile.payload.auth_auto_sync == Some(false)
+            || (profile.payload.auth_auto_sync != Some(true)
+                && normalize_auth_override(profile.payload.raw_auth.as_deref()).is_some())
         {
             return Ok(());
         }
         let Some(raw_auth) =
             read_optional_text(&self.paths.codex_home.join("auth.json")).and_then(|text| {
-                serde_json::from_str::<serde_json::Value>(&text).ok()?;
+                let auth = parse_external_auth_json(&text)?;
+                let expected_account_id = profile.account_id.clone().or_else(|| {
+                    profile
+                        .payload
+                        .raw_auth
+                        .as_deref()
+                        .and_then(parse_external_auth_json)
+                        .map(|previous| previous.account_id)
+                });
+                if expected_account_id
+                    .as_deref()
+                    .is_some_and(|account_id| account_id != auth.account_id)
+                {
+                    return None;
+                }
                 normalize_auth_override(Some(&text))
             })
         else {
             return Ok(());
         };
+        if profile.payload.raw_auth.as_deref() == Some(raw_auth.as_str())
+            && profile.payload.auth_auto_sync == Some(true)
+        {
+            return Ok(());
+        }
         let mut payload = profile.payload;
         payload.raw_auth = Some(raw_auth);
+        payload.auth_auto_sync = Some(true);
         self.database
             .update_profile(&active_id, &profile.name, &payload, &now_ms().to_string())?;
         Ok(())
