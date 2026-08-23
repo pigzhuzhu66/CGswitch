@@ -1,7 +1,7 @@
 use super::profile_config::{is_builtin_placeholder, provider_api_key};
 use super::{
     app_err, atomic_write, backup_file, builtin, codex_config, normalize_auth_override, now_ms,
-    read_optional_text, AppContext, AppResult, Path, PathBuf, ProfilePayload,
+    read_optional_text, AppContext, AppResult, Path, PathBuf, ProfileKind, ProfilePayload,
 };
 
 impl AppContext {
@@ -258,6 +258,33 @@ impl AppContext {
             return Ok(());
         }
         self.sync_active_profile_document(document)?;
+        self.sync_active_profile_auth()?;
+        Ok(())
+    }
+
+    /// 切换离开官方订阅档案时，把当前 live auth 固化为档案快照，避免下一个账号覆盖后无法恢复。
+    fn sync_active_profile_auth(&self) -> AppResult<()> {
+        let Some(active_id) = self.active_profile_state()? else {
+            return Ok(());
+        };
+        let profile = self.database.profile(&active_id)?;
+        if profile.kind != ProfileKind::Official
+            || normalize_auth_override(profile.payload.raw_auth.as_deref()).is_some()
+        {
+            return Ok(());
+        }
+        let Some(raw_auth) =
+            read_optional_text(&self.paths.codex_home.join("auth.json")).and_then(|text| {
+                serde_json::from_str::<serde_json::Value>(&text).ok()?;
+                normalize_auth_override(Some(&text))
+            })
+        else {
+            return Ok(());
+        };
+        let mut payload = profile.payload;
+        payload.raw_auth = Some(raw_auth);
+        self.database
+            .update_profile(&active_id, &profile.name, &payload, &now_ms().to_string())?;
         Ok(())
     }
 }

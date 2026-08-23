@@ -191,6 +191,50 @@ new_field = "accumulated"
 }
 
 #[test]
+fn apply_profile_snapshots_active_official_live_auth_before_switching() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = crate::paths::from_home(home.path()).unwrap();
+    paths.ensure().unwrap();
+    std::fs::create_dir_all(&paths.codex_home).unwrap();
+    std::fs::write(paths.codex_config(), "model = \"gpt-5.6\"\n").unwrap();
+    let account_one_auth = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1"}}"#;
+    std::fs::write(paths.codex_home.join("auth.json"), account_one_auth).unwrap();
+
+    let context = AppContext::new(paths).unwrap();
+    let profile_one = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+    let profile_two = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+
+    context.apply_profile(&profile_one.id).unwrap();
+    context.apply_profile(&profile_two.id).unwrap();
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-2"}}"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        context
+            .database
+            .profile(&profile_one.id)
+            .unwrap()
+            .payload
+            .raw_auth
+            .as_deref(),
+        Some(account_one_auth)
+    );
+
+    context.apply_profile(&profile_one.id).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
+        account_one_auth
+    );
+}
+
+#[test]
 fn capture_sets_active_and_autosyncs_previous() {
     let home = tempfile::tempdir().unwrap();
     let paths = crate::paths::from_home(home.path()).unwrap();
