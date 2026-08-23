@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## [0.7.4] - 2026-08-24
+
+### 修复
+
+- 官方订阅档案 live auth 同步支持手动接管：在供应商编辑器修改 auth 字段后自动标记为手动接管，避免被 Codex 轮换的最新凭据覆盖
+- 同步时校验账号一致性：live auth 的 account_id 与档案不匹配时拒绝写回，防止不同账号之间的凭据交叉覆盖
+- 窗口聚焦 / 启动 CGswitch 时也会拉取最新 live auth 写回活动档案，及时捕获窗口外的凭据轮换
+- raw_auth 与 live 内容一致且已处于自动同步状态时跳过写库，减少无意义写盘
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v0.7.4-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v0.7.4-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v0.7.4-macOS-x64.dmg`
+
 ## [0.7.2] - 2026-08-24
 
 ### 修复
