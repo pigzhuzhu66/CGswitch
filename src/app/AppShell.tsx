@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layers2, Minus, Settings as SettingsIcon, Square, X } from "lucide-react";
+import { Layers2, Minus, Blocks, Puzzle, Settings as SettingsIcon, Square, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "../api";
 import { McpIcon } from "../components/McpIcon";
@@ -7,6 +7,8 @@ import { FeedbackProvider } from "./Feedback";
 import { useActivationRefresh, useAppState, useCodexPolling, useSidebarIndicator, useThemeMode, type AppView } from "./appShellHooks";
 import ProfilesView from "../features/profiles/ProfilesView";
 import McpView from "../features/mcp/McpView";
+import PluginsView from "../features/plugins/PluginsView";
+import SkillsView from "../features/skills/SkillsView";
 import SettingsView from "../features/settings/SettingsView";
 
 const appWindow = isTauri ? getCurrentWindow() : null;
@@ -15,6 +17,7 @@ export default function AppShell() {
   const [view, setView] = useState<AppView>("profiles");
   const [profilesReset, setProfilesReset] = useState(0);
   const [mcpReset, setMcpReset] = useState(0);
+  const [skillsReset, setSkillsReset] = useState(0);
   const { state, stateRef, loadError, refresh, refreshAuthStatus, updateCodex, updateSettings, previewTheme } = useAppState();
   useThemeMode(state?.settings.theme);
   const { start: startPolling, stop: stopPolling } = useCodexPolling(stateRef, updateCodex);
@@ -87,6 +90,15 @@ export default function AppShell() {
     setView("mcp");
   };
 
+  const goPlugins = () => {
+    setView("plugins");
+  };
+
+  const goSkills = () => {
+    setSkillsReset((value) => value + 1);
+    setView("skills");
+  };
+
   const navClass = (active: boolean) =>
     `apple-sidebar-nav-button ${active ? "bg-[var(--selection-bg)] font-semibold text-accent" : "font-normal hover:bg-black/5 dark:hover:bg-white/8"}`;
 
@@ -139,6 +151,16 @@ export default function AppShell() {
                 <span className="apple-sidebar-label" aria-hidden={sidebar.sidebarCollapsed}>MCP 管理</span>
                 {sidebar.sidebarCollapsed && sidebar.sidebarFlyoutArmed ? <span className="apple-sidebar-flyout" aria-hidden="true">MCP 管理</span> : null}
               </button>
+              <button ref={sidebar.pluginsNavRef} type="button" className={navClass(view === "plugins")} aria-label="插件" onClick={goPlugins} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
+                <Blocks strokeWidth={2} aria-hidden="true" />
+                <span className="apple-sidebar-label" aria-hidden={sidebar.sidebarCollapsed}>插件</span>
+                {sidebar.sidebarCollapsed && sidebar.sidebarFlyoutArmed ? <span className="apple-sidebar-flyout" aria-hidden="true">插件</span> : null}
+              </button>
+              <button ref={sidebar.skillsNavRef} type="button" className={navClass(view === "skills")} aria-label="Skill" onClick={goSkills} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
+                <Puzzle strokeWidth={2} aria-hidden="true" />
+                <span className="apple-sidebar-label" aria-hidden={sidebar.sidebarCollapsed}>Skill</span>
+                {sidebar.sidebarCollapsed && sidebar.sidebarFlyoutArmed ? <span className="apple-sidebar-flyout" aria-hidden="true">Skill</span> : null}
+              </button>
             </nav>
             <div className="absolute inset-x-1.5 bottom-4">
               <button ref={sidebar.settingsNavRef} type="button" className={navClass(view === "settings")} aria-label="设置" onClick={() => setView("settings")} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
@@ -163,6 +185,10 @@ export default function AppShell() {
               <ProfilesView key={profilesReset} state={state} activationEpoch={activationEpoch} onRefresh={refresh} />
             ) : view === "mcp" ? (
               <McpView key={mcpReset} />
+            ) : view === "plugins" ? (
+              <PluginsView />
+            ) : view === "skills" ? (
+              <SkillsView key={skillsReset} />
             ) : (
               <SettingsView state={state} onPreviewTheme={previewTheme} onRefresh={refresh} onSaved={updateSettings} onHome={goProfiles} />
             )}

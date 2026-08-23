@@ -3,6 +3,12 @@ import type {
   AppState,
   DatabaseBackupInfo,
   McpServerSpec,
+  MarketplacePlugin,
+  PluginMarketplace,
+  PluginPreview,
+  PluginSkill,
+  PluginSummary,
+  SkillSummary,
   ProfileBalanceInfo,
   ProfileDetail,
   ProfileSummary,
@@ -92,6 +98,192 @@ function patchSystemProxyForWeb(text: string, enabled: boolean): string {
   lines.push("[features]", "respect_system_proxy = true");
   return lines.join(newline);
 }
+
+// 与后端一致：安装/卸载驱动 codex plugin CLI；列表读 codex plugin list、
+// 插件列表与 Codex Skill 注册表分开；插件 origin 只描述插件来源
+let webPlugins: PluginSummary[] = [
+  {
+    name: "memory-bank",
+    version: "1.2.0",
+    display_name: "Memory Bank",
+    description: "跨会话的记忆管理插件（浏览器调试 fixture）",
+    category: "memory",
+    capabilities: ["read", "write"],
+    contains: ["skills", "mcp"],
+    enabled: true,
+    origin: "codex",
+    marketplace: "example-plugins",
+    store_path: "C:\\Users\\<user>\\.codex\\plugins\\cache\\example-plugins\\memory-bank\\1.2.0",
+    source_url: "https://github.com/example/plugins",
+  },
+  {
+    name: "code-reviewer",
+    version: "0.4.1",
+    display_name: null,
+    description: "代码审查工作流（已禁用示例）",
+    category: null,
+    capabilities: [],
+    contains: ["skills"],
+    enabled: false,
+    origin: "codex",
+    marketplace: "example-plugins",
+    store_path: "C:\\Users\\<user>\\.codex\\plugins\\cache\\example-plugins\\code-reviewer\\0.4.1",
+    source_url: null,
+  },
+  {
+    name: "documents",
+    version: "26.819.11345",
+    display_name: "Documents",
+    description: "官方市场里的已装插件（只读示例）",
+    category: null,
+    capabilities: [],
+    contains: ["skills"],
+    enabled: true,
+    origin: "official",
+    marketplace: "openai-primary-runtime",
+    store_path: "C:\\Users\\<user>\\.cache\\codex-runtimes\\plugins\\documents",
+    source_url: null,
+  },
+  {
+    name: "ponytail",
+    version: "4.9.0",
+    display_name: "Ponytail",
+    description: "用户自装的第三方市场插件（经 codex CLI 卸载）",
+    category: null,
+    capabilities: [],
+    contains: ["skills"],
+    enabled: true,
+    origin: "codex",
+    marketplace: "ponytail",
+    store_path: "C:\\Users\\<user>\\.codex\\plugins\\cache\\ponytail\\ponytail\\4.9.0",
+    source_url: null,
+  },
+];
+
+const webPluginSkills: Record<string, PluginSkill[]> = {
+  "memory-bank": [{ name: "session-summary", path: "skills/session-summary/SKILL.md", description: "整理跨会话摘要" }],
+  ponytail: [{ name: "ponytail", path: "skills/ponytail/SKILL.md", description: "精简实现工作流" }],
+};
+
+const webSkills: SkillSummary[] = [
+  {
+    name: "lark-base",
+    description: "Skill 注册表里的已装技能（只读示例）",
+    source_url: "https://github.com/larksuite/cli.git",
+    store_path: "C:\\Users\\<user>\\.agents\\skills\\lark-base",
+  },
+];
+
+let webMarketplaces: PluginMarketplace[] = [
+  {
+    name: "openai-bundled",
+    root: "C:\\Users\\<user>\\.codex\\.tmp\\bundled-marketplaces\\openai-bundled",
+    kind: "official",
+    source_url: null,
+    display_name: "OpenAI Bundled",
+    description: "Codex 官方捆绑插件市场。",
+  },
+  {
+    name: "ponytail",
+    root: "C:\\Users\\<user>\\.codex\\.tmp\\marketplaces\\ponytail",
+    kind: "third-party",
+    source_url: "https://github.com/DietrichGebert/ponytail.git",
+    display_name: "Ponytail",
+    description: "社区插件市场，提供精简实现、YAGNI 和标准库优先的开发工作流。",
+  },
+  {
+    name: "youmind",
+    root: "C:\\Users\\<user>\\.codex\\.tmp\\marketplaces\\youmind",
+    kind: "third-party",
+    source_url: "https://github.com/YouMind-OpenLab/plugin-marketplace.git",
+    display_name: "YouMind",
+    description: "YouMind 社区插件市场，收录创作、设计和内容工作流插件。",
+  },
+];
+
+let webMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
+  ponytail: [
+    {
+      plugin_id: "ponytail@ponytail",
+      name: "ponytail",
+      version: "4.9.0",
+      installed: true,
+      auth_policy: "ON_INSTALL",
+      source: "https://github.com/DietrichGebert/ponytail.git",
+      display_name: "Ponytail",
+      description: "Prefer YAGNI, the standard library, native platform features, and the smallest correct implementation.",
+      category: "Productivity",
+      capabilities: ["Instructions", "Lifecycle hooks"],
+    },
+  ],
+};
+
+const webPluginUpdates = [{ name: "ponytail", marketplace: "ponytail", version: "5.0.0" }];
+
+const webRecommendedMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
+  xiaolai: [
+    {
+      plugin_id: "grill@xiaolai",
+      name: "grill",
+      version: "1.3.0",
+      installed: false,
+      auth_policy: "ON_USE",
+      source: "https://github.com/xiaolai/grill-for-claude.git",
+      display_name: "Grill",
+      description: "用于代码工作流与开发辅助的社区插件。",
+      category: "Development",
+      capabilities: ["Instructions"],
+    },
+    {
+      plugin_id: "xros@xiaolai",
+      name: "xros",
+      version: "0.3.0",
+      installed: false,
+      auth_policy: "ON_USE",
+      source: "https://github.com/xiaolai/xros.git",
+      display_name: "XROS",
+      description: "面向终端工作流的社区插件。",
+      category: "Productivity",
+      capabilities: ["Instructions"],
+    },
+  ],
+  youmind: [
+    {
+      plugin_id: "hyperframes@youmind",
+      name: "hyperframes",
+      version: null,
+      installed: false,
+      auth_policy: "ON_INSTALL",
+      source: "./plugins/hyperframes",
+      display_name: "HyperFrames by HeyGen",
+      description: "Write HTML, render video, and create interactive motion graphics with HeyGen's HyperFrames.",
+      category: "Design",
+      capabilities: ["Read", "Write"],
+    },
+  ],
+};
+
+const webPluginPreview: PluginPreview = {
+  repo: "openai/plugins",
+  reference: "main",
+  default_branch: "main",
+  candidates: [
+    {
+      sub_path: "plugins/memory-bank",
+      name: "memory-bank",
+      version: "1.2.0",
+      display_name: "Memory Bank",
+      description: "浏览器调试用的候选插件 fixture",
+      capabilities: ["read", "write"],
+      contains: ["skills", "mcp"],
+      files: [
+        "plugins/memory-bank/.codex-plugin/plugin.json",
+        "plugins/memory-bank/skills/session-summary/SKILL.md",
+        "plugins/memory-bank/.mcp.json",
+      ],
+    },
+  ],
+};
 
 // 从 2xx 的 JSON 响应体里识别供应商级错误（OpenAI 风格 error 或智谱风格 code/success）。
 function connectionErrorFromBody(value: unknown): string | null {
@@ -592,6 +784,129 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         String(args?.configText ?? ""),
         Boolean(args?.enabled),
       ) as T;
+    case "list_plugins":
+      return webPlugins.map((plugin) => ({ ...plugin })) as T;
+    case "list_skills":
+      return webSkills.map((skill) => ({ ...skill })) as T;
+    case "list_plugin_skills":
+      return (webPluginSkills[String(args?.name ?? "")] ?? []).map((skill) => ({ ...skill })) as T;
+    case "list_plugin_marketplaces":
+      return [...webMarketplaces]
+        .sort((left, right) => Number(left.kind !== "official") - Number(right.kind !== "official") || left.name.localeCompare(right.name))
+        .map((marketplace) => ({ ...marketplace })) as T;
+    case "list_marketplace_plugins":
+      return (webMarketplacePlugins[String(args?.marketplace ?? "")] ?? []).map((plugin) => ({ ...plugin })) as T;
+    case "add_plugin_marketplace": {
+      const source = String(args?.url ?? "");
+      const name = source.includes("ponytail") ? "ponytail" : source.includes("xiaolai") ? "xiaolai" : "third-party-marketplace";
+      const marketplace: PluginMarketplace = {
+        name,
+        root: `C:\\Users\\<user>\\.codex\\.tmp\\marketplaces\\${name}`,
+        kind: "third-party",
+        source_url: source,
+        display_name: name === "xiaolai" ? "xiaolai (Codex)" : name,
+        description: name === "xiaolai"
+          ? "社区 Codex 插件市场，收录 xiaolai 维护的 Claude/Codex 插件。"
+          : "第三方 Codex 插件市场。",
+      };
+      webMarketplaces = [...webMarketplaces.filter((item) => item.name !== name), marketplace];
+      webMarketplacePlugins[name] ??= (webRecommendedMarketplacePlugins[name] ?? []).map((plugin) => ({ ...plugin }));
+      return marketplace as T;
+    }
+    case "remove_plugin_marketplace": {
+      const name = String(args?.name ?? "");
+      if (name.startsWith("openai")) throw new Error("官方市场不能移除");
+      webMarketplaces = webMarketplaces.filter((marketplace) => marketplace.name !== name);
+      return undefined as T;
+    }
+    case "install_marketplace_plugin": {
+      const marketplace = String(args?.marketplace ?? "");
+      const name = String(args?.name ?? "");
+      const catalog = webMarketplacePlugins[marketplace] ?? [];
+      const item = catalog.find((plugin) => plugin.name === name);
+      if (!item) throw new Error("没有找到可安装的插件");
+      item.installed = true;
+      const summary: PluginSummary = {
+        name: item.name,
+        version: item.version,
+        display_name: item.display_name,
+        description: item.description ?? `来自 ${marketplace} 市场的插件`,
+        category: item.category,
+        capabilities: item.capabilities,
+        contains: ["skills"],
+        enabled: true,
+        origin: "codex",
+        marketplace,
+        store_path: `C:\\Users\\<user>\\.codex\\plugins\\cache\\${marketplace}\\${item.name}\\${item.version ?? "latest"}`,
+        source_url: item.source,
+      };
+      webPlugins = [...webPlugins.filter((plugin) => plugin.name !== name), summary].sort((a, b) => a.name.localeCompare(b.name));
+      return summary as T;
+    }
+    case "check_plugin_updates":
+      return webPluginUpdates.filter((update) => {
+        const marketplace = webMarketplaces.find((item) => item.name === update.marketplace);
+        const plugin = webPlugins.find((item) => item.name === update.name && item.marketplace === update.marketplace);
+        return marketplace?.kind === "third-party" && plugin?.version !== update.version;
+      }) as T;
+    case "upgrade_marketplace_plugin": {
+      const marketplace = String(args?.marketplace ?? "");
+      const name = String(args?.name ?? "");
+      const update = webPluginUpdates.find((item) => item.name === name && item.marketplace === marketplace);
+      const target = webPlugins.find((item) => item.name === name && item.marketplace === marketplace);
+      if (!update || !target || webMarketplaces.find((item) => item.name === marketplace)?.kind !== "third-party") {
+        throw new Error("只能升级第三方插件市场中的插件");
+      }
+      target.version = update.version;
+      (webMarketplacePlugins[marketplace] ?? []).forEach((plugin) => {
+        if (plugin.name === name) plugin.version = update.version;
+      });
+      return undefined as T;
+    }
+    case "preview_plugin": {
+      // 与后端一致：预览需要真实 GitHub 网络；浏览器环境仅对示例地址返回 fixture，其余抛错
+      const url = String(args?.url ?? "");
+      if (url.includes("openai/plugins")) return webPluginPreview as T;
+      throw new Error("浏览器调试无法访问 GitHub，插件预览请在 Tauri 窗口测试");
+    }
+    case "install_plugin": {
+      const candidate = webPluginPreview.candidates[0];
+      const summary: PluginSummary = {
+        name: candidate.name,
+        version: candidate.version,
+        display_name: candidate.display_name,
+        description: candidate.description,
+        category: null,
+        capabilities: candidate.capabilities,
+        contains: candidate.contains,
+        enabled: true,
+        origin: "codex",
+        marketplace: "openai-plugins",
+        store_path: `C:\\Users\\<user>\\.codex\\plugins\\cache\\openai-plugins\\${candidate.name}\\${candidate.version ?? "latest"}`,
+        source_url: "https://github.com/openai/plugins",
+      };
+      webPlugins = [...webPlugins.filter((plugin) => plugin.name !== summary.name), summary].sort((a, b) => a.name.localeCompare(b.name));
+      return summary as T;
+    }
+    case "uninstall_plugin": {
+      // 与后端一致：官方市场拒绝卸载；Skill 在独立页面展示
+      const target = webPlugins.find((plugin) => plugin.name === args?.name);
+      if (webSkills.some((skill) => skill.name === args?.name)) {
+        throw new Error("该 Skill 属于 Codex Skill 注册表，请在 Codex 内管理它");
+      }
+      if (target?.origin === "official") {
+        throw new Error("该插件属于 Codex 官方市场，请在 Codex 内管理它");
+      }
+      webPlugins = webPlugins.filter((plugin) => plugin.name !== args?.name);
+      Object.values(webMarketplacePlugins).forEach((plugins) => {
+        plugins.forEach((plugin) => {
+          if (plugin.name === args?.name) {
+            plugin.installed = false;
+          }
+        });
+      });
+      return undefined as T;
+    }
     case "delete_profile": {
       const index = webProfiles.findIndex((item) => item.id === args?.id);
       if (index >= 0) webProfiles.splice(index, 1);

@@ -23,6 +23,10 @@
   --selection-bg: rgba(0, 122, 255, 0.12);
   /* 状态徽标文字：比 --success 深一档，浅底上保证对比度；深色主题换亮绿 */
   --success-text: #248a3d;
+  --chip-success: #30d158;
+  --profile-chip-bg: rgb(0 0 0 / 0.04);
+  --input-bg: #f5f5f5;
+  --profile-meta-text: rgba(60, 60, 67, 0.68);
   /* 功能强调紫（静默启动等）：iOS 系统紫，深色主题换亮紫 */
   --lavender: #af52de;
   /* 品牌图标底色：按文字色派生的浅灰砖，深浅主题共用同一公式自动适配 */
@@ -71,15 +75,19 @@
   /* linguagram 深色配色：抬升暖灰画布（不纯黑）+ 表面抬一档 + 白底 hairline */
   --accent: #5e9cff;
   --success: #3fb950;
-  --app-bg: #1a1d1f;
-  --panel-bg: #24242a;
-  --panel-border: rgba(255, 255, 255, 0.10);
+  --app-bg: #202124;
+  --panel-bg: #252526;
+  --panel-border: rgba(255, 255, 255, 0.08);
   --panel-ring: rgba(255, 255, 255, 0.06);
-  --panel-divider: rgba(255, 255, 255, 0.08);
-  --text-secondary: #ffffff;
-  --sidebar-bg: #15151a;
-  --selection-bg: rgba(94, 156, 255, 0.18);
+  --panel-divider: rgba(255, 255, 255, 0.06);
+  --text-secondary: rgba(255, 255, 255, 0.68);
+  --sidebar-bg: #333333;
+  --selection-bg: rgba(94, 156, 255, 0.16);
   --success-text: #6ee7a0;
+  --chip-success: #63e68a;
+  --profile-chip-bg: #1e1e1e;
+  --input-bg: #1e1e1e;
+  --profile-meta-text: rgba(255, 255, 255, 0.62);
   --lavender: #bf5af2;
   --scrollbar-thumb: color-mix(in srgb, var(--text-secondary) 25%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--text-secondary) 40%, transparent);
@@ -150,7 +158,7 @@ textarea::placeholder {
    字号与内边距只在这里改，禁止在组件里单独调某颗胶囊的尺寸 */
 .apple-chip {
   align-items: center;
-  background: rgb(0 0 0 / 0.04);
+  background: var(--profile-chip-bg);
   border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
   border-radius: 999px;
   display: inline-flex;
@@ -164,10 +172,22 @@ textarea::placeholder {
   background: rgb(255 255 255 / 0.08);
 }
 
+:root.dark .profile-card-meta .apple-chip {
+  background: var(--profile-chip-bg);
+}
+
+.profile-card-meta .apple-chip {
+  font-size: 12px;
+}
+
+.profile-card-meta {
+  color: var(--profile-meta-text);
+}
+
 /* 余额/用量胶囊数据变色（全局统一；cc-switch 同款阈值，后续供应商直接复用）。
    变色数据同时加粗，标签/倒计时保持默认字重 */
 .chip-success {
-  color: var(--success);
+  color: var(--chip-success);
   font-weight: 600;
 }
 
@@ -641,6 +661,12 @@ body.drag-settling .profile-card-actions {
   padding-inline: var(--gap-main);
 }
 
+/* 页头右侧固定槽位在长标题页面可收缩，避免切页时操作区换行造成上下跳动 */
+.apple-page-bar > .w-full.max-w-md {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
 .apple-page-bar--sticky {
   position: sticky;
   /* 与 .apple-page-bar 的负上边距共用 --main-top-inset，sticky 顶点始终贴住 main 顶部 */
@@ -684,7 +710,7 @@ body.drag-settling .profile-card-actions {
 }
 
 .apple-edit-toolbar--footer .apple-action-button:not(.app-button--primary):hover {
-  background: var(--sidebar-bg);
+  background: var(--profile-chip-bg);
 }
 
 /* 首卡片与页头的间距统一由 .apple-edit-content 的 padding-top（--gap-page）承担，
@@ -805,7 +831,7 @@ body.drag-settling .profile-card-actions {
 }
 
 .apple-action-button:hover {
-  background: var(--sidebar-bg);
+  background: var(--profile-chip-bg);
 }
 
 .apple-action-button--quaternary {
@@ -842,7 +868,25 @@ body.drag-settling .profile-card-actions {
 }
 
 :where(.apple-icon-button:hover:not(:disabled), .apple-icon-button:focus-visible:not(:disabled)) {
-  background: var(--sidebar-bg);
+  background: var(--profile-chip-bg);
+}
+
+.apple-toolbar-group {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.125rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--profile-chip-bg) 45%, transparent);
+}
+
+.apple-toolbar-group > .apple-action-button {
+  height: var(--icon-button-size);
+}
+
+.apple-toolbar-group > :is(.apple-action-button, .apple-icon-button):is(:hover, :focus-visible):not(:disabled) {
+  background: var(--tile-bg);
 }
 
 .mcp-sync-confirm {
@@ -907,6 +951,10 @@ body.drag-settling .profile-card-actions {
    区块之间以分隔线连接，不再各自成卡（编辑供应商/新建供应商等整页表单用） */
 .apple-panel-section {
   padding: var(--gap-card);
+}
+
+.apple-panel-section--compact {
+  padding-block: var(--gap-section);
 }
 
 .apple-panel-section + .apple-panel-section {
@@ -1058,7 +1106,7 @@ button:focus-visible {
 }
 
 .app-dialog-close:hover {
-  background: var(--sidebar-bg);
+  background: var(--profile-chip-bg);
   color: inherit;
 }
 
@@ -1181,7 +1229,7 @@ button:focus-visible {
   gap: 0.5rem;
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-control);
-  background: var(--panel-bg);
+  background: var(--input-bg);
   padding: 0.5rem 0.75rem;
   color: inherit;
   font: inherit;
@@ -1415,7 +1463,7 @@ button:focus-visible {
   min-height: var(--control-height);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-control);
-  background: var(--panel-bg);
+  background: var(--input-bg);
   padding: 0.5rem 0.75rem;
   color: inherit;
   font: inherit;

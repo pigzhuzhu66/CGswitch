@@ -161,6 +161,81 @@ export interface Settings {
   database_backup_keep_count: number;
 }
 
+export interface PluginSkill {
+  name: string;
+  path: string;
+  description: string | null;
+}
+
+export interface PluginMarketplace {
+  name: string;
+  root: string;
+  kind: "official" | "third-party";
+  source_url: string | null;
+  display_name: string | null;
+  description: string | null;
+}
+
+export interface MarketplacePlugin {
+  plugin_id: string;
+  name: string;
+  version: string | null;
+  installed: boolean;
+  auth_policy: string;
+  source: string | null;
+  display_name: string | null;
+  description: string | null;
+  category: string | null;
+  capabilities: string[];
+}
+
+export interface PluginUpdate {
+  name: string;
+  marketplace: string;
+  version: string;
+}
+
+export interface SkillSummary {
+  name: string;
+  description: string | null;
+  source_url: string | null;
+  store_path: string;
+}
+
+export interface PluginSummary {
+  name: string;
+  version: string | null;
+  display_name: string | null;
+  description: string | null;
+  category: string | null;
+  capabilities: string[];
+  contains: string[];
+  enabled: boolean;
+  /** official=官方市场；codex=第三方市场。 */
+  origin: "official" | "codex";
+  marketplace: string | null;
+  store_path: string;
+  source_url: string | null;
+}
+
+export interface PluginCandidate {
+  sub_path: string;
+  name: string;
+  version: string | null;
+  display_name: string | null;
+  description: string | null;
+  capabilities: string[];
+  contains: string[];
+  files: string[];
+}
+
+export interface PluginPreview {
+  repo: string;
+  reference: string;
+  default_branch: string;
+  candidates: PluginCandidate[];
+}
+
 export interface CodexAppStatus {
   running: boolean;
   display_path: string;
