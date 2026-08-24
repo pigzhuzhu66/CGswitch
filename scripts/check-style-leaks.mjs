@@ -26,6 +26,11 @@ const RULES = [
     extract: (match) => match,
   },
   {
+    name: "Tailwind CSS 变量简写（bg-[var(--…)] 应使用 bg-(--…)）",
+    pattern: /(?:^|[\s"'`])(?:[a-z-]+:)*bg-\[var\(--[^)]*\)\](?:\/[^\s"'`}]+)?/g,
+    extract: (match) => match.trim(),
+  },
+  {
     name: "Tailwind 中性灰（次要文字用 muted / text-[var(--text-secondary)]）",
     pattern: /(?:text|bg|border)-(?:zinc|gray|neutral|slate|stone)-\d+/g,
     extract: (match) => match,

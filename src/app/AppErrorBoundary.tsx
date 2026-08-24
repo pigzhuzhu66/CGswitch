@@ -22,7 +22,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <main className="flex h-screen items-center justify-center bg-[var(--app-bg)] p-6">
+      <main className="flex h-screen items-center justify-center bg-(--app-bg) p-6">
         <section className="apple-group w-full max-w-lg text-center">
           <h1 className="apple-title">界面加载失败</h1>
           <p className="muted mt-2 text-sm">当前页面遇到异常，可以重新加载后继续使用。</p>

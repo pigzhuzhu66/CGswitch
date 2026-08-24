@@ -5,7 +5,8 @@ use super::profile_config::{
 use super::{
     app_err, atomic_write, backup_file, builtin, codex_config, codex_process,
     normalize_auth_override, now_ms, parse_external_auth_json, profile_summary, read_optional_text,
-    AppContext, AppResult, AppState, CodexAppStatus, ProfileDetail, ProfileKind, ProfileSummary,
+    AppContext, AppResult, AppState, AuthSource, CodexAppStatus, ProfileDetail, ProfileKind,
+    ProfileSummary,
 };
 
 pub(super) fn validated_name(name: &str) -> AppResult<String> {
@@ -39,11 +40,9 @@ impl AppContext {
         if let Some(document) = live.as_ref() {
             let _ = self.sync_active_profile_document(document);
         }
-        // 窗口启动/聚焦会刷新状态：同时把 Codex 可能刚刚轮换的 live auth 保存到活动档案。
-        let _ = self.sync_active_profile_auth();
         let settings = self.settings()?;
         let profiles = self.database.profiles()?;
-        // 激活状态只来自手动应用/捕获（显式状态或应用事件），不做 live 配置推断，
+        // 激活状态只来自手动应用（显式状态或应用事件），不做 live 配置推断，
         // 避免“添加供应商”被误判成“正在使用”。
         let active_profile_id = match self.active_profile_state()? {
             Some(id) if profiles.iter().any(|profile| profile.id == id) => Some(id),
@@ -115,17 +114,15 @@ impl AppContext {
             .map(|text| text.trim_end().to_string());
         let timestamp = now_ms().to_string();
         let summary = self.database.insert_profile(&name, &payload, &timestamp)?;
-        // 捕获即建立“当前 live = 该供应商”的显式关联：先把旧激活供应商的使用中累计改动
-        // 同步回其快照，再把捕获结果设为使用中（捕获到的是什么就用什么，不比对内容）
+        // 捕获只保存快照；保留当前激活供应商，并把它在 live 中的累计改动同步回快照。
         if let Some(document) = self.live_document() {
-            self.autosync_active_profile(&summary.id, &document)?;
+            self.sync_active_profile_document(&document)?;
         }
-        self.database.set_active_profile(Some(&summary.id))?;
         self.database.record_event(
             Some(&summary.id),
             "capture",
             "success",
-            Some("captured live configuration and set active"),
+            Some("captured live configuration"),
             &timestamp,
         )?;
         Ok(summary)
@@ -164,6 +161,13 @@ impl AppContext {
                 .ok_or_else(|| app_err!("内置供应商缺少配置"))?;
             payload.provider_body =
                 Some(codex_config::update_provider_body(body, base_url, api_key)?);
+        }
+        if payload.provider_id.is_none() {
+            payload.auth_source = Some(if account_id.is_some() {
+                AuthSource::Oauth
+            } else {
+                AuthSource::Desktop
+            });
         }
         let timestamp = now_ms().to_string();
         let summary = self
@@ -382,10 +386,6 @@ impl AppContext {
         } else {
             None
         };
-        let live_auth = active
-            .then(|| read_optional_text(&self.paths.codex_home.join("auth.json")))
-            .flatten();
-
         // 使用中：live 文件原样展示；未使用：数据库快照原样展示（所见即所得，不再掩码）
         let raw_config = live_config.or_else(|| payload.raw_config.clone());
         let config_fragment = match raw_config.as_deref() {
@@ -423,11 +423,21 @@ impl AppContext {
                 .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
         });
         let raw_auth = normalize_auth_override(payload.raw_auth.as_deref());
+        let auth_source = payload.effective_auth_source(stored.kind, stored.account_id.as_deref());
+        let desktop_login = if auth_source == Some(AuthSource::Desktop) {
+            raw_auth
+                .as_deref()
+                .and_then(parse_external_auth_json)
+                .map(|auth| auth.email.unwrap_or(auth.account_id))
+        } else {
+            None
+        };
 
         Ok(ProfileDetail {
             id: stored.id.clone(),
             name: stored.name.clone(),
             account_id: stored.account_id.clone(),
+            desktop_login,
             icon: stored.icon.clone(),
             provider: payload.provider_id.clone(),
             base_url: provider.as_ref().and_then(|detail| detail.base_url.clone()),
@@ -435,16 +445,16 @@ impl AppContext {
             model_values: payload.model_values.clone(),
             config_fragment,
             raw_config,
-            // 官方订阅：展示当前生效的全局认证（未保存时不写进档案）；
-            // 第三方：只展示档案级认证，避免把 live 的 Codex 官方认证预填进编辑页、保存时意外收进档案
-            auth_content: if stored.kind == ProfileKind::Official {
-                raw_auth.clone().or(live_auth)
-            } else {
-                raw_auth.clone()
-            },
+            auth_source,
             catalog_content,
             raw_catalog: payload.raw_catalog.clone(),
-            raw_auth,
+            raw_auth: if auth_source == Some(AuthSource::Desktop)
+                || stored.kind == ProfileKind::ThirdParty
+            {
+                raw_auth
+            } else {
+                None
+            },
             admin_url: payload.admin_url.clone(),
             show_balance: payload.show_balance,
             updated_at: stored.updated_at.clone(),
@@ -460,7 +470,22 @@ impl AppContext {
         catalog_text: Option<&str>,
         auth_text: Option<&str>,
     ) -> AppResult<ProfileDetail> {
+        let _operation = self
+            .operation
+            .lock()
+            .map_err(|_| app_err!("操作锁已损坏"))?;
         let stored = self.database.profile(id)?;
+        let auth_source = stored
+            .payload
+            .effective_auth_source(stored.kind, stored.account_id.as_deref());
+        if stored.kind == ProfileKind::Official
+            && auth_source == Some(AuthSource::Oauth)
+            && auth_text.is_some()
+        {
+            return Err(app_err!(
+                "OAuth 配置的认证由账号选择管理，不能编辑 Desktop auth.json"
+            ));
+        }
         let mut payload = stored.payload;
 
         // 清空 auth 内容 = 移除档案级覆盖，恢复为账号自动凭据
@@ -495,6 +520,9 @@ impl AppContext {
             payload.raw_auth = auth_override.clone();
             // 只要编辑器提交了 auth（包括清空），就明确切换为手动控制。
             payload.auth_auto_sync = Some(false);
+        } else if auth_source == Some(AuthSource::Oauth) {
+            payload.raw_auth = None;
+            payload.auth_auto_sync = None;
         }
         self.database
             .update_profile(id, &stored.name, &payload, &now_ms().to_string())?;
@@ -511,10 +539,9 @@ impl AppContext {
                 self.write_raw_catalog(&payload)?;
             }
             if auth_text.is_some() {
-                if payload.raw_auth.is_some() {
-                    self.write_raw_auth(&payload)?;
-                } else {
-                    self.remove_raw_auth()?;
+                match normalize_auth_override(payload.raw_auth.as_deref()) {
+                    Some(raw) => self.write_auth_json(&raw)?,
+                    None => self.remove_raw_auth()?,
                 }
             }
         }

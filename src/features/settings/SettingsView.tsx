@@ -16,13 +16,13 @@ import type { AppState, PathInfo, Settings } from "../../types";
 import ChatGPTAccount from "./ChatGPTAccount";
 import { SettingsAbout, SettingsAdvanced, SettingsGeneral } from "./SettingsSections";
 
-interface SettingsViewProps { state: AppState; onPreviewTheme: (theme: Settings["theme"]) => void; onRefresh: () => Promise<void>; onSaved: (settings: Settings) => void; onHome: () => void; }
 type Section = "general" | "codex" | "account" | "advanced" | "about";
+interface SettingsViewProps { state: AppState; onPreviewTheme: (theme: Settings["theme"]) => void; onRefresh: () => Promise<void>; onSaved: (settings: Settings) => void; onHome: () => void; initialSection?: Section; }
 
-export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved, onHome }: SettingsViewProps) {
+export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved, onHome, initialSection = "general" }: SettingsViewProps) {
   const feedback = useFeedback();
   const [form, setForm] = useState<Settings>(state.settings);
-  const [section, setSection] = useState<Section>("general");
+  const [section, setSection] = useState<Section>(initialSection);
   const [saving, setSaving] = useState(false);
   const [backupsEpoch, setBackupsEpoch] = useState(0);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
@@ -30,6 +30,7 @@ export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
 
   useEffect(() => setForm(state.settings), [state.settings]);
+  useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => { void api.getSettings().then((settings) => { setForm(settings); onSaved(settings); }).catch((error) => feedback.error(String(error))); }, []);
   useEffect(() => { const button = tabBar.current?.querySelector<HTMLElement>(`[data-section="${section}"]`); if (button) setIndicator({ left: button.offsetLeft, width: button.offsetWidth }); }, [section]);
 
@@ -71,7 +72,7 @@ export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved
         </div>
       </div>
     ) : null}
-    {section === "account" ? <div className="apple-group mt-[var(--gap-section)] p-4"><div className="flex items-center gap-3"><ProfileIconTile name="ChatGPT" icon="openai-chatgpt" size="sm" /><h2 className="title-sm">ChatGPT 账号</h2></div><div className="mt-3"><ChatGPTAccount initialStatus={state.auth_status} /></div></div> : null}
+    {section === "account" ? <div className="apple-group mt-[var(--gap-section)] p-4"><div className="flex items-center gap-3"><ProfileIconTile name="ChatGPT" icon="openai-chatgpt" size="sm" /><h2 className="title-sm">ChatGPT 账号</h2></div><div className="mt-3"><ChatGPTAccount initialStatus={state.auth_status} balanceCache={state.balance_cache} /></div></div> : null}
     {section === "advanced" ? <SettingsAdvanced form={form} onPatch={(patch) => void saveGeneral(patch)} paths={state.paths} backupsEpoch={backupsEpoch} onOpenPath={openPath} onRefresh={onRefresh} /> : null}
     {section === "about" ? <SettingsAbout paths={state.paths} onOpenPath={openPath} openingPath={openingPath} /> : null}
   </div></section>;

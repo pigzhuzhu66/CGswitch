@@ -7,33 +7,14 @@ use crate::auth::codex_oauth::{
 use crate::codex::config as codex_config;
 use crate::error::{app_err, AppResult};
 use crate::models::{
-    AppState, CodexAppStatus, McpServerSpec, McpSyncPreview, ProfileBalanceInfo, ProfileDetail,
-    ProfileSummary, Settings,
+    AppState, AuthSource, CodexAppStatus, McpServerSpec, McpSyncPreview, ProfileBalanceInfo,
+    ProfileDetail, ProfileSummary, Settings,
 };
 use crate::services::{
     AppContext, DatabaseBackupInfo, MarketplacePlugin, PluginMarketplace, PluginPreview,
     PluginSkill, PluginSummary, PluginUpdate, ProfileBalance, ProfileConnectionResult,
     SkillSummary,
 };
-
-async fn unmanaged_external_codex_auth(
-    state: &AppContext,
-    oauth: &CodexOAuthState,
-) -> AppResult<Option<ManagedAccount>> {
-    let Some(external) = state.external_codex_auth()? else {
-        return Ok(None);
-    };
-    let status = oauth.0.read().await.get_status().await;
-    if status
-        .accounts
-        .iter()
-        .any(|account| account.id == external.id)
-    {
-        Ok(None)
-    } else {
-        Ok(Some(external))
-    }
-}
 
 fn should_try_next_account_credential(result: &ProfileConnectionResult) -> bool {
     matches!(result.status, Some(401 | 403))
@@ -288,24 +269,20 @@ pub async fn test_profile_connection(
 ) -> AppResult<ProfileConnectionResult> {
     // 官方订阅：测认证连通性（token 有效 + 网络可达），走 Codex 官方后端端点
     if state.is_subscription_profile(&id)? {
-        let manager = oauth.0.read().await;
+        let source = state.profile_auth_source(&id)?;
         let bound = state.bound_account_id(&id)?;
-        return match bound {
-            Some(account_id) => test_account_connection(&state, &manager, &account_id).await,
-            None => match unmanaged_external_codex_auth(&state, &oauth).await? {
-                Some(_) => {
-                    let token = state
-                        .external_codex_access_token()?
-                        .ok_or_else(|| app_err!("未检测到有效的 Codex 官方认证"))?;
-                    state.test_subscription_connection(&token).await
-                }
-                None => match manager.default_account_id().await {
-                    Some(account_id) => {
-                        test_account_connection(&state, &manager, &account_id).await
-                    }
-                    None => return Err(app_err!("未检测到已认证的 ChatGPT 订阅账号，请先登录")),
-                },
-            },
+        return match source {
+            Some(AuthSource::Oauth) => {
+                let account_id = bound.ok_or_else(|| app_err!("OAuth 配置未绑定订阅账号"))?;
+                test_account_connection(&state, &oauth.0, &account_id).await
+            }
+            Some(AuthSource::Desktop) => {
+                let token = state
+                    .external_codex_access_token()?
+                    .ok_or_else(|| app_err!("未检测到有效的 Codex Desktop 认证"))?;
+                state.test_subscription_connection(&token).await
+            }
+            None => Err(app_err!("官方配置缺少认证来源")),
         };
     }
     state
@@ -326,8 +303,9 @@ pub async fn test_provider_connection(
 pub async fn get_profile_balance(
     id: String,
     state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
 ) -> AppResult<ProfileBalance> {
-    state.get_profile_balance(&id).await
+    state.get_profile_balance(&id, &oauth.0).await
 }
 
 #[tauri::command]
@@ -348,7 +326,7 @@ pub async fn import_database(
 ) -> AppResult<()> {
     state.import_database(&path)?;
     // 数据库整体替换后，内存中的订阅账号同步重载
-    oauth.0.read().await.reload_from_database()?;
+    oauth.0.reload_from_database()?;
     Ok(())
 }
 
@@ -364,7 +342,7 @@ pub async fn restore_database(
     oauth: State<'_, CodexOAuthState>,
 ) -> AppResult<()> {
     state.restore_database(&name)?;
-    oauth.0.read().await.reload_from_database()?;
+    oauth.0.reload_from_database()?;
     Ok(())
 }
 
@@ -415,12 +393,16 @@ pub fn set_profile_balance(
 }
 
 #[tauri::command]
-pub fn set_profile_account(
+pub async fn set_profile_account(
     id: String,
     account_id: Option<String>,
     state: State<'_, AppContext>,
-) -> AppResult<()> {
-    state.set_profile_account(&id, account_id.as_deref())
+    oauth: State<'_, CodexOAuthState>,
+) -> Result<(), String> {
+    state
+        .set_profile_account_and_apply_active(&id, account_id.as_deref(), &oauth.0)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -505,56 +487,14 @@ pub async fn apply_profile(
     oauth: State<'_, CodexOAuthState>,
 ) -> Result<(), String> {
     state
-        .apply_profile(&id)
-        .map_err(|error| error.to_string())?;
-    // 认证优先级：档案 auth 覆盖 > 显式绑定账号 > 未托管的 Codex 官方认证 > 自动账号回退。
-    let is_subscription = state
-        .is_subscription_profile(&id)
-        .map_err(|error| error.to_string())?;
-    let has_auth_override = state
-        .has_auth_override(&id)
-        .map_err(|error| error.to_string())?;
-    if is_subscription && !has_auth_override {
-        let manager = oauth.0.read().await;
-        let bound = state
-            .bound_account_id(&id)
-            .map_err(|error| error.to_string())?;
-        let external_live = unmanaged_external_codex_auth(&state, &oauth)
-            .await
-            .map_err(|error| error.to_string())?
-            .is_some();
-        let account_id = match (bound, external_live) {
-            (Some(id), _) => Some(id),
-            (None, true) => None,
-            (None, false) => manager.default_account_id().await,
-        };
-        if let Some(account_id) = account_id {
-            // 当前 live auth.json 已属于目标账号时，保留 Codex 正在使用的凭据。
-            if state
-                .external_codex_access_token_for_account(&account_id)
-                .map_err(|error| error.to_string())?
-                .is_none()
-            {
-                // 否则优先用缓存凭据离线切换；首次（无缓存）才刷新一次播种。
-                let content = match manager.cached_auth_json(&account_id).await {
-                    Some(cached) => cached,
-                    None => manager
-                        .codex_auth_json(&account_id)
-                        .await
-                        .map_err(|error| error.to_string())?,
-                };
-                state
-                    .write_codex_auth_json(&content)
-                    .map_err(|error| error.to_string())?;
-            }
-        }
-    }
-    Ok(())
+        .apply_profile_with_auth(&id, &oauth.0)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-pub fn restart_codex(app: AppHandle, state: State<'_, AppContext>) -> AppResult<()> {
-    state.restart_codex(&app)
+pub fn restart_codex(state: State<'_, AppContext>) -> AppResult<()> {
+    state.restart_codex()
 }
 
 /// MCP 服务器管理：直接读写 live ~/.codex/config.toml 的 [mcp_servers.*] 段。
@@ -670,8 +610,6 @@ pub async fn auth_start_login(
 ) -> Result<DeviceCodeResponse, String> {
     state
         .0
-        .read()
-        .await
         .start_device_flow()
         .await
         .map_err(|error| error.to_string())
@@ -682,7 +620,7 @@ pub async fn auth_poll_for_account(
     device_code: String,
     state: State<'_, CodexOAuthState>,
 ) -> Result<Option<ManagedAccount>, String> {
-    match state.0.write().await.poll_for_token(&device_code).await {
+    match state.0.poll_for_token(&device_code).await {
         Ok(account) => Ok(account),
         Err(CodexOAuthError::AuthorizationPending) => Ok(None),
         Err(error) => Err(error.to_string()),
@@ -694,22 +632,45 @@ pub async fn auth_get_status(
     app: State<'_, AppContext>,
     oauth: State<'_, CodexOAuthState>,
 ) -> Result<AuthStatus, String> {
-    let mut status = oauth.0.read().await.get_status().await;
-    // 只把不属于 CGswitch 管理列表的 auth.json 识别为 Codex 官方外部认证。
+    let mut status = oauth.0.get_status().await;
+    // Desktop 和 OAuth 即便属于同一账号也同时展示；来源由档案绑定显式决定，不能在状态层合并。
     let external = app
         .external_codex_auth()
-        .map_err(|error| error.to_string())?
-        .filter(|external| {
-            !status
-                .accounts
-                .iter()
-                .any(|account| account.id == external.id)
-        });
+        .map_err(|error| error.to_string())?;
     if let Some(external) = external {
         status.external = Some(external);
         status.authenticated = true;
     }
     Ok(status)
+}
+
+#[tauri::command]
+pub async fn auth_get_quota(
+    source: AuthSource,
+    account_id: Option<String>,
+    state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
+) -> Result<ProfileBalance, String> {
+    state
+        .get_auth_quota(source, account_id.as_deref(), &oauth.0)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn auth_preview(
+    account_id: String,
+    oauth: State<'_, CodexOAuthState>,
+) -> Result<Option<String>, String> {
+    if let Some(cached) = oauth.0.cached_auth_json(&account_id).await {
+        return Ok(Some(cached));
+    }
+    oauth
+        .0
+        .codex_auth_json(&account_id)
+        .await
+        .map(Some)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -719,8 +680,6 @@ pub async fn auth_remove_account(
 ) -> Result<(), String> {
     state
         .0
-        .write()
-        .await
         .remove_account(&account_id)
         .await
         .map_err(|error| error.to_string())

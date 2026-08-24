@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { AppSelect } from "../../components/AppSelect";
+import { AppDisclosure } from "../../components/AppDisclosure";
 import ConfigTextEditor, { type ConfigTextEditorHandle } from "../../components/ConfigTextEditor";
 import type { EditorDiagnosticSummary, McpServerSpec } from "../../types";
 
@@ -185,35 +186,37 @@ export default function McpEdit({ server, create = false, onBack }: McpEditProps
           </div>
 
           <div className="apple-panel-section">
-            <div className={`apple-disclosure ${advancedOpen ? "apple-disclosure--open" : ""}`}>
-              <button type="button" className="apple-disclosure__summary" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)}>
-                <ChevronRight className="apple-disclosure__icon" size={18} strokeWidth={2} aria-hidden="true" />
-                <span className="field-subtitle">高级选项（环境变量 / 请求头 / 超时）</span>
-              </button>
-              <div className="apple-disclosure__content" aria-hidden={!advancedOpen} inert={!advancedOpen}>
-                <div className="apple-disclosure__body">
-                {transport === "stdio" ? <>
-                  <div className="field-label mb-1.5">环境变量</div>
-                  <PairEditor pairs={envPairs} onChange={setEnvPairs} keyPlaceholder="变量名" valuePlaceholder="值" />
-                </> : <>
-                  <div className="field-label mb-1.5">HTTP 请求头（固定值）</div>
-                  <PairEditor pairs={headerPairs} onChange={setHeaderPairs} keyPlaceholder="Header 名" valuePlaceholder="值" />
-                  <div className="field-label mb-1.5 mt-4">HTTP 请求头（值取自环境变量）</div>
-                  <PairEditor pairs={envHeaderPairs} onChange={setEnvHeaderPairs} keyPlaceholder="Header 名" valuePlaceholder="环境变量名" />
-                </>}
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <div className="field-label mb-1.5">启动超时（秒，可选）</div>
-                    <TimeoutInput value={startupTimeout} onChange={setStartupTimeout} placeholder="默认 10" />
-                  </div>
-                  <div>
-                    <div className="field-label mb-1.5">工具调用超时（秒，可选）</div>
-                    <TimeoutInput value={toolTimeout} onChange={setToolTimeout} placeholder="默认 60" />
-                    </div>
-                  </div>
+            <AppDisclosure
+              open={advancedOpen}
+              onOpenChange={setAdvancedOpen}
+              summary={(
+                <>
+                  <ChevronRight className="apple-disclosure__icon" size={18} strokeWidth={2} aria-hidden="true" />
+                  <span className="field-subtitle">高级选项（环境变量 / 请求头 / 超时）</span>
+                </>
+              )}
+              showIcon={false}
+            >
+              {transport === "stdio" ? <>
+                <div className="field-label mb-1.5">环境变量</div>
+                <PairEditor pairs={envPairs} onChange={setEnvPairs} keyPlaceholder="变量名" valuePlaceholder="值" />
+              </> : <>
+                <div className="field-label mb-1.5">HTTP 请求头（固定值）</div>
+                <PairEditor pairs={headerPairs} onChange={setHeaderPairs} keyPlaceholder="Header 名" valuePlaceholder="值" />
+                <div className="field-label mb-1.5 mt-4">HTTP 请求头（值取自环境变量）</div>
+                <PairEditor pairs={envHeaderPairs} onChange={setEnvHeaderPairs} keyPlaceholder="Header 名" valuePlaceholder="环境变量名" />
+              </>}
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <div className="field-label mb-1.5">启动超时（秒，可选）</div>
+                  <TimeoutInput value={startupTimeout} onChange={setStartupTimeout} placeholder="默认 10" />
+                </div>
+                <div>
+                  <div className="field-label mb-1.5">工具调用超时（秒，可选）</div>
+                  <TimeoutInput value={toolTimeout} onChange={setToolTimeout} placeholder="默认 60" />
                 </div>
               </div>
-            </div>
+            </AppDisclosure>
           </div>
 
           <div className="apple-panel-section">
@@ -227,7 +230,7 @@ export default function McpEdit({ server, create = false, onBack }: McpEditProps
       </div>
 
       <div className="apple-edit-toolbar apple-edit-toolbar--footer">
-        {diagnostics.count > 0 ? <button type="button" className="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg border border-[var(--danger)]/20 bg-[var(--danger)]/10 px-2.5 py-1 text-xs chip-danger" title="跳转到第一个错误" aria-live="polite" onClick={() => editorRef.current?.focusFirstDiagnostic()}><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--danger)]" aria-hidden="true" /><span className="truncate">{diagnostics.count} 个错误{diagnostics.firstLine !== null ? ` · 第 ${diagnostics.firstLine} 行` : ""}</span></button> : null}
+        {diagnostics.count > 0 ? <button type="button" className="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg border border-[var(--danger)]/20 bg-(--danger)/10 px-2.5 py-1 text-xs chip-danger" title="跳转到第一个错误" aria-live="polite" onClick={() => editorRef.current?.focusFirstDiagnostic()}><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-(--danger)" aria-hidden="true" /><span className="truncate">{diagnostics.count} 个错误{diagnostics.firstLine !== null ? ` · 第 ${diagnostics.firstLine} 行` : ""}</span></button> : null}
         <button type="button" className="apple-action-button" disabled={formatting || saving} onClick={() => void formatToml()}>格式化</button>
         <button type="button" className="apple-action-button" onClick={onBack}>取消</button>
         <button type="button" className="apple-action-button app-button--primary" disabled={saving} onClick={() => void save()}><Save className="h-4 w-4" strokeWidth={2} />{saving ? "保存中…" : "保存"}</button>

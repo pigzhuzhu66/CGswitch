@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type {
   AppState,
   AuthStatus,
@@ -22,15 +21,12 @@ import type {
   ProfileDetail,
   ProfileConnectionResult,
   ProfileSummary,
-  RestartStage,
   Settings,
   TomlDiagnostic,
 } from "../types";
 import { webInvoke } from "./web-mock";
 
 export const isTauri = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
-
-type RestartProgressHandler = (payload: { stage: RestartStage; message: string | null }) => void;
 
 function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   return isTauri ? invoke<T>(command, args) : webInvoke<T>(command, args);
@@ -156,16 +152,13 @@ export const api = {
   authPollForAccount: (deviceCode: string) =>
     call<ManagedAccount | null>("auth_poll_for_account", { deviceCode }),
   authGetStatus: () => call<AuthStatus>("auth_get_status"),
+  authGetQuota: (source: "desktop" | "oauth", accountId?: string) =>
+    call<ProfileBalance>("auth_get_quota", { source, accountId }),
+  authPreview: (accountId: string) => call<string | null>("auth_preview", { accountId }),
   authRemoveAccount: (accountId: string) =>
     call<void>("auth_remove_account", { accountId }),
   openUrl: (url: string) => call<void>("open_url", { url }),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<Settings>("save_settings", { settings }),
   openPath: (path: string) => call<void>("open_path", { path }),
-  onRestartProgress: async (handler: RestartProgressHandler) => {
-    if (!isTauri) return () => undefined;
-    return listen("restart-progress", (event) =>
-      handler(event.payload as { stage: RestartStage; message: string | null }),
-    );
-  },
 };

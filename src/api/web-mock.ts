@@ -11,6 +11,7 @@ import type {
   SkillSummary,
   SkillCandidate,
   ProfileBalanceInfo,
+  ProfileConnectionResult,
   ProfileDetail,
   ProfileSummary,
   Settings,
@@ -21,6 +22,7 @@ const webProfiles: ProfileSummary[] = [
   {
     id: "profile-zai-glm-high",
     name: "ZAI GLM 高推理",
+    kind: "third_party",
     account_id: null,
     model: "glm-5.3",
     provider: "ZAI",
@@ -35,6 +37,7 @@ const webProfiles: ProfileSummary[] = [
   {
     id: "profile-zai-glm-fast",
     name: "ZAI GLM 快速",
+    kind: "third_party",
     account_id: null,
     model: "glm-5-turbo",
     provider: "ZAI",
@@ -49,7 +52,9 @@ const webProfiles: ProfileSummary[] = [
   {
     id: "profile-official",
     name: "官方默认",
+    kind: "official",
     account_id: null,
+    auth_source: "desktop",
     model: "gpt-5.6",
     provider: null,
     reasoning_effort: "medium",
@@ -218,6 +223,7 @@ let webMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
       description: "Prefer YAGNI, the standard library, native platform features, and the smallest correct implementation.",
       category: "Productivity",
       capabilities: ["Instructions", "Lifecycle hooks"],
+      contains: ["skills", "hooks"],
     },
   ],
 };
@@ -237,6 +243,7 @@ const webRecommendedMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
       description: "用于代码工作流与开发辅助的外部插件。",
       category: "Development",
       capabilities: ["Instructions"],
+      contains: ["skills"],
     },
     {
       plugin_id: "xros@xiaolai",
@@ -249,6 +256,7 @@ const webRecommendedMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
       description: "面向终端工作流的外部插件。",
       category: "Productivity",
       capabilities: ["Instructions"],
+      contains: ["skills"],
     },
   ],
   youmind: [
@@ -263,6 +271,7 @@ const webRecommendedMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
       description: "Write HTML, render video, and create interactive motion graphics with HeyGen's HyperFrames.",
       category: "Design",
       capabilities: ["Read", "Write"],
+      contains: ["app"],
     },
   ],
 };
@@ -315,6 +324,49 @@ function connectionErrorFromBody(value: unknown): string | null {
   return null;
 }
 
+function isOpenCodeGoBaseUrl(baseUrl: string): boolean {
+  return baseUrl.replace(/\/+$/, "").toLowerCase() === "https://opencode.ai/zen/go/v1";
+}
+
+async function testOpenCodeConnection(
+  baseUrl: string,
+  apiKey: string,
+): Promise<ProfileConnectionResult> {
+  const start = Date.now();
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/responses`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "deepseek-v4-flash",
+        input: "ping",
+        max_output_tokens: 0,
+      }),
+    });
+    const latency_ms = Date.now() - start;
+    const body = await res.text();
+    const probeValidationRejection =
+      [400, 422].includes(res.status) && body.toLowerCase().includes("max_output_tokens");
+    const ok = res.ok || probeValidationRejection;
+    return {
+      ok,
+      latency_ms,
+      status: res.status,
+      error: ok ? null : res.status === 401 || res.status === 403 ? "API 密钥无效" : `接口返回 HTTP ${res.status}`,
+    };
+  } catch {
+    return {
+      ok: false,
+      latency_ms: null,
+      status: null,
+      error: "连接失败：浏览器跨域限制无法真实请求，请用桌面版验证",
+    };
+  }
+}
+
 interface WebDetail {
   base_url: string | null;
   api_key: string | null;
@@ -323,6 +375,7 @@ interface WebDetail {
   raw_config?: string | null;
   raw_catalog?: string | null;
   raw_auth?: string | null;
+  desktop_login?: string | null;
 }
 
 const webDetails: Record<string, WebDetail> = {
@@ -367,6 +420,8 @@ function webProfileDetail(id: string): ProfileDetail {
     id: profile.id,
     name: profile.name,
     account_id: profile.account_id,
+    auth_source: profile.auth_source ?? (profile.account_id ? "oauth" : profile.kind === "official" ? "desktop" : null),
+    desktop_login: detail?.desktop_login ?? null,
     icon: profile.icon,
     provider: profile.provider,
     base_url: detail?.base_url ?? null,
@@ -374,9 +429,6 @@ function webProfileDetail(id: string): ProfileDetail {
     model_values: detail?.model_values ?? {},
     config_fragment: detail?.config_fragment ?? "",
     raw_config: detail?.raw_config ?? null,
-    auth_content: detail?.api_key
-      ? '{\n  "OPENAI_API_KEY": "sk-demo-real-value"\n}'
-      : null,
     catalog_content: detail?.model_values.model_catalog_json
       ? '{\n  "models": [\n    { "id": "glm-5.3", "name": "GLM 5.3" }\n  ]\n}'
       : null,
@@ -428,9 +480,23 @@ let webMcpServers: McpServerSpec[] = [
     env_http_headers: {},
   },
 ];
-// 与后端一致：激活状态只由“应用/捕获”显式建立，添加供应商不激活
+// 与后端一致：激活状态只由“应用”显式建立，添加/捕获供应商不激活
 let webActiveProfileId: string | null = null;
 const webBalanceCache: Record<string, ProfileBalanceInfo> = {};
+const webChatgptQuota: ProfileBalanceInfo = {
+  currency: "",
+  total_balance: "",
+  granted_balance: "",
+  topped_up_balance: "",
+  usage_percent: 18,
+  usage_reset: "3h12m",
+  usage_reset_at: Date.now() + 3 * 60 * 60 * 1000 + 12 * 60 * 1000,
+  usage_label: "5小时",
+  weekly_usage_percent: 42,
+  weekly_reset: "4d8h",
+  weekly_reset_at: Date.now() + 4 * 86_400_000 + 8 * 3_600_000,
+  weekly_label: "7天",
+};
 
 function databaseBackupName(date = new Date()): string {
   const pad = (value: number, length = 2) => String(value).padStart(length, "0");
@@ -484,6 +550,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const profile: ProfileSummary = {
         id: `profile-${Date.now()}`,
         name: String(args?.name ?? "新供应商"),
+        kind: "third_party",
         account_id: null,
         model: "glm-5.3",
         provider: "ZAI",
@@ -496,8 +563,6 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         updated_at: now,
       };
       webProfiles.push(profile);
-      // 捕获即建立“当前 live = 该供应商”的显式关联
-      webActiveProfileId = profile.id;
       return profile as T;
     }
     case "add_builtin_profile": {
@@ -513,7 +578,9 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const profile: ProfileSummary = {
         id: `profile-${Date.now()}`,
         name: preset.name,
+        kind: preset.provider ? "third_party" : "official",
         account_id: preset.provider ? null : (typeof args?.accountId === "string" ? args.accountId : null),
+        auth_source: preset.provider ? null : (typeof args?.accountId === "string" && args.accountId ? "oauth" : "desktop"),
         model: preset.model,
         provider: preset.provider,
         reasoning_effort: stripTomlQuotes(preset.model_values.model_reasoning_effort) || null,
@@ -538,6 +605,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const profile: ProfileSummary = {
         id: `profile-${Date.now()}`,
         name: String(args?.name ?? "自定义供应商"),
+        kind: "third_party",
         account_id: null,
         model: null,
         provider: null,
@@ -575,6 +643,9 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const baseUrl = String(args?.baseUrl ?? "");
       if (!apiKey.trim()) throw new Error("请填写 API 密钥");
       if (!baseUrl.trim()) throw new Error("请填写调用地址");
+      if (isOpenCodeGoBaseUrl(baseUrl.trim())) {
+        return (await testOpenCodeConnection(baseUrl.trim(), apiKey.trim())) as T;
+      }
       const url = `${baseUrl.replace(/\/+$/, "")}/models`;
       const start = Date.now();
       try {
@@ -602,6 +673,9 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       if (!apiKey.trim()) throw new Error("请填写 API 密钥");
       const baseUrl = args?.baseUrl !== undefined ? String(args.baseUrl) : "https://api.example.com";
       if (!baseUrl.trim()) throw new Error("请填写调用地址");
+      if (isOpenCodeGoBaseUrl(baseUrl.trim())) {
+        return (await testOpenCodeConnection(baseUrl.trim(), apiKey.trim())) as T;
+      }
       // 网页调试模式做真实请求，避免“随便填都能成功”的假象；
       // 跨域被浏览器拦截时明确提示用桌面版验证
       const url = `${baseUrl.replace(/\/+$/, "")}/models`;
@@ -646,6 +720,10 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
     case "get_profile_balance": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
+      // 与后端一致：官方 ChatGPT 配置按其固定登录来源查询额度。
+      if (profile.kind === "official") {
+        return { is_available: true, balance_infos: [webChatgptQuota], latency_ms: 210 } as T;
+      }
       if (!balanceQueryProviders.has(profile.provider ?? "")) {
         throw new Error("该供应商不支持余额查询");
       }
@@ -738,6 +816,9 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       }
       return undefined as T;
     }
+    case "auth_get_quota":
+      // 与后端一致：Settings 的 Codex/OAuth 账号均返回官方额度窗口。
+      return { is_available: true, balance_infos: [webChatgptQuota], latency_ms: 210 } as T;
     case "duplicate_profile": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
@@ -770,6 +851,10 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
     case "update_profile_config": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
+      const source = profile.auth_source ?? (profile.account_id ? "oauth" : profile.kind === "official" ? "desktop" : null);
+      if (profile.kind === "official" && source === "oauth" && typeof args?.authText === "string") {
+        throw new Error("OAuth 配置的认证由账号选择管理，不能编辑 Desktop auth.json");
+      }
       const detail = webDetails[profile.id];
       if (detail) {
         if (typeof args?.configText === "string") detail.raw_config = args.configText;
@@ -851,7 +936,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         description: item.description ?? `来自 ${marketplace} 市场的插件`,
         category: item.category,
         capabilities: item.capabilities,
-        contains: ["skills"],
+        contains: item.contains,
         enabled: true,
         origin: "codex",
         marketplace,
@@ -936,6 +1021,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       return undefined as T;
     }
     case "apply_profile":
+      // 与后端一致：官方档案的认证来源在创建时固定；Web mock 不操作本机 auth.json。
       webActiveProfileId = typeof args?.id === "string" ? args.id : null;
       await new Promise((resolve) => setTimeout(resolve, 500));
       return undefined as T;
@@ -946,11 +1032,24 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       return undefined as T;
     case "auth_get_status":
       return { authenticated: false, default_account_id: null, accounts: [], external: null } as T;
+    case "auth_preview": {
+      if (typeof args?.accountId !== "string" || !args.accountId) {
+        throw new Error("OAuth 账号不能为空");
+      }
+      const accountId = args.accountId;
+      return JSON.stringify({
+        auth_mode: "chatgpt",
+        OPENAI_API_KEY: null,
+        tokens: { account_id: accountId, access_token: "<preview-only>" },
+      }, null, 2) as T;
+    }
     case "set_profile_account": {
       const profile = webProfiles.find((item) => item.id === args?.id);
-      if (profile) {
-        profile.account_id = typeof args?.accountId === "string" ? args.accountId : null;
-      }
+      if (!profile) throw new Error("供应商配置不存在");
+      const source = profile.auth_source ?? (profile.account_id ? "oauth" : profile.kind === "official" ? "desktop" : null);
+      if (source !== "oauth") throw new Error("Desktop 配置不能切换为 OAuth，请新建 ChatGPT 配置");
+      if (typeof args?.accountId !== "string" || !args.accountId) throw new Error("OAuth 配置必须绑定一个订阅账号");
+      profile.account_id = args.accountId;
       return undefined as T;
     }
     case "open_url":

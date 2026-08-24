@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter};
+use tokio::sync::Mutex as AsyncMutex;
 
 use crate::auth::codex_oauth::{parse_external_auth_json, ManagedAccount};
 use crate::builtin;
@@ -11,9 +11,9 @@ use crate::database::{profile_summary, Database};
 use crate::error::{app_err, AppResult};
 use crate::fsutil::{atomic_write, backup_file, prune_backups};
 use crate::models::{
-    AppState, CodexAppStatus, McpServerSpec, McpSyncDiffEntry, McpSyncEntryKind, McpSyncFieldDiff,
-    McpSyncPreview, PathInfo, ProfileBalanceInfo, ProfileDetail, ProfileKind, ProfilePayload,
-    ProfileSummary, Settings,
+    AppState, AuthSource, CodexAppStatus, McpServerSpec, McpSyncDiffEntry, McpSyncEntryKind,
+    McpSyncFieldDiff, McpSyncPreview, PathInfo, ProfileBalanceInfo, ProfileDetail, ProfileKind,
+    ProfilePayload, ProfileSummary, Settings,
 };
 use crate::paths::{now_ms, AppPaths};
 
@@ -40,6 +40,8 @@ pub struct AppContext {
     database: Arc<Database>,
     paths: AppPaths,
     operation: Mutex<()>,
+    /// 认证激活需要等待 OAuth 刷新，必须从开始到 live auth 写入保持顺序。
+    activation: AsyncMutex<()>,
 }
 
 impl AppContext {
@@ -53,6 +55,7 @@ impl AppContext {
             database,
             paths,
             operation: Mutex::new(()),
+            activation: AsyncMutex::new(()),
         }
     }
 }

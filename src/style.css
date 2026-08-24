@@ -23,9 +23,11 @@
   --text-secondary: rgba(60, 60, 67, 0.68);
   --sidebar-bg: #e8e8e9;
   --selection-bg: rgba(0, 122, 255, 0.12);
+  --profile-active-bg: color-mix(in srgb, var(--accent) 7%, var(--panel-bg));
   /* 状态徽标文字：比 --success 深一档，浅底上保证对比度；深色主题换亮绿 */
   --success-text: #248a3d;
   --chip-success: #30d158;
+  --toast-icon-foreground: #1c1c1e;
   --profile-chip-bg: rgb(0 0 0 / 0.04);
   --input-bg: #f5f5f5;
   --profile-meta-text: rgba(60, 60, 67, 0.68);
@@ -66,7 +68,7 @@
   /* 页面顶部栏与底部操作栏统一高度 */
   --toolbar-height: 3.625rem;
   /* 窗口标题栏高度：品牌区与窗口控制按钮共用同一垂直中心 */
-  --window-chrome-height: 2.5rem;
+  --window-chrome-height: 2.125rem;
   /* 卡片、高亮分区和配置编辑器容器统一圆角 */
   --radius-card: 1rem;
   /* 右侧滚动条占位宽度，启动时由 JS 实测写入，保证左右视觉间距完全一致 */
@@ -88,8 +90,10 @@
   --text-secondary: rgba(255, 255, 255, 0.68);
   --sidebar-bg: #25282b;
   --selection-bg: rgba(0, 122, 255, 0.16);
+  --profile-active-bg: color-mix(in srgb, var(--accent) 14%, var(--panel-bg));
   --success-text: #6ee7a0;
   --chip-success: #63e68a;
+  --toast-icon-foreground: #ffffff;
   --profile-chip-bg: #1e1e1e;
   --input-bg: #1e1e1e;
   --profile-meta-text: rgba(255, 255, 255, 0.62);
@@ -190,7 +194,11 @@ textarea::placeholder {
   min-height: 18px;
 }
 
-/* 余额/用量胶囊数据变色（全局统一；cc-switch 同款阈值，后续供应商直接复用）。
+.profile-card-content__text {
+  transform: translateY(-2px);
+}
+
+/* 余额/用量胶囊数据变色（全局统一；后续供应商直接复用）。
    变色数据同时加粗，标签/倒计时保持默认字重 */
 .chip-success {
   color: var(--chip-success);
@@ -525,79 +533,33 @@ main:has(.apple-scroll-page) {
   overflow: hidden;
 }
 
+.profile-card-actions--dragging {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.profile-card-actions > .apple-action-button {
+  height: var(--icon-button-size);
+  font-weight: 600;
+}
+
+.profile-list > .apple-group.is-drag-hover h3,
+.profile-drag-preview.is-drag-hover h3 {
+  color: var(--accent);
+  transition: none;
+}
+
+.profile-list > .apple-group.is-drag-hover .profile-card-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transition: none;
+}
+
 /* 拖拽期间全局禁止文本选中，防止路过卡片时标题/内容被框选 */
 body.drag-active,
 body.drag-active * {
   user-select: none !important;
   -webkit-user-select: none !important;
-}
-
-body.drag-settling .profile-card-actions {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-/* 供应商卡片行间分割线：按相邻卡片绘制，不依赖 item index 或组件属性透传 */
-.profile-list > [data-draggable] + [data-draggable] {
-  border-top: 1px solid;
-  border-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--panel-divider) 56px,
-    var(--panel-divider) calc(100% - 56px),
-    transparent 100%
-  ) 1;
-}
-
-/* 重启进度卡展开/收起：布局推移只由外层 grid 行高（0fr↔1fr）一个属性承担，
-   卡片本体只动 transform + opacity（合成器线程）。替代逐帧 JS 写
-   height/margin/padding 的方案——那种方式每帧触发整页 reflow，且 rAF 回调
-   与重启期间的 React 提交争抢主线程，表现为推动下方列表时卡顿。 */
-.restart-card-reveal {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--motion-layout) cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.restart-card-reveal--open {
-  grid-template-rows: 1fr;
-}
-
-.restart-card-reveal__inner {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.restart-card-reveal__inner > .apple-group {
-  opacity: 0;
-  transform: translateY(-10px);
-  transition:
-    transform var(--motion-layout) cubic-bezier(0.22, 1, 0.36, 1),
-    opacity var(--motion-fast) ease-out;
-}
-
-.restart-card-reveal--open .restart-card-reveal__inner > .apple-group {
-  opacity: 1;
-  transform: none;
-}
-
-/* 进场：元素带 --open 挂载，从收起起始样式过渡到展开（WebView2 Chromium 支持 @starting-style） */
-@starting-style {
-  .restart-card-reveal--open {
-    grid-template-rows: 0fr;
-  }
-
-  .restart-card-reveal--open .restart-card-reveal__inner > .apple-group {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .restart-card-reveal,
-  .restart-card-reveal__inner > .apple-group {
-    transition: none;
-  }
 }
 
 .apple-sidebar-label {
@@ -639,7 +601,7 @@ body.drag-settling .profile-card-actions {
 /* 标题栏品牌按钮浮标：锚定标题栏左侧色块（随侧边栏宽度自适应），
    展开时浮标在侧边栏右缘外、收缩时在栏外右侧；两种状态悬停都显示动作提示 */
 .apple-sidebar-brand + .apple-sidebar-flyout {
-  /* 标题栏为 40px，浮标保持在品牌区垂直中心 */
+  /* 标题栏为 34px，浮标保持在品牌区垂直中心 */
   top: calc(50% + 6px);
   /* 与其他按钮浮标一致：距侧边栏右缘 3.6px（导航按钮 mx-1.5 内缩 6px + 0.6rem 间距） */
   left: calc(100% + 0.225rem);
@@ -878,11 +840,116 @@ body.drag-settling .profile-card-actions {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.codex-status {
+  display: inline-flex;
+  height: 1.75rem;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--panel-ring);
+  border-radius: 999px;
+  padding-inline: 0.5rem;
+  color: inherit;
+  background: color-mix(in srgb, var(--panel-bg) 90%, transparent);
+  white-space: nowrap;
+}
+
+.codex-status--running {
+  border-color: color-mix(in srgb, var(--success) 24%, var(--panel-ring));
+  background: color-mix(in srgb, var(--success) 4%, var(--panel-bg));
+}
+
+.codex-status__signal {
+  display: grid;
+  width: 1.125rem;
+  height: 1.125rem;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+}
+
+.codex-status__signal-dot {
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.codex-status--running .codex-status__signal {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.codex-status--running .codex-status__signal-dot {
+  animation: codex-status-breathe 2.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.codex-status__name {
+  color: inherit;
+}
+
+.codex-status__divider {
+  width: 1px;
+  height: 0.75rem;
+  background: currentColor;
+  opacity: 0.28;
+}
+
+.codex-status__label {
+  color: currentColor;
+}
+
+@keyframes codex-status-breathe {
+  0%, 100% { opacity: 0.82; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-status--running .codex-status__signal-dot { animation: none; }
+}
+
 .apple-group {
   overflow: hidden;
   border-radius: var(--radius-card);
   background: var(--panel-bg);
   box-shadow: 0 0 0 1px var(--panel-ring);
+}
+
+/* 配置卡片专属：整卡激活底色 + 细边框，避免污染其他 apple-group 卡片。 */
+.profile-list > .apple-group.is-active,
+.profile-drag-preview.is-active {
+  background-image: linear-gradient(
+    90deg,
+    var(--profile-active-bg) 0%,
+    color-mix(in srgb, var(--profile-active-bg) 45%, transparent) 58%,
+    transparent 100%
+  );
+}
+
+.profile-list > .apple-group.is-active {
+  box-shadow:
+    0 0 0 1px var(--panel-ring),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.profile-drag-preview.is-active {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+:root.dark .profile-list > .apple-group.is-active {
+  box-shadow:
+    0 0 0 1px var(--panel-ring),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+
+:root.dark .profile-drag-preview.is-active {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
 .apple-segmented-control { background: var(--input-bg); }
@@ -999,6 +1066,39 @@ body.drag-settling .profile-card-actions {
 .mcp-sync-choice:hover,
 .mcp-sync-choice:focus-visible {
   background: var(--selection-bg);
+}
+
+.mcp-sync-diff {
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--panel-bg);
+  box-shadow: 0 0 0 1px var(--panel-ring);
+}
+
+.mcp-sync-diff.apple-disclosure--open .apple-disclosure__body { padding-top: 0; }
+
+.mcp-sync-diff .apple-disclosure__summary {
+  min-height: var(--control-height);
+  padding: 0.625rem 0.75rem;
+  background: color-mix(in srgb, var(--sidebar-bg) 34%, var(--panel-bg));
+}
+
+.mcp-sync-diff .apple-disclosure__summary:hover,
+.mcp-sync-diff .apple-disclosure__summary:focus-visible {
+  background: var(--selection-bg);
+}
+
+.mcp-sync-diff__detail {
+  border-top: 1px solid var(--panel-divider);
+  background: color-mix(in srgb, var(--sidebar-bg) 22%, var(--panel-bg));
+  padding: 0.75rem;
+}
+
+.mcp-sync-diff__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  color: var(--text-secondary);
 }
 
 .apple-editor-shell {
@@ -1232,7 +1332,7 @@ button:focus-visible {
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel-bg) 88%, white);
   box-shadow: 0 3px 6px -4px rgb(0 0 0 / 0.12), 0 6px 16px 0 rgb(0 0 0 / 0.08), 0 9px 28px 8px rgb(0 0 0 / 0.05);
-  padding: 10px 20px;
+  padding: 10px 12px;
   color: inherit;
   font-size: 14px;
   line-height: 1.6;
@@ -1266,26 +1366,51 @@ button:focus-visible {
 }
 
 .app-toast__icon {
+  box-sizing: border-box;
   flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
   margin: 0 10px 0 0;
+  padding: 3px;
+  border-radius: 50%;
   opacity: var(--toast-opacity);
   transition: opacity 220ms ease-out;
   transition-delay: var(--toast-transition-delay);
 }
 
-.app-toast__icon--success { color: var(--success); }
-.app-toast__icon--error { color: var(--danger); }
-.app-toast__icon--warning { color: var(--warning); }
-.app-toast__icon--info { color: var(--accent); }
+.app-toast__icon--success { color: var(--toast-icon-foreground); background: var(--success); }
+.app-toast__icon--error { color: var(--toast-icon-foreground); background: var(--danger); }
+.app-toast__icon--warning { color: var(--toast-icon-foreground); background: var(--warning); }
+.app-toast__icon--info { color: var(--toast-icon-foreground); background: var(--accent); }
 
 .app-toast__content {
   display: inline-block;
+  flex: 0 1 auto;
   min-width: 0;
   font-size: inherit;
   line-height: inherit;
   opacity: var(--toast-opacity);
   transition: opacity 220ms ease-out;
   transition-delay: var(--toast-transition-delay);
+}
+
+.app-toast__close {
+  display: grid;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  opacity: var(--toast-opacity);
+  transition: background-color var(--motion-fast) ease-out, color var(--motion-fast) ease-out, opacity 220ms ease-out;
+  transition-delay: 0ms, 0ms, var(--toast-transition-delay);
+}
+
+.app-toast__close:hover {
+  background: var(--profile-chip-bg);
+  color: inherit;
 }
 
 .app-select {
@@ -1387,8 +1512,8 @@ button:focus-visible {
 }
 
 .app-select-option:hover,
-.app-select-option:focus-visible { background: color-mix(in srgb, var(--sidebar-bg) 42%, var(--panel-bg)); color: var(--accent); outline: none; }
-.app-select-option[data-selected="true"] { background: color-mix(in srgb, var(--sidebar-bg) 42%, var(--panel-bg)); color: var(--accent); font-weight: 600; }
+.app-select-option:focus-visible { background: color-mix(in srgb, var(--accent) 7%, var(--panel-bg)); color: var(--accent); outline: none; }
+.app-select-option[data-selected="true"] { background: var(--selection-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent); color: var(--accent); font-weight: 600; }
 .app-select-option__check { flex: 0 0 auto; color: var(--accent); }
 
 .app-dynamic-input {

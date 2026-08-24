@@ -78,6 +78,7 @@ pub struct MarketplacePlugin {
     pub description: Option<String>,
     pub category: Option<String>,
     pub capabilities: Vec<String>,
+    pub contains: Vec<String>,
 }
 
 /// 外部市场快照更新后，已安装插件的可升级项。
@@ -207,28 +208,37 @@ fn codex_cli_file_name() -> &'static str {
     }
 }
 
-/// codex CLI 探测链：`~/.codex/bin`（CLI 安装约定）、Desktop appserver 自带的副本、PATH。
-fn find_codex_cli(home: &Path) -> Option<PathBuf> {
-    let mut candidates = vec![
-        home.join(".codex").join("bin").join(codex_cli_file_name()),
+fn cli_candidates(home: &Path, path_dirs: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    let mut candidates = vec![home.join(".codex").join("bin").join(codex_cli_file_name())];
+    candidates.extend(
+        path_dirs
+            .into_iter()
+            .map(|dir| dir.join(codex_cli_file_name())),
+    );
+    candidates.push(
         home.join(".codex")
             .join("plugins")
             .join(".plugin-appserver")
             .join(codex_cli_file_name()),
-    ];
-    if let Some(paths) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&paths) {
-            candidates.push(dir.join(codex_cli_file_name()));
-        }
-    }
-    candidates.into_iter().find(|path| path.is_file())
+    );
+    candidates
+}
+
+/// codex CLI 探测链：`~/.codex/bin`、PATH 中的独立 CLI、Desktop appserver 自带副本兜底。
+fn find_codex_cli(home: &Path) -> Option<PathBuf> {
+    let path_dirs = std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .unwrap_or_default();
+    cli_candidates(home, path_dirs)
+        .into_iter()
+        .find(|path| path.is_file())
 }
 
 /// 跑 `codex plugin <args>`，返回 stdout；失败时把 CLI 的报错带出来。
 fn run_codex_plugin(home: &Path, args: &[&str]) -> AppResult<String> {
     let cli = find_codex_cli(home).ok_or_else(|| {
         app_err!(
-            "未找到 codex CLI（已尝试 ~/.codex/bin、桌面版 appserver 目录与 PATH），无法管理插件"
+            "未找到 codex CLI（已尝试 ~/.codex/bin、PATH 与桌面版 appserver 目录），无法管理插件"
         )
     })?;
     let mut command = std::process::Command::new(&cli);
@@ -436,6 +446,7 @@ struct MarketplaceEntryMetadata {
     description: Option<String>,
     category: Option<String>,
     capabilities: Vec<String>,
+    contains: Vec<String>,
     version: Option<String>,
 }
 
@@ -458,9 +469,8 @@ fn marketplace_entry_metadata(root: Option<&Path>, name: &str) -> MarketplaceEnt
         return MarketplaceEntryMetadata::default();
     };
     let interface = entry.get("interface");
-    let local_manifest = entry_local_path(entry)
-        .and_then(|raw| resolve_local_path(root, &raw))
-        .and_then(|path| read_manifest(&path));
+    let local_path = entry_local_path(entry).and_then(|raw| resolve_local_path(root, &raw));
+    let local_manifest = local_path.as_deref().and_then(read_manifest);
     let manifest_interface = local_manifest
         .as_ref()
         .and_then(|item| item.interface.as_ref());
@@ -482,6 +492,10 @@ fn marketplace_entry_metadata(root: Option<&Path>, name: &str) -> MarketplaceEnt
             .or_else(|| manifest_interface.and_then(|item| item.category.clone())),
         capabilities: manifest_interface
             .map(|item| item.capabilities.clone())
+            .unwrap_or_default(),
+        contains: local_path
+            .as_deref()
+            .map(store_contains)
             .unwrap_or_default(),
         version: local_manifest
             .as_ref()
@@ -550,6 +564,7 @@ fn parse_marketplace_plugins_output(
                 description: metadata.description,
                 category: metadata.category,
                 capabilities: metadata.capabilities,
+                contains: metadata.contains,
             })
         })
         .collect())
@@ -2147,6 +2162,14 @@ ponytail@ponytail               installed, disabled 4.9.0         C:\\cache\\pon
         let plugin_dir = root.path().join("plugins/local-tool/.codex-plugin");
         std::fs::create_dir_all(&marketplace_dir).unwrap();
         std::fs::create_dir_all(&plugin_dir).unwrap();
+        std::fs::create_dir_all(root.path().join("plugins/local-tool/skills/example")).unwrap();
+        std::fs::write(
+            root.path()
+                .join("plugins/local-tool/skills/example/SKILL.md"),
+            "# Example",
+        )
+        .unwrap();
+        std::fs::write(root.path().join("plugins/local-tool/.mcp.json"), "{}").unwrap();
         std::fs::write(
             marketplace_dir.join("marketplace.json"),
             r#"{
@@ -2197,6 +2220,24 @@ ponytail@ponytail               installed, disabled 4.9.0         C:\\cache\\pon
             vec!["Read".to_string(), "Write".to_string()]
         );
         assert_eq!(items[0].version.as_deref(), Some("2.0.0"));
+        assert_eq!(items[0].contains, vec!["skills", "mcp"]);
+    }
+
+    #[test]
+    fn cli_candidates_prefer_path_before_desktop_appserver() {
+        let home = Path::new("/home/user");
+        let candidates = cli_candidates(
+            home,
+            vec![PathBuf::from("/usr/local/bin"), PathBuf::from("/usr/bin")],
+        );
+        let filename = codex_cli_file_name();
+        assert_eq!(candidates[0], home.join(".codex/bin").join(filename));
+        assert_eq!(candidates[1], Path::new("/usr/local/bin").join(filename));
+        assert_eq!(candidates[2], Path::new("/usr/bin").join(filename));
+        assert_eq!(
+            candidates[3],
+            home.join(".codex/plugins/.plugin-appserver").join(filename)
+        );
     }
 
     #[test]

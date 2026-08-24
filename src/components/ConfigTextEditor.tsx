@@ -4,7 +4,7 @@ import { bracketMatching, defaultHighlightStyle, foldGutter, foldKeymap, indentO
 import { json } from "@codemirror/lang-json";
 import { forEachDiagnostic, lintGutter, lintKeymap, linter, type Diagnostic } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { crosshairCursor, drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, keymap, lineNumbers, placeholder as editorPlaceholder, rectangularSelection, dropCursor, type ViewUpdate } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { toml } from "@codemirror/legacy-modes/mode/toml";
@@ -51,13 +51,14 @@ interface ConfigTextEditorProps {
   value: string;
   language: "toml" | "json";
   placeholder?: string;
+  readOnly?: boolean;
   validateToml?: (text: string) => Promise<TomlDiagnostic[]>;
   onChange: (value: string) => void;
   onDiagnostics: (summary: EditorDiagnosticSummary) => void;
 }
 
 const ConfigTextEditor = forwardRef<ConfigTextEditorHandle, ConfigTextEditorProps>(function ConfigTextEditor(
-  { value, language, placeholder, validateToml = api.validateToml, onChange, onDiagnostics },
+  { value, language, placeholder, readOnly = false, validateToml = api.validateToml, onChange, onDiagnostics },
   ref,
 ) {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
@@ -68,6 +69,7 @@ const ConfigTextEditor = forwardRef<ConfigTextEditorHandle, ConfigTextEditorProp
   const onDiagnosticsRef = useRef(onDiagnostics);
   const lastSummary = useRef<EditorDiagnosticSummary | null>(null);
   const syncingValueRef = useRef(false);
+  const editingCompartment = useRef(new Compartment());
 
   valueRef.current = value;
   onChangeRef.current = onChange;
@@ -146,6 +148,10 @@ const ConfigTextEditor = forwardRef<ConfigTextEditorHandle, ConfigTextEditorProp
         doc: valueRef.current,
         extensions: [
           basicSetup,
+          editingCompartment.current.of([
+            EditorState.readOnly.of(readOnly),
+            EditorView.editable.of(!readOnly),
+          ]),
           editorPlaceholder(placeholder ?? "在此编辑配置…"),
           language === "toml" ? StreamLanguage.define(toml) : json(),
           language === "toml" ? tomlDiagnostics : jsonDiagnostics,
@@ -167,6 +173,17 @@ const ConfigTextEditor = forwardRef<ConfigTextEditorHandle, ConfigTextEditorProp
       if (viewRef.current === editor) viewRef.current = null;
     };
   }, [dark, language, placeholder, validateToml]);
+
+  useEffect(() => {
+    const editor = viewRef.current;
+    if (!editor) return;
+    editor.dispatch({
+      effects: editingCompartment.current.reconfigure([
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly),
+      ]),
+    });
+  }, [readOnly]);
 
   useEffect(() => {
     const editor = viewRef.current;

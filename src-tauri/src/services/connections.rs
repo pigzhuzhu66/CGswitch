@@ -1,5 +1,9 @@
 use super::profile_config::{parse_provider_detail, stored_provider_api_key};
-use super::{app_err, atomic_write, AppContext, AppResult, BTreeMap, PathBuf, ProfileBalanceInfo};
+use super::{
+    app_err, atomic_write, AppContext, AppResult, AuthSource, BTreeMap, PathBuf,
+    ProfileBalanceInfo, ProfileKind,
+};
+use crate::auth::codex_oauth::{parse_external_auth_json, CodexOAuthManager};
 
 /// 供应商连通性测试结果
 #[derive(Debug, Clone, serde::Serialize)]
@@ -32,6 +36,24 @@ struct MiniMaxRemainsResponse {
     base_resp: MiniMaxBaseResp,
     #[serde(default)]
     model_remains: Vec<MiniMaxModelRemains>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ChatgptUsageResponse {
+    pub(crate) rate_limit: Option<ChatgptRateLimit>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ChatgptRateLimit {
+    pub(crate) primary_window: Option<ChatgptRateLimitWindow>,
+    pub(crate) secondary_window: Option<ChatgptRateLimitWindow>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ChatgptRateLimitWindow {
+    pub(crate) used_percent: Option<f64>,
+    pub(crate) limit_window_seconds: Option<i64>,
+    pub(crate) reset_at: Option<i64>,
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
@@ -112,6 +134,62 @@ pub(crate) fn connection_error_from_body(value: &serde_json::Value) -> Option<St
     None
 }
 
+/// OpenCode Go 的 `/models` 不校验密钥，使用无效参数探针触发鉴权后的请求校验。
+async fn test_opencode_connection(
+    base_url: &str,
+    api_key: &str,
+) -> AppResult<ProfileConnectionResult> {
+    let responses_url = format!("{}/responses", base_url.trim_end_matches('/'));
+    let client = http_client()?;
+    let start = std::time::Instant::now();
+    let response = client
+        .post(&responses_url)
+        .bearer_auth(api_key)
+        .json(&serde_json::json!({
+            "model": "deepseek-v4-flash",
+            "input": "ping",
+            "max_output_tokens": 0,
+        }))
+        .send()
+        .await;
+
+    match response {
+        Ok(response) => {
+            let status = response.status();
+            let latency_ms = Some(start.elapsed().as_millis());
+            let body = response.text().await.unwrap_or_default();
+            let probe_validation_rejection =
+                matches!(
+                    status,
+                    reqwest::StatusCode::BAD_REQUEST | reqwest::StatusCode::UNPROCESSABLE_ENTITY
+                ) && body.to_ascii_lowercase().contains("max_output_tokens");
+            let ok = status.is_success() || probe_validation_rejection;
+            let error = if ok {
+                None
+            } else if status == reqwest::StatusCode::UNAUTHORIZED
+                || status == reqwest::StatusCode::FORBIDDEN
+            {
+                Some("API 密钥无效".to_string())
+            } else {
+                Some(format!("接口返回 HTTP {status}"))
+            };
+
+            Ok(ProfileConnectionResult {
+                ok,
+                latency_ms,
+                status: Some(status.as_u16()),
+                error,
+            })
+        }
+        Err(error) => Ok(ProfileConnectionResult {
+            ok: false,
+            latency_ms: None,
+            status: error.status().map(|status| status.as_u16()),
+            error: Some(reqwest_error_message(&error)),
+        }),
+    }
+}
+
 /// 余额/用量请求公共骨架：统一处理 401/403、错误提取与网络错误；
 /// 各家只提供 URL 和成功响应的解析。
 async fn query_balance_endpoint(
@@ -189,8 +267,15 @@ async fn query_deepseek_balance(
 
 /// MiniMax Coding Plan 用量查询：GET {base}/api/openplatform/coding_plan/remains。
 /// 接口形态以用户实测可用的 statusline.ps1 为准（国内版 Coding Plan）。
-/// GET {base}/models 带密钥的连通性测试核心，与 profile 无关（创建态表单直接复用）。
+/// 供应商连通性测试核心，与 profile 无关（创建态表单直接复用）。
 async fn test_models_endpoint(base_url: &str, api_key: &str) -> AppResult<ProfileConnectionResult> {
+    if base_url
+        .trim_end_matches('/')
+        .eq_ignore_ascii_case("https://opencode.ai/zen/go/v1")
+    {
+        return test_opencode_connection(base_url, api_key).await;
+    }
+
     let models_url = format!("{}/models", base_url.trim_end_matches('/'));
     let client = http_client()?;
 
@@ -318,10 +403,14 @@ async fn query_minimax_balance(
                     topped_up_balance: String::new(),
                     usage_percent: Some(usage_percent),
                     usage_reset: entry.remains_time.and_then(|ms| format_reset(ms, false)),
+                    usage_reset_at: None,
+                    usage_label: None,
                     weekly_usage_percent: used_percent(entry.current_weekly_remaining_percent),
                     weekly_reset: entry
                         .weekly_remains_time
                         .and_then(|ms| format_reset(ms, true)),
+                    weekly_reset_at: None,
+                    weekly_label: None,
                 }],
                 latency_ms,
             })
@@ -337,7 +426,7 @@ pub(crate) fn used_percent(remaining: Option<f64>) -> Option<u32> {
     Some(used.clamp(0.0, 100.0).round() as u32)
 }
 
-/// 重置倒计时格式：with_days=true 支持 d/h/m（7 天窗口），否则 h/m（5 小时窗口）；不足 1 分钟不显示。
+/// 重置倒计时格式：按窗口长度决定是否显示天数；不足 1 分钟不显示。
 pub(crate) fn format_reset(ms: i64, with_days: bool) -> Option<String> {
     if ms <= 60_000 {
         return None;
@@ -362,8 +451,131 @@ pub(crate) fn format_reset(ms: i64, with_days: bool) -> Option<String> {
     })
 }
 
+fn chatgpt_window_label(seconds: Option<i64>, fallback: &str) -> String {
+    match seconds {
+        Some(18_000) => "5小时".to_string(),
+        Some(604_800) => "7天".to_string(),
+        Some(2_592_000) => "30天".to_string(),
+        Some(value) if value > 0 && value % 86_400 == 0 => format!("{}天", value / 86_400),
+        Some(value) if value > 0 && value % 3_600 == 0 => format!("{}小时", value / 3_600),
+        _ => fallback.to_string(),
+    }
+}
+
+fn chatgpt_reset_countdown(reset_at: Option<i64>, window_seconds: Option<i64>) -> Option<String> {
+    let reset_ms = chatgpt_reset_timestamp(reset_at)?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    format_reset(
+        reset_ms.saturating_sub(now_ms),
+        window_seconds.unwrap_or_default() >= 86_400,
+    )
+}
+
+fn chatgpt_reset_timestamp(reset_at: Option<i64>) -> Option<i64> {
+    let reset_at = reset_at?;
+    Some(if reset_at > 1_000_000_000_000 {
+        reset_at
+    } else {
+        reset_at.saturating_mul(1_000)
+    })
+}
+
+pub(crate) fn chatgpt_quota_info(response: ChatgptUsageResponse) -> Option<ProfileBalanceInfo> {
+    let rate_limit = response.rate_limit?;
+    let windows = [rate_limit.primary_window, rate_limit.secondary_window];
+    let mut usable_windows = windows
+        .iter()
+        .flatten()
+        .filter(|window| window.used_percent.is_some());
+    let primary = usable_windows.next()?;
+    let secondary = usable_windows.next();
+    let usage_percent = primary.used_percent?.clamp(0.0, 100.0).round() as u32;
+    Some(ProfileBalanceInfo {
+        currency: String::new(),
+        total_balance: String::new(),
+        granted_balance: String::new(),
+        topped_up_balance: String::new(),
+        usage_percent: Some(usage_percent),
+        usage_reset: chatgpt_reset_countdown(primary.reset_at, primary.limit_window_seconds),
+        usage_reset_at: chatgpt_reset_timestamp(primary.reset_at),
+        usage_label: primary
+            .limit_window_seconds
+            .map(|seconds| chatgpt_window_label(Some(seconds), "额度")),
+        weekly_usage_percent: secondary
+            .as_ref()
+            .and_then(|window| window.used_percent)
+            .map(|used| used.clamp(0.0, 100.0).round() as u32),
+        weekly_reset: secondary.as_ref().and_then(|window| {
+            chatgpt_reset_countdown(window.reset_at, window.limit_window_seconds)
+        }),
+        weekly_reset_at: secondary
+            .as_ref()
+            .and_then(|window| chatgpt_reset_timestamp(window.reset_at)),
+        weekly_label: secondary.as_ref().and_then(|window| {
+            window
+                .limit_window_seconds
+                .map(|seconds| chatgpt_window_label(Some(seconds), "周期"))
+        }),
+    })
+}
+
+fn chatgpt_usage_request(
+    client: &reqwest::Client,
+    access_token: &str,
+    account_id: Option<&str>,
+) -> reqwest::RequestBuilder {
+    let mut request = client
+        .get("https://chatgpt.com/backend-api/wham/usage")
+        .bearer_auth(access_token)
+        .header("User-Agent", "codex-cli")
+        .header("Accept", "application/json");
+    if let Some(account_id) = account_id.filter(|id| *id != "codex-external") {
+        request = request.header("chatgpt-account-id", account_id);
+    }
+    request
+}
+
+async fn query_chatgpt_quota(
+    access_token: &str,
+    account_id: Option<&str>,
+) -> AppResult<ProfileBalance> {
+    let client = http_client()?;
+    let start = std::time::Instant::now();
+    let response = chatgpt_usage_request(&client, access_token, account_id)
+        .send()
+        .await
+        .map_err(|error| app_err!("额度查询失败：{}", reqwest_error_message(&error)))?;
+    let latency_ms = Some(start.elapsed().as_millis());
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| app_err!("额度接口响应读取失败: {error}"))?;
+    if !status.is_success() {
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            if body.contains("unsupported_country_region_territory") {
+                return Err(app_err!("认证请求被地区限制拦截，请开启系统代理后重试"));
+            }
+            return Err(app_err!("ChatGPT 登录已失效，请重新登录"));
+        }
+        return Err(app_err!("额度查询失败：接口返回 HTTP {status}"));
+    }
+    let response = serde_json::from_str::<ChatgptUsageResponse>(&body)
+        .map_err(|error| app_err!("额度接口响应解析失败: {error}"))?;
+    let info =
+        chatgpt_quota_info(response).ok_or_else(|| app_err!("额度接口未返回可用的限额窗口"))?;
+    Ok(ProfileBalance {
+        is_available: true,
+        balance_infos: vec![info],
+        latency_ms,
+    })
+}
+
 impl AppContext {
-    /// 验证供应商密钥连通性：请求 OpenAI 兼容的 GET {base}/models（带 Bearer 密钥），
+    /// 验证供应商密钥连通性：默认请求 OpenAI 兼容的 GET {base}/models，OpenCode Go 使用鉴权探针，
     /// 2xx 视为可用，401/403 视为密钥无效，返回延迟 / HTTP 状态 / 错误信息。
     /// 表单传入的地址/密钥实时生效（传了就用传的，空的直接报错）；
     /// 不传才回退已保存值（卡片上的测试按钮走这条）。
@@ -420,9 +632,7 @@ impl AppContext {
     ) -> AppResult<ProfileConnectionResult> {
         let client = http_client()?;
         let start = std::time::Instant::now();
-        match client
-            .get("https://chatgpt.com/backend-api/wham/usage")
-            .bearer_auth(access_token)
+        match chatgpt_usage_request(&client, access_token, None)
             .send()
             .await
         {
@@ -473,11 +683,67 @@ impl AppContext {
         }
     }
 
-    /// 按供应商查询余额/用量：DeepSeek 查账户余额，MiniMax 查 Token Plan 剩余用量。
-    /// 使用该供应商自己保存的 API 密钥，以配置为单位查询。
-    pub async fn get_profile_balance(&self, id: &str) -> AppResult<ProfileBalance> {
+    /// 读取设置页中的 Codex 登录或指定 OAuth 账号的官方额度。
+    pub async fn get_auth_quota(
+        &self,
+        source: AuthSource,
+        account_id: Option<&str>,
+        oauth: &CodexOAuthManager,
+    ) -> AppResult<ProfileBalance> {
+        let (access_token, account_id) = match source {
+            AuthSource::Desktop => {
+                let account = self
+                    .external_codex_auth()?
+                    .ok_or_else(|| app_err!("未检测到有效的 Codex 登录"))?;
+                let token = self
+                    .external_codex_access_token_for_account(&account.id)?
+                    .ok_or_else(|| app_err!("未检测到有效的 Codex 登录"))?;
+                (token, Some(account.id))
+            }
+            AuthSource::Oauth => {
+                let account_id = account_id.ok_or_else(|| app_err!("OAuth 账号不存在"))?;
+                let token = oauth
+                    .get_valid_token_for_account(account_id)
+                    .await
+                    .map_err(|error| app_err!("{error}"))?;
+                (token, Some(account_id.to_string()))
+            }
+        };
+        query_chatgpt_quota(&access_token, account_id.as_deref()).await
+    }
+
+    /// 按配置查询余额/用量；ChatGPT 配置只读自身认证来源，不读取 live auth.json。
+    pub async fn get_profile_balance(
+        &self,
+        id: &str,
+        oauth: &CodexOAuthManager,
+    ) -> AppResult<ProfileBalance> {
         let stored = self.database.profile(id)?;
         let payload = &stored.payload;
+        if stored.kind == ProfileKind::Official {
+            let (access_token, account_id) =
+                match payload.effective_auth_source(stored.kind, stored.account_id.as_deref()) {
+                    Some(AuthSource::Desktop) => payload
+                        .raw_auth
+                        .as_deref()
+                        .and_then(parse_external_auth_json)
+                        .map(|auth| (auth.access_token, Some(auth.account_id)))
+                        .ok_or_else(|| app_err!("该 Codex 配置尚未保存有效登录"))?,
+                    Some(AuthSource::Oauth) => {
+                        let account_id = stored
+                            .account_id
+                            .as_deref()
+                            .ok_or_else(|| app_err!("OAuth 配置未绑定订阅账号"))?;
+                        let token = oauth
+                            .get_valid_token_for_account(account_id)
+                            .await
+                            .map_err(|error| app_err!("{error}"))?;
+                        (token, Some(account_id.to_string()))
+                    }
+                    None => return Err(app_err!("官方配置缺少登录方式")),
+                };
+            return query_chatgpt_quota(&access_token, account_id.as_deref()).await;
+        }
         let provider = payload.provider_id.as_deref().unwrap_or_default();
         if provider != "deepseek" && provider != "minimax" {
             return Err(app_err!("该供应商不支持余额/用量查询"));

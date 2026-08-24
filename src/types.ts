@@ -1,8 +1,11 @@
 export interface ProfileSummary {
   id: string;
   name: string;
+  kind: "official" | "third_party";
   /** 官方档案绑定的订阅账号 id；第三方为 null。 */
   account_id: string | null;
+  /** 官方档案创建时固定的认证来源；旧数据缺失时由 account_id 推断。 */
+  auth_source?: "desktop" | "oauth" | null;
   model: string | null;
   provider: string | null;
   reasoning_effort: string | null;
@@ -20,6 +23,10 @@ export interface ProfileDetail {
   name: string;
   /** 官方档案绑定的订阅账号 id；第三方为 null。 */
   account_id: string | null;
+  /** 官方档案创建时固定的认证来源。 */
+  auth_source?: "desktop" | "oauth" | null;
+  /** Desktop 配置自身 auth.json 解析出的登录账号。 */
+  desktop_login: string | null;
   icon: string | null;
   provider: string | null;
   base_url: string | null;
@@ -28,7 +35,6 @@ export interface ProfileDetail {
   config_fragment: string;
   /** 供应商自己保存的完整 config 原文（内置供应商可全量编辑；普通供应商为片段）。 */
   raw_config: string | null;
-  auth_content: string | null;
   catalog_content: string | null;
   /** 供应商自己保存的 models.json 原文。 */
   raw_catalog: string | null;
@@ -107,14 +113,22 @@ export interface ProfileBalanceInfo {
   total_balance: string;
   granted_balance: string;
   topped_up_balance: string;
-  /** 用量型供应商（如 MiniMax Token Plan）的剩余百分比；余额型供应商为 null。 */
+  /** 用量型供应商（如 MiniMax Token Plan）的已用百分比；余额型供应商为 null。 */
   usage_percent: number | null;
-  /** 5 小时窗口重置倒计时（如 "2h23m"）。 */
+  /** 主用量窗口重置倒计时（如 "2h23m"）。 */
   usage_reset: string | null;
-  /** 7 天窗口已用百分比；仅用量型供应商返回。 */
+  /** 主用量窗口重置时间（Unix 毫秒）。 */
+  usage_reset_at?: number | null;
+  /** 主用量窗口名称；由接口返回的窗口长度推断。 */
+  usage_label?: string | null;
+  /** 次用量窗口已用百分比；仅用量型供应商返回。 */
   weekly_usage_percent: number | null;
-  /** 7 天窗口重置倒计时（如 "5d21h"）。 */
+  /** 次用量窗口重置倒计时（如 "5d21h"）。 */
   weekly_reset: string | null;
+  /** 次用量窗口重置时间（Unix 毫秒）。 */
+  weekly_reset_at?: number | null;
+  /** 次用量窗口名称；免费方案可为 30 天。 */
+  weekly_label?: string | null;
 }
 
 export interface ProfileBalance {
@@ -187,6 +201,7 @@ export interface MarketplacePlugin {
   description: string | null;
   category: string | null;
   capabilities: string[];
+  contains: string[];
 }
 
 export interface PluginUpdate {
@@ -270,5 +285,3 @@ export interface AppState {
   /** 供应商级余额/用量缓存（上次成功查询结果），保证卡片静默显示不闪烁。 */
   balance_cache: Record<string, ProfileBalanceInfo>;
 }
-
-export type RestartStage = "idle" | "stopping" | "waiting" | "launching" | "success" | "error";
