@@ -17,7 +17,7 @@ export function ProfileIconTile({ name, icon, size = "sm" }: ProfileIconTileProp
   const current = sizes[size];
   const iconUrl = providerIconUrl(icon);
   return (
-    <span className={`grid shrink-0 place-items-center bg-[var(--tile-bg)] ${current.tile}`} aria-hidden="true">
+    <span className={`grid shrink-0 place-items-center bg-(--tile-bg) ${current.tile}`} aria-hidden="true">
       {iconUrl ? <img src={iconUrl} alt="" className={`${current.image} ${providerIconThemeClass(icon)}`} /> : <span className={`font-bold text-accent ${current.text}`}>{name.charAt(0)}</span>}
     </span>
   );

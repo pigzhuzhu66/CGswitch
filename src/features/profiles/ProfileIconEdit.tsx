@@ -25,11 +25,11 @@ export default function ProfileIconEdit({ icon, onBack, onSave }: ProfileIconEdi
               <button
                 key={current.id}
                 type="button"
-                className={`flex flex-col items-center gap-1 rounded-lg px-1.5 py-2 transition-colors ${selected === current.id ? "shadow-[0_0_0_1px_var(--accent)] bg-[var(--selection-bg)]" : "shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4"}`}
+                className={`flex flex-col items-center gap-1 rounded-lg px-1.5 py-2 transition-colors ${selected === current.id ? "shadow-[0_0_0_1px_var(--accent)] bg-(--selection-bg)" : "shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4"}`}
                 aria-pressed={selected === current.id}
                 onClick={() => setSelected(current.id)}
               >
-                <span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--tile-bg)]" aria-hidden="true"><img src={current.url} alt={current.label} className={`h-4 w-4 ${providerIconThemeClass(current.id)}`} /></span>
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-(--tile-bg)" aria-hidden="true"><img src={current.url} alt={current.label} className={`h-4 w-4 ${providerIconThemeClass(current.id)}`} /></span>
                 <span className="w-full truncate text-center text-xs">{current.label}</span>
               </button>
             ))}

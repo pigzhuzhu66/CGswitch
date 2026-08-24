@@ -736,7 +736,7 @@ function PluginMarketplaceView({
                             {marketplace.kind === "third-party" ? (
                               <button
                                 type="button"
-                                className="apple-icon-button text-[var(--danger)]/70 hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]"
+                                className="apple-icon-button text-[var(--danger)]/70 hover:bg-(--danger)/10 hover:text-[var(--danger)]"
                                 title="卸载市场"
                                 aria-label={`卸载插件市场 ${marketplace.display_name ?? marketplace.name}`}
                                 disabled={Boolean(removing)}
@@ -892,7 +892,7 @@ export default function PluginsView() {
                   {removableOrigins.includes(plugin.origin) ? (
                     <button
                       type="button"
-                      className="apple-icon-button text-[var(--danger)]/70 hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]"
+                      className="apple-icon-button text-[var(--danger)]/70 hover:bg-(--danger)/10 hover:text-[var(--danger)]"
                       title="卸载"
                       aria-label={`卸载 ${plugin.name}`}
                       onClick={() => void remove(plugin)}

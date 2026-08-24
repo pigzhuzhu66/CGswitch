@@ -66,7 +66,7 @@
   /* 页面顶部栏与底部操作栏统一高度 */
   --toolbar-height: 3.625rem;
   /* 窗口标题栏高度：品牌区与窗口控制按钮共用同一垂直中心 */
-  --window-chrome-height: 2.5rem;
+  --window-chrome-height: 2.25rem;
   /* 卡片、高亮分区和配置编辑器容器统一圆角 */
   --radius-card: 1rem;
   /* 右侧滚动条占位宽度，启动时由 JS 实测写入，保证左右视觉间距完全一致 */
@@ -627,7 +627,7 @@ body.drag-settling .profile-card-actions {
 /* 标题栏品牌按钮浮标：锚定标题栏左侧色块（随侧边栏宽度自适应），
    展开时浮标在侧边栏右缘外、收缩时在栏外右侧；两种状态悬停都显示动作提示 */
 .apple-sidebar-brand + .apple-sidebar-flyout {
-  /* 标题栏为 40px，浮标保持在品牌区垂直中心 */
+  /* 标题栏为 36px，浮标保持在品牌区垂直中心 */
   top: calc(50% + 6px);
   /* 与其他按钮浮标一致：距侧边栏右缘 3.6px（导航按钮 mx-1.5 内缩 6px + 0.6rem 间距） */
   left: calc(100% + 0.225rem);
@@ -873,41 +873,39 @@ body.drag-settling .profile-card-actions {
   box-shadow: 0 0 0 1px var(--panel-ring);
 }
 
-/* 已激活卡片：1px 内描边 + 内发光，发光是激活态专属信号。 */
-.apple-group.is-active {
+/* 配置卡片专属：1px 内描边 + 内发光，避免污染其他 apple-group 卡片。 */
+.profile-list > .apple-group.is-active {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
-    inset 0 0 18px 0 color-mix(in srgb, var(--accent) 22%, transparent);
+    inset 0 0 14px 0 color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-:root.dark .apple-group.is-active {
+:root.dark .profile-list > .apple-group.is-active {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent),
-    inset 0 0 22px 0 color-mix(in srgb, var(--accent) 40%, transparent);
+    inset 0 0 18px 0 color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
-/* 悬停：描边加深到 75%（dark 90%），不引入发光。
-   避免和激活态视觉混淆——发光专属激活。 */
-.apple-group:hover {
+/* 配置卡片悬停：描边加深，不引入发光。 */
+.profile-list > .apple-group:hover {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
-:root.dark .apple-group:hover {
+:root.dark .profile-list > .apple-group:hover {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 90%, transparent);
 }
 
-/* 激活 + 悬停：描边跟随 hover 加深，发光保留。
-   特异性 0,0,3,0 高于 .apple-group:hover 的 0,0,2,0，强制不被覆盖。 */
-.apple-group.is-active:hover {
+/* 激活 + 悬停：描边跟随 hover 加深，发光保留。 */
+.profile-list > .apple-group.is-active:hover {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent),
-    inset 0 0 18px 0 color-mix(in srgb, var(--accent) 22%, transparent);
+    inset 0 0 14px 0 color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-:root.dark .apple-group.is-active:hover {
+:root.dark .profile-list > .apple-group.is-active:hover {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--accent) 90%, transparent),
-    inset 0 0 22px 0 color-mix(in srgb, var(--accent) 40%, transparent);
+    inset 0 0 18px 0 color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 .apple-segmented-control { background: var(--input-bg); }

@@ -227,7 +227,7 @@ export default function McpEdit({ server, create = false, onBack }: McpEditProps
       </div>
 
       <div className="apple-edit-toolbar apple-edit-toolbar--footer">
-        {diagnostics.count > 0 ? <button type="button" className="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg border border-[var(--danger)]/20 bg-[var(--danger)]/10 px-2.5 py-1 text-xs chip-danger" title="跳转到第一个错误" aria-live="polite" onClick={() => editorRef.current?.focusFirstDiagnostic()}><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--danger)]" aria-hidden="true" /><span className="truncate">{diagnostics.count} 个错误{diagnostics.firstLine !== null ? ` · 第 ${diagnostics.firstLine} 行` : ""}</span></button> : null}
+        {diagnostics.count > 0 ? <button type="button" className="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg border border-[var(--danger)]/20 bg-(--danger)/10 px-2.5 py-1 text-xs chip-danger" title="跳转到第一个错误" aria-live="polite" onClick={() => editorRef.current?.focusFirstDiagnostic()}><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-(--danger)" aria-hidden="true" /><span className="truncate">{diagnostics.count} 个错误{diagnostics.firstLine !== null ? ` · 第 ${diagnostics.firstLine} 行` : ""}</span></button> : null}
         <button type="button" className="apple-action-button" disabled={formatting || saving} onClick={() => void formatToml()}>格式化</button>
         <button type="button" className="apple-action-button" onClick={onBack}>取消</button>
         <button type="button" className="apple-action-button app-button--primary" disabled={saving} onClick={() => void save()}><Save className="h-4 w-4" strokeWidth={2} />{saving ? "保存中…" : "保存"}</button>

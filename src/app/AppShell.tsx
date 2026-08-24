@@ -121,7 +121,7 @@ export default function AppShell() {
   };
 
   const navClass = (active: boolean) =>
-    `apple-sidebar-nav-button ${active ? "bg-[var(--selection-bg)] font-semibold text-accent" : "font-normal hover:bg-black/5 dark:hover:bg-white/8"}`;
+    `apple-sidebar-nav-button ${active ? "bg-(--selection-bg) font-semibold text-accent" : "font-normal hover:bg-black/5 dark:hover:bg-white/8"}`;
 
   return (
     <FeedbackProvider>
@@ -192,7 +192,7 @@ export default function AppShell() {
             </div>
           </aside>
 
-          <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-[var(--app-bg)] pt-4">
+          <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-(--app-bg) pt-4">
             {!state ? (
               <div className="startup-skeleton" aria-busy="true">
                 <div className="startup-skeleton__title" />
