@@ -129,7 +129,7 @@ export default function ProfileCard({
       ref={sortable.setNodeRef}
       data-draggable
       style={style}
-      className={`apple-group${active ? " is-active" : ""} group flex cursor-pointer select-none flex-col gap-4 px-5 py-4.5 transition-colors sm:flex-row sm:items-center sm:justify-between ${sortable.isDragging ? "opacity-35" : active ? "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--selection-bg)_60%,transparent),transparent_65%)]" : "hover:bg-black/3 dark:hover:bg-white/4"}`}
+      className={`apple-group${active ? " is-active" : ""} group flex cursor-pointer select-none flex-col gap-4 px-5 py-4.5 transition-colors sm:flex-row sm:items-center sm:justify-between ${sortable.isDragging ? "invisible" : active ? "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--selection-bg)_60%,transparent),transparent_65%)]" : "hover:bg-black/3 dark:hover:bg-white/4"}`}
       title="单击编辑"
       onClick={onEdit}
     >

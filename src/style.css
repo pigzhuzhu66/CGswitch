@@ -880,8 +880,22 @@ body.drag-settling .profile-card-actions {
     inset 0 0 14px 0 color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+.profile-drag-preview.is-active {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    inset 0 0 14px 0 color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 :root.dark .profile-list > .apple-group.is-active {
   box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent),
+    inset 0 0 18px 0 color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+:root.dark .profile-drag-preview.is-active {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.2),
     inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent),
     inset 0 0 18px 0 color-mix(in srgb, var(--accent) 34%, transparent);
 }
