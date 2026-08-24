@@ -876,6 +876,7 @@ body.drag-settling .profile-card-actions {
 /* 配置卡片专属：1px 内描边 + 内发光，避免污染其他 apple-group 卡片。 */
 .profile-list > .apple-group.is-active {
   box-shadow:
+    0 0 0 1px var(--panel-ring),
     inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
     inset 0 0 14px 0 color-mix(in srgb, var(--accent) 18%, transparent);
 }
@@ -889,6 +890,7 @@ body.drag-settling .profile-card-actions {
 
 :root.dark .profile-list > .apple-group.is-active {
   box-shadow:
+    0 0 0 1px var(--panel-ring),
     inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent),
     inset 0 0 18px 0 color-mix(in srgb, var(--accent) 34%, transparent);
 }
