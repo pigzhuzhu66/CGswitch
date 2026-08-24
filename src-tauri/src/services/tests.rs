@@ -20,6 +20,12 @@ fn chatgpt_auth(account_id: &str, access_token: &str) -> String {
     )
 }
 
+fn oauth_auth(account_id: &str, access_token: &str, refresh_token: &str, id_token: &str) -> String {
+    format!(
+        r#"{{"auth_mode":"chatgpt","tokens":{{"id_token":"{id_token}","access_token":"{access_token}","refresh_token":"{refresh_token}","account_id":"{account_id}"}}}}"#
+    )
+}
+
 #[test]
 fn live_codex_auth_is_available_for_matching_account_only() {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -423,16 +429,26 @@ fn focus_refresh_keeps_last_desktop_snapshot_when_live_auth_is_invalid() {
 #[tokio::test]
 async fn oauth_activation_and_account_switch_write_only_the_bound_account_snapshot() {
     let (_home, context) = chatgpt_test_context();
-    let oauth_auth = chatgpt_auth("oauth-account", "oauth-access");
-    let second_oauth_auth = chatgpt_auth("oauth-second", "oauth-second-access");
+    let initial_oauth_auth = oauth_auth(
+        "oauth-account",
+        "cached-access",
+        "refresh-token",
+        "id-token",
+    );
+    let initial_second_oauth_auth = oauth_auth(
+        "oauth-second",
+        "cached-second-access",
+        "second-refresh-token",
+        "second-id-token",
+    );
     context
         .database
         .upsert_account(&crate::database::StoredAccount {
             id: "oauth-account".into(),
             email: None,
-            id_token: None,
+            id_token: Some("id-token".into()),
             refresh_token: "refresh-token".into(),
-            auth_json: Some(oauth_auth.clone()),
+            auth_json: Some(initial_oauth_auth.clone()),
             authenticated_at: 1,
         })
         .unwrap();
@@ -441,9 +457,9 @@ async fn oauth_activation_and_account_switch_write_only_the_bound_account_snapsh
         .upsert_account(&crate::database::StoredAccount {
             id: "oauth-second".into(),
             email: None,
-            id_token: None,
+            id_token: Some("second-id-token".into()),
             refresh_token: "second-refresh-token".into(),
-            auth_json: Some(second_oauth_auth.clone()),
+            auth_json: Some(initial_second_oauth_auth.clone()),
             authenticated_at: 2,
         })
         .unwrap();
@@ -451,16 +467,21 @@ async fn oauth_activation_and_account_switch_write_only_the_bound_account_snapsh
         .add_builtin_profile("chatgpt", None, None, None, Some("oauth-account"))
         .unwrap();
     let oauth = crate::auth::codex_oauth::CodexOAuthManager::new(context.database.clone());
+    oauth
+        .seed_access_token_for_test("oauth-account", "fresh-oauth-access")
+        .await;
 
     context
         .apply_profile_with_auth(&profile.id, &oauth)
         .await
         .unwrap();
 
-    assert_eq!(
-        std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
-        oauth_auth
-    );
+    let live: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(live["tokens"]["access_token"], "fresh-oauth-access");
+    assert_eq!(live["tokens"]["refresh_token"], "refresh-token");
     assert_eq!(
         context
             .database
@@ -471,6 +492,21 @@ async fn oauth_activation_and_account_switch_write_only_the_bound_account_snapsh
         None
     );
 
+    let externally_refreshed = oauth_auth(
+        "oauth-account",
+        "codex-refreshed-access",
+        "rotated-refresh-token",
+        "rotated-id-token",
+    );
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        &externally_refreshed,
+    )
+    .unwrap();
+    oauth
+        .seed_access_token_for_test("oauth-second", "fresh-second-access")
+        .await;
+
     context
         .set_profile_account_and_apply_active(&profile.id, Some("oauth-second"), &oauth)
         .await
@@ -479,9 +515,23 @@ async fn oauth_activation_and_account_switch_write_only_the_bound_account_snapsh
         context.bound_account_id(&profile.id).unwrap().as_deref(),
         Some("oauth-second")
     );
+    let live: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(live["tokens"]["access_token"], "fresh-second-access");
+    assert_eq!(live["tokens"]["refresh_token"], "second-refresh-token");
+    let account = context
+        .database
+        .accounts()
+        .unwrap()
+        .into_iter()
+        .find(|account| account.id == "oauth-account")
+        .unwrap();
+    assert_eq!(account.refresh_token, "rotated-refresh-token");
     assert_eq!(
-        std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
-        second_oauth_auth
+        account.auth_json.as_deref(),
+        Some(externally_refreshed.as_str())
     );
 }
 
@@ -535,7 +585,7 @@ fn focus_refresh_keeps_oauth_auth_out_of_profile_snapshot() {
 }
 
 #[test]
-fn manual_auth_clear_is_not_repopulated_by_focus_refresh() {
+fn desktop_auth_clear_repopulates_after_focus_refresh() {
     let (_home, context) = chatgpt_test_context();
     let profile = context
         .add_builtin_profile("chatgpt", None, None, None, None)
@@ -554,14 +604,47 @@ fn manual_auth_clear_is_not_repopulated_by_focus_refresh() {
         .unwrap();
     std::fs::write(
         context.paths.codex_home.join("auth.json"),
-        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"should-not-repopulate"}}"#,
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"should-repopulate"}}"#,
     )
     .unwrap();
     context.get_state().unwrap();
 
     let stored = context.database.profile(&profile.id).unwrap();
-    assert_eq!(stored.payload.auth_auto_sync, Some(false));
-    assert_eq!(stored.payload.raw_auth, None);
+    assert_eq!(stored.payload.auth_auto_sync, Some(true));
+    assert_eq!(
+        stored.payload.raw_auth,
+        Some(r#"{"auth_mode":"chatgpt","tokens":{"access_token":"should-repopulate"}}"#.into())
+    );
+}
+
+#[test]
+fn legacy_empty_desktop_auth_snapshot_repopulates_after_focus_refresh() {
+    let (_home, context) = chatgpt_test_context();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+    context.apply_profile(&profile.id).unwrap();
+    let mut stored = context.database.profile(&profile.id).unwrap();
+    stored.payload.auth_auto_sync = Some(false);
+    stored.payload.raw_auth = None;
+    context
+        .database
+        .update_profile(&profile.id, &stored.name, &stored.payload, "2")
+        .unwrap();
+
+    std::fs::write(
+        context.paths.codex_home.join("auth.json"),
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"legacy-repopulate"}}"#,
+    )
+    .unwrap();
+    context.get_state().unwrap();
+
+    let stored = context.database.profile(&profile.id).unwrap();
+    assert_eq!(stored.payload.auth_auto_sync, Some(true));
+    assert_eq!(
+        stored.payload.raw_auth,
+        Some(r#"{"auth_mode":"chatgpt","tokens":{"access_token":"legacy-repopulate"}}"#.into())
+    );
 }
 
 #[test]

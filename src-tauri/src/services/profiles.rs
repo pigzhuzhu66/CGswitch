@@ -518,8 +518,12 @@ impl AppContext {
         }
         if auth_text.is_some() {
             payload.raw_auth = auth_override.clone();
-            // 只要编辑器提交了 auth（包括清空），就明确切换为手动控制。
-            payload.auth_auto_sync = Some(false);
+            // Desktop 清空 auth 是移除旧快照并等待下一次桌面认证；有内容才是手动接管。
+            payload.auth_auto_sync = if auth_source == Some(AuthSource::Desktop) {
+                Some(auth_override.is_none())
+            } else {
+                Some(false)
+            };
         } else if auth_source == Some(AuthSource::Oauth) {
             payload.raw_auth = None;
             payload.auth_auto_sync = None;

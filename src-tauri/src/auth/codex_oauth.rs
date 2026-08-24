@@ -434,15 +434,15 @@ impl CodexOAuthManager {
         &self,
         account_id: &str,
     ) -> Result<String, CodexOAuthError> {
-        if let Some(cached) = self.access_tokens.read().await.get(account_id) {
-            if !cached.is_expiring_soon() {
-                return Ok(cached.token.clone());
-            }
-        }
-
         let refresh_lock = self.get_refresh_lock(account_id).await;
         let _guard = refresh_lock.lock().await;
+        self.get_valid_token_for_account_locked(account_id).await
+    }
 
+    async fn get_valid_token_for_account_locked(
+        &self,
+        account_id: &str,
+    ) -> Result<String, CodexOAuthError> {
         if let Some(cached) = self.access_tokens.read().await.get(account_id) {
             if !cached.is_expiring_soon() {
                 return Ok(cached.token.clone());
@@ -494,7 +494,13 @@ impl CodexOAuthManager {
 
     /// 生成官方 Codex CLI 的 auth.json 内容（ChatGPT 订阅登录格式）。
     pub async fn codex_auth_json(&self, account_id: &str) -> Result<String, CodexOAuthError> {
-        let access_token = self.get_valid_token_for_account(account_id).await?;
+        let refresh_lock = self.get_refresh_lock(account_id).await;
+        let _guard = refresh_lock.lock().await;
+        self.codex_auth_json_locked(account_id).await
+    }
+
+    async fn codex_auth_json_locked(&self, account_id: &str) -> Result<String, CodexOAuthError> {
+        let access_token = self.get_valid_token_for_account_locked(account_id).await?;
         let (refresh_token, id_token) = {
             let accounts = self.accounts.read().await;
             let account = accounts
@@ -538,8 +544,10 @@ impl CodexOAuthManager {
         &self,
         account_id: &str,
     ) -> Result<String, CodexOAuthError> {
+        let refresh_lock = self.get_refresh_lock(account_id).await;
+        let _guard = refresh_lock.lock().await;
         self.access_tokens.write().await.remove(account_id);
-        self.codex_auth_json(account_id).await
+        self.codex_auth_json_locked(account_id).await
     }
 
     /// 读取缓存的 auth.json（离线切换配置用，不触发 token 刷新）。
@@ -548,6 +556,66 @@ impl CodexOAuthManager {
         accounts
             .get(account_id)
             .and_then(|account| account.auth_json.clone())
+    }
+
+    /// 把 Codex 运行中刷新过的同账号 auth.json 同步回 OAuth 账号。
+    /// 只接受已在 CGswitch 管理中的账号，避免把桌面登录误导入为新账号。
+    pub async fn sync_external_auth_json(&self, text: &str) -> Result<bool, CodexOAuthError> {
+        let Some(auth) = parse_external_auth_json(text) else {
+            return Ok(false);
+        };
+        let Some(refresh_token) = auth.refresh_token.clone() else {
+            return Ok(false);
+        };
+        let refresh_lock = self.get_refresh_lock(&auth.account_id).await;
+        let _guard = refresh_lock.lock().await;
+        let updated = {
+            let mut accounts = self.accounts.write().await;
+            let Some(account) = accounts.get_mut(&auth.account_id) else {
+                return Ok(false);
+            };
+            let mut changed = false;
+            if account.refresh_token != refresh_token {
+                account.refresh_token = refresh_token;
+                changed = true;
+            }
+            if let Some(id_token) = auth.id_token {
+                if account.id_token.as_deref() != Some(id_token.as_str()) {
+                    account.id_token = Some(id_token);
+                    changed = true;
+                }
+            }
+            if let Some(email) = auth.email {
+                if account.email.as_deref() != Some(email.as_str()) {
+                    account.email = Some(email);
+                    changed = true;
+                }
+            }
+            if account.auth_json.as_deref() != Some(text) {
+                account.auth_json = Some(text.to_string());
+                changed = true;
+            }
+            changed.then(|| account.clone())
+        };
+        let Some(account) = updated else {
+            return Ok(false);
+        };
+        // 外部 auth.json 没有可靠的 expires_in，不能把它伪装成内存有效 token；
+        // 下一次生成 auth.json 时必须按数据库里的 refresh_token 重新验证。
+        self.access_tokens.write().await.remove(&auth.account_id);
+        self.save_account(&account)?;
+        Ok(true)
+    }
+
+    #[cfg(test)]
+    pub async fn seed_access_token_for_test(&self, account_id: &str, token: &str) {
+        self.access_tokens.write().await.insert(
+            account_id.to_string(),
+            CachedAccessToken {
+                token: token.to_string(),
+                expires_at_ms: now_ms() + 3_600_000,
+            },
+        );
     }
 
     // ==================== 账号管理 ====================
@@ -820,6 +888,8 @@ pub struct ExternalCodexAuth {
     pub account_id: String,
     pub email: Option<String>,
     pub access_token: String,
+    pub id_token: Option<String>,
+    pub refresh_token: Option<String>,
 }
 
 /// 解析 Codex CLI 官方生成的 auth.json。
@@ -835,14 +905,33 @@ pub fn parse_external_auth_json(text: &str) -> Option<ExternalCodexAuth> {
         .get("access_token")
         .and_then(|token| token.as_str())
         .filter(|token| !token.is_empty())?;
-    let (account_id, email) = match tokens.get("id_token").and_then(|token| token.as_str()) {
+    let id_token = tokens
+        .get("id_token")
+        .and_then(|token| token.as_str())
+        .filter(|token| !token.is_empty())
+        .map(str::to_string);
+    let refresh_token = tokens
+        .get("refresh_token")
+        .and_then(|token| token.as_str())
+        .filter(|token| !token.is_empty())
+        .map(str::to_string);
+    let (jwt_account_id, email) = match id_token.as_deref() {
         Some(id_token) => identity_from_jwt(id_token),
         None => (None, None),
     };
+    let account_id = jwt_account_id.or_else(|| {
+        tokens
+            .get("account_id")
+            .and_then(|account_id| account_id.as_str())
+            .filter(|account_id| !account_id.is_empty())
+            .map(str::to_string)
+    });
     Some(ExternalCodexAuth {
         account_id: account_id.unwrap_or_else(|| "codex-external".to_string()),
         email,
         access_token: access_token.to_string(),
+        id_token,
+        refresh_token,
     })
 }
 
@@ -906,6 +995,8 @@ mod tests {
         assert_eq!(auth.account_id, "acc-123");
         assert_eq!(auth.email.as_deref(), Some("test@example.com"));
         assert_eq!(auth.access_token, "at-1");
+        assert_eq!(auth.id_token.as_deref(), Some(id_token.as_str()));
+        assert_eq!(auth.refresh_token.as_deref(), Some("rt-1"));
     }
 
     #[test]
@@ -993,6 +1084,34 @@ mod tests {
         let accounts = manager.list_accounts().await;
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].id, "acc-456");
+    }
+
+    #[tokio::test]
+    async fn sync_external_auth_updates_only_existing_account() {
+        let dir = tempfile::tempdir().unwrap();
+        let database = setup(dir.path());
+        let manager = CodexOAuthManager::new(database.clone());
+        manager
+            .add_account_internal(
+                "acc-1".to_string(),
+                "old-refresh".to_string(),
+                Some("old@example.com".to_string()),
+                Some("old-id".to_string()),
+            )
+            .await
+            .unwrap();
+        let auth = r#"{"auth_mode":"chatgpt","tokens":{"id_token":"new-id","access_token":"new-access","refresh_token":"new-refresh","account_id":"acc-1"}}"#;
+
+        assert!(manager.sync_external_auth_json(auth).await.unwrap());
+        assert!(!manager.sync_external_auth_json(auth).await.unwrap());
+        let stored = database.accounts().unwrap().pop().unwrap();
+        assert_eq!(stored.refresh_token, "new-refresh");
+        assert_eq!(stored.id_token.as_deref(), Some("new-id"));
+        assert_eq!(stored.auth_json.as_deref(), Some(auth));
+
+        let unknown = auth.replace("acc-1", "unknown");
+        assert!(!manager.sync_external_auth_json(&unknown).await.unwrap());
+        assert_eq!(manager.list_accounts().await.len(), 1);
     }
 
     #[tokio::test]

@@ -5,6 +5,18 @@ use super::{
 use crate::auth::codex_oauth::{CodexOAuthManager, ExternalCodexAuth};
 
 impl AppContext {
+    /// 在切换或刷新前吸收 Codex 运行中产生的同账号 OAuth auth.json。
+    pub async fn sync_live_oauth_auth(&self, oauth: &CodexOAuthManager) -> AppResult<()> {
+        let Some(text) = read_optional_text(&self.paths.codex_home.join("auth.json")) else {
+            return Ok(());
+        };
+        oauth
+            .sync_external_auth_json(&text)
+            .await
+            .map_err(|error| app_err!("{error}"))?;
+        Ok(())
+    }
+
     /// 把认证原文写入 ~/.codex/auth.json（写前备份旧文件）。
     pub(super) fn write_auth_json(&self, content: &str) -> AppResult<()> {
         let destination = self.paths.codex_home.join("auth.json");
@@ -117,18 +129,18 @@ impl AppContext {
         oauth: &CodexOAuthManager,
     ) -> AppResult<()> {
         let _activation = self.activation.lock().await;
+        self.sync_live_oauth_auth(oauth).await?;
         let active = self.profile_auth_source(id)? == Some(AuthSource::Oauth)
             && self.is_active_profile(id)?;
         let content = if active {
             let account_id =
                 account_id.ok_or_else(|| app_err!("OAuth 配置必须绑定一个订阅账号"))?;
-            Some(match oauth.cached_auth_json(account_id).await {
-                Some(cached) => cached,
-                None => oauth
+            Some(
+                oauth
                     .codex_auth_json(account_id)
                     .await
                     .map_err(|error| app_err!("{error}"))?,
-            })
+            )
         } else {
             None
         };

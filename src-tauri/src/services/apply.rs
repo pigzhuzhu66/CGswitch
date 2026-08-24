@@ -22,6 +22,7 @@ impl AppContext {
         oauth: &CodexOAuthManager,
     ) -> AppResult<()> {
         let _activation = self.activation.lock().await;
+        self.sync_live_oauth_auth(oauth).await?;
         let profile = self.database.profile(id)?;
         let oauth_auth = match profile
             .payload
@@ -32,13 +33,13 @@ impl AppContext {
                     .account_id
                     .as_deref()
                     .ok_or_else(|| app_err!("OAuth 配置必须绑定一个订阅账号"))?;
-                Some(match oauth.cached_auth_json(account_id).await {
-                    Some(cached) => cached,
-                    None => oauth
+                // 激活必须生成经过 refresh_token 验证的最新 auth.json，不能把旧缓存重新写回 live。
+                Some(
+                    oauth
                         .codex_auth_json(account_id)
                         .await
                         .map_err(|error| app_err!("{error}"))?,
-                })
+                )
             }
             _ => None,
         };
@@ -317,7 +318,10 @@ impl AppContext {
             .and_then(|file| read_optional_text(&file))
             .or_else(|| profile.payload.raw_catalog.clone());
         match auth_source {
-            Some(AuthSource::Desktop) if profile.payload.auth_auto_sync != Some(false) => {
+            Some(AuthSource::Desktop)
+                if profile.payload.auth_auto_sync != Some(false)
+                    || profile.payload.raw_auth.is_none() =>
+            {
                 let live_auth = read_optional_text(&self.paths.codex_home.join("auth.json"));
                 if let Some(text) = live_auth {
                     // Codex 正在刷新或外部文件损坏时，不能把不可用内容覆盖掉最后一次有效快照。

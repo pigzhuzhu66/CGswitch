@@ -174,7 +174,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh, onMana
     setBusy(true);
     try {
       await api.applyProfile(profile.id);
-      feedback.success("切换成功");
+      feedback.success("切换成功，重启Codex生效");
       if (state.settings.auto_restart) await restart(true);
       await onRefresh();
     } catch (error) { feedback.error(String(error)); }
