@@ -207,7 +207,7 @@ export default function AppShell() {
             ) : view === "mcp" ? (
               <McpView key={mcpReset} />
             ) : view === "plugins" ? (
-              <PluginsView />
+              <PluginsView state={state} />
             ) : view === "skills" ? (
               <SkillsView cachedSkills={skillCache} onSkillsChange={setSkillCache} />
             ) : (

@@ -632,6 +632,11 @@ fn summary(
     ProfileSummary {
         id: id.into(),
         name: name.into(),
+        kind: if payload.provider_id.is_some() {
+            ProfileKind::ThirdParty
+        } else {
+            ProfileKind::Official
+        },
         account_id: account_id.map(str::to_string),
         model: display_text(payload.model_values.get("model")),
         provider: payload.provider_id.clone(),

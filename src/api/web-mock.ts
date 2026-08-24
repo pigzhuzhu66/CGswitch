@@ -22,6 +22,7 @@ const webProfiles: ProfileSummary[] = [
   {
     id: "profile-zai-glm-high",
     name: "ZAI GLM 高推理",
+    kind: "third_party",
     account_id: null,
     model: "glm-5.3",
     provider: "ZAI",
@@ -36,6 +37,7 @@ const webProfiles: ProfileSummary[] = [
   {
     id: "profile-zai-glm-fast",
     name: "ZAI GLM 快速",
+    kind: "third_party",
     account_id: null,
     model: "glm-5-turbo",
     provider: "ZAI",
@@ -50,6 +52,7 @@ const webProfiles: ProfileSummary[] = [
   {
     id: "profile-official",
     name: "官方默认",
+    kind: "official",
     account_id: null,
     model: "gpt-5.6",
     provider: null,
@@ -219,6 +222,7 @@ let webMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
       description: "Prefer YAGNI, the standard library, native platform features, and the smallest correct implementation.",
       category: "Productivity",
       capabilities: ["Instructions", "Lifecycle hooks"],
+      contains: ["skills", "hooks"],
     },
   ],
 };
@@ -238,6 +242,7 @@ const webRecommendedMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
       description: "用于代码工作流与开发辅助的外部插件。",
       category: "Development",
       capabilities: ["Instructions"],
+      contains: ["skills"],
     },
     {
       plugin_id: "xros@xiaolai",
@@ -250,6 +255,7 @@ const webRecommendedMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
       description: "面向终端工作流的外部插件。",
       category: "Productivity",
       capabilities: ["Instructions"],
+      contains: ["skills"],
     },
   ],
   youmind: [
@@ -264,6 +270,7 @@ const webRecommendedMarketplacePlugins: Record<string, MarketplacePlugin[]> = {
       description: "Write HTML, render video, and create interactive motion graphics with HeyGen's HyperFrames.",
       category: "Design",
       capabilities: ["Read", "Write"],
+      contains: ["app"],
     },
   ],
 };
@@ -528,6 +535,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const profile: ProfileSummary = {
         id: `profile-${Date.now()}`,
         name: String(args?.name ?? "新供应商"),
+        kind: "third_party",
         account_id: null,
         model: "glm-5.3",
         provider: "ZAI",
@@ -555,6 +563,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const profile: ProfileSummary = {
         id: `profile-${Date.now()}`,
         name: preset.name,
+        kind: preset.provider ? "third_party" : "official",
         account_id: preset.provider ? null : (typeof args?.accountId === "string" ? args.accountId : null),
         model: preset.model,
         provider: preset.provider,
@@ -580,6 +589,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const profile: ProfileSummary = {
         id: `profile-${Date.now()}`,
         name: String(args?.name ?? "自定义供应商"),
+        kind: "third_party",
         account_id: null,
         model: null,
         provider: null,
@@ -899,7 +909,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         description: item.description ?? `来自 ${marketplace} 市场的插件`,
         category: item.category,
         capabilities: item.capabilities,
-        contains: ["skills"],
+        contains: item.contains,
         enabled: true,
         origin: "codex",
         marketplace,

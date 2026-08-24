@@ -8,7 +8,7 @@ import { AppSelect } from "../../components/AppSelect";
 import { EmptyStateCard } from "../../components/EmptyStateCard";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { TrashIcon } from "../../components/TrashIcon";
-import type { MarketplacePlugin, PluginCandidate, PluginMarketplace, PluginPreview, PluginSkill, PluginSummary, PluginUpdate } from "../../types";
+import type { AppState, MarketplacePlugin, PluginCandidate, PluginMarketplace, PluginPreview, PluginSkill, PluginSummary, PluginUpdate } from "../../types";
 
 const containsLabels: Record<string, string> = {
   skills: "Skills",
@@ -203,12 +203,14 @@ function MarketplaceDetailView({
   onInstalled,
   updates,
   onUpgrade,
+  thirdPartyProfile,
 }: {
   marketplace: PluginMarketplace;
   onBack: () => void;
   onInstalled: () => Promise<void>;
   updates: PluginUpdate[];
   onUpgrade: (update: PluginUpdate) => Promise<void>;
+  thirdPartyProfile: boolean;
 }) {
   const feedback = useFeedback();
   const [plugins, setPlugins] = useState<MarketplacePlugin[]>([]);
@@ -301,6 +303,15 @@ function MarketplaceDetailView({
       </div>
       <div className="apple-edit-content">
         <div className="space-y-4">
+          {thirdPartyProfile ? (
+            <div className="apple-group">
+              <div className="apple-panel-section">
+                <p className="muted text-sm">
+                  当前为第三方模型：插件包会保留；带 App 或 MCP 连接器的插件可能无法在 Codex 中加载。需要授权或使用连接器时，请切换到 ChatGPT 官方订阅配置。
+                </p>
+              </div>
+            </div>
+          ) : null}
           <div className="apple-group">
             <div className="apple-panel-section">
               <div className="flex flex-wrap items-center gap-2">
@@ -342,10 +353,11 @@ function MarketplaceDetailView({
                       {plugin.installed ? <span className="apple-chip">已安装</span> : null}
                     </div>
                     {plugin.description ? <div className="muted mt-1 break-words text-sm">{plugin.description}</div> : null}
-                    {(plugin.category || plugin.capabilities.length) ? (
+                    {(plugin.category || plugin.capabilities.length || plugin.contains.length) ? (
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      {plugin.category ? <span className="apple-chip">分类：{plugin.category}</span> : null}
-                      {plugin.capabilities.length ? <ContainsChips items={plugin.capabilities} /> : null}
+                        {plugin.category ? <span className="apple-chip">分类：{plugin.category}</span> : null}
+                        {plugin.capabilities.length ? <ContainsChips items={plugin.capabilities} /> : null}
+                        {plugin.contains.length ? <ContainsChips items={plugin.contains} /> : null}
                       </div>
                     ) : null}
                   </div>
@@ -533,9 +545,11 @@ function AddPluginView({
 function PluginMarketplaceView({
   onBack,
   onInstalled,
+  thirdPartyProfile,
 }: {
   onBack: () => void;
   onInstalled: () => Promise<void>;
+  thirdPartyProfile: boolean;
 }) {
   const feedback = useFeedback();
   const [marketplaces, setMarketplaces] = useState<PluginMarketplace[]>([]);
@@ -649,7 +663,16 @@ function PluginMarketplaceView({
   };
 
   if (selectedMarketplace) {
-    return <MarketplaceDetailView marketplace={selectedMarketplace} onBack={() => setSelectedMarketplace(null)} onInstalled={onInstalled} updates={updates} onUpgrade={upgrade} />;
+    return (
+      <MarketplaceDetailView
+        marketplace={selectedMarketplace}
+        onBack={() => setSelectedMarketplace(null)}
+        onInstalled={onInstalled}
+        updates={updates}
+        onUpgrade={upgrade}
+        thirdPartyProfile={thirdPartyProfile}
+      />
+    );
   }
   if (showAddPlugin) {
     return <AddPluginView onBack={() => setShowAddPlugin(false)} onMarketplaceAdded={async (marketplace) => { await refreshMarketplaces(); setShowAddPlugin(false); openMarketplace(marketplace); }} onInstalled={onInstalled} />;
@@ -771,13 +794,15 @@ function PluginMarketplaceView({
   );
 }
 
-export default function PluginsView() {
+export default function PluginsView({ state }: { state: AppState }) {
   const feedback = useFeedback();
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [selectedPlugin, setSelectedPlugin] = useState<PluginSummary | null>(null);
   const [addingMarketplace, setAddingMarketplace] = useState(false);
+  const thirdPartyProfile =
+    state.profiles.find((profile) => profile.id === state.active_profile_id)?.kind === "third_party";
 
   const refresh = async (force = false) => {
     try {
@@ -824,6 +849,7 @@ export default function PluginsView() {
       <PluginMarketplaceView
         onBack={() => setAddingMarketplace(false)}
         onInstalled={() => refresh(true)}
+        thirdPartyProfile={thirdPartyProfile}
       />
     );
   }

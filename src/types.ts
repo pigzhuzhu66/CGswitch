@@ -1,6 +1,7 @@
 export interface ProfileSummary {
   id: string;
   name: string;
+  kind: "official" | "third_party";
   /** 官方档案绑定的订阅账号 id；第三方为 null。 */
   account_id: string | null;
   model: string | null;
@@ -187,6 +188,7 @@ export interface MarketplacePlugin {
   description: string | null;
   category: string | null;
   capabilities: string[];
+  contains: string[];
 }
 
 export interface PluginUpdate {
