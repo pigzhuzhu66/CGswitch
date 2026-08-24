@@ -198,7 +198,7 @@ textarea::placeholder {
   transform: translateY(-2px);
 }
 
-/* 余额/用量胶囊数据变色（全局统一；cc-switch 同款阈值，后续供应商直接复用）。
+/* 余额/用量胶囊数据变色（全局统一；后续供应商直接复用）。
    变色数据同时加粗，标签/倒计时保持默认字重 */
 .chip-success {
   color: var(--chip-success);

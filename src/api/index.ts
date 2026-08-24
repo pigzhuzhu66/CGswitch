@@ -152,6 +152,8 @@ export const api = {
   authPollForAccount: (deviceCode: string) =>
     call<ManagedAccount | null>("auth_poll_for_account", { deviceCode }),
   authGetStatus: () => call<AuthStatus>("auth_get_status"),
+  authGetQuota: (source: "desktop" | "oauth", accountId?: string) =>
+    call<ProfileBalance>("auth_get_quota", { source, accountId }),
   authPreview: (accountId: string) => call<string | null>("auth_preview", { accountId }),
   authRemoveAccount: (accountId: string) =>
     call<void>("auth_remove_account", { accountId }),

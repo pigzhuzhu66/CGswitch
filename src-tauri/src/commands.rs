@@ -303,8 +303,9 @@ pub async fn test_provider_connection(
 pub async fn get_profile_balance(
     id: String,
     state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
 ) -> AppResult<ProfileBalance> {
-    state.get_profile_balance(&id).await
+    state.get_profile_balance(&id, &oauth.0).await
 }
 
 #[tauri::command]
@@ -641,6 +642,19 @@ pub async fn auth_get_status(
         status.authenticated = true;
     }
     Ok(status)
+}
+
+#[tauri::command]
+pub async fn auth_get_quota(
+    source: AuthSource,
+    account_id: Option<String>,
+    state: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
+) -> Result<ProfileBalance, String> {
+    state
+        .get_auth_quota(source, account_id.as_deref(), &oauth.0)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

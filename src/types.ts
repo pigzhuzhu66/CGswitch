@@ -113,14 +113,22 @@ export interface ProfileBalanceInfo {
   total_balance: string;
   granted_balance: string;
   topped_up_balance: string;
-  /** 用量型供应商（如 MiniMax Token Plan）的剩余百分比；余额型供应商为 null。 */
+  /** 用量型供应商（如 MiniMax Token Plan）的已用百分比；余额型供应商为 null。 */
   usage_percent: number | null;
-  /** 5 小时窗口重置倒计时（如 "2h23m"）。 */
+  /** 主用量窗口重置倒计时（如 "2h23m"）。 */
   usage_reset: string | null;
-  /** 7 天窗口已用百分比；仅用量型供应商返回。 */
+  /** 主用量窗口重置时间（Unix 毫秒）。 */
+  usage_reset_at?: number | null;
+  /** 主用量窗口名称；由接口返回的窗口长度推断。 */
+  usage_label?: string | null;
+  /** 次用量窗口已用百分比；仅用量型供应商返回。 */
   weekly_usage_percent: number | null;
-  /** 7 天窗口重置倒计时（如 "5d21h"）。 */
+  /** 次用量窗口重置倒计时（如 "5d21h"）。 */
   weekly_reset: string | null;
+  /** 次用量窗口重置时间（Unix 毫秒）。 */
+  weekly_reset_at?: number | null;
+  /** 次用量窗口名称；免费方案可为 30 天。 */
+  weekly_label?: string | null;
 }
 
 export interface ProfileBalance {

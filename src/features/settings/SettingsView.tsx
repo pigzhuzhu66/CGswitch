@@ -72,7 +72,7 @@ export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved
         </div>
       </div>
     ) : null}
-    {section === "account" ? <div className="apple-group mt-[var(--gap-section)] p-4"><div className="flex items-center gap-3"><ProfileIconTile name="ChatGPT" icon="openai-chatgpt" size="sm" /><h2 className="title-sm">ChatGPT 账号</h2></div><div className="mt-3"><ChatGPTAccount initialStatus={state.auth_status} /></div></div> : null}
+    {section === "account" ? <div className="apple-group mt-[var(--gap-section)] p-4"><div className="flex items-center gap-3"><ProfileIconTile name="ChatGPT" icon="openai-chatgpt" size="sm" /><h2 className="title-sm">ChatGPT 账号</h2></div><div className="mt-3"><ChatGPTAccount initialStatus={state.auth_status} balanceCache={state.balance_cache} /></div></div> : null}
     {section === "advanced" ? <SettingsAdvanced form={form} onPatch={(patch) => void saveGeneral(patch)} paths={state.paths} backupsEpoch={backupsEpoch} onOpenPath={openPath} onRefresh={onRefresh} /> : null}
     {section === "about" ? <SettingsAbout paths={state.paths} onOpenPath={openPath} openingPath={openingPath} /> : null}
   </div></section>;

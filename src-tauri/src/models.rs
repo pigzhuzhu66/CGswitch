@@ -187,18 +187,30 @@ pub struct ProfileBalanceInfo {
     pub total_balance: String,
     pub granted_balance: String,
     pub topped_up_balance: String,
-    /// 用量型供应商（如 MiniMax Token Plan）的剩余百分比；余额型供应商为 None。
+    /// 用量型供应商（如 MiniMax Token Plan）的已用百分比；余额型供应商为 None。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage_percent: Option<u32>,
-    /// 5 小时窗口重置倒计时（如 "2h23m"）；余额型供应商为 None。
+    /// 主用量窗口重置倒计时（如 "2h23m"）；余额型供应商为 None。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage_reset: Option<String>,
-    /// 7 天窗口已用百分比；仅用量型供应商返回。
+    /// 主用量窗口重置时间（Unix 毫秒）；余额型供应商为 None。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_reset_at: Option<i64>,
+    /// 主用量窗口名称；由接口返回的窗口长度推断。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_label: Option<String>,
+    /// 次用量窗口已用百分比；仅用量型供应商返回。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weekly_usage_percent: Option<u32>,
-    /// 7 天窗口重置倒计时（如 "5d21h"）；仅用量型供应商返回。
+    /// 次用量窗口重置倒计时（如 "5d21h"）；仅用量型供应商返回。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weekly_reset: Option<String>,
+    /// 次用量窗口重置时间（Unix 毫秒）；仅用量型供应商返回。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weekly_reset_at: Option<i64>,
+    /// 次用量窗口名称；免费方案可为“30天”。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weekly_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -28,7 +28,6 @@ const DEVICE_VERIFICATION_URL: &str = "https://auth.openai.com/codex/device";
 const DEVICE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
 const TOKEN_REFRESH_BUFFER_MS: i64 = 60_000;
 const DEVICE_CODE_DEFAULT_EXPIRES_IN: u64 = 900;
-const POLLING_SAFETY_MARGIN_SECS: u64 = 3;
 const CODEX_USER_AGENT: &str = "cgswitch-codex-oauth";
 const REGION_BLOCKED_MARKER: &str = "unsupported_country_region_territory";
 
@@ -761,7 +760,7 @@ fn parse_interval(value: Option<&serde_json::Value>) -> u64 {
         Some(serde_json::Value::String(text)) => text.parse::<u64>().unwrap_or(5),
         _ => 5,
     };
-    raw.max(1) + POLLING_SAFETY_MARGIN_SECS
+    raw.max(1)
 }
 
 fn compute_expires_at_ms(expires_in: Option<i64>) -> i64 {
@@ -872,19 +871,10 @@ mod tests {
 
     #[test]
     fn parse_interval_handles_number_string_and_default() {
-        assert_eq!(
-            parse_interval(Some(&serde_json::json!(5))),
-            5 + POLLING_SAFETY_MARGIN_SECS
-        );
-        assert_eq!(
-            parse_interval(Some(&serde_json::json!("10"))),
-            10 + POLLING_SAFETY_MARGIN_SECS
-        );
-        assert_eq!(parse_interval(None), 5 + POLLING_SAFETY_MARGIN_SECS);
-        assert_eq!(
-            parse_interval(Some(&serde_json::json!(0))),
-            1 + POLLING_SAFETY_MARGIN_SECS
-        );
+        assert_eq!(parse_interval(Some(&serde_json::json!(5))), 5);
+        assert_eq!(parse_interval(Some(&serde_json::json!("10"))), 10);
+        assert_eq!(parse_interval(None), 5);
+        assert_eq!(parse_interval(Some(&serde_json::json!(0))), 1);
     }
 
     #[test]

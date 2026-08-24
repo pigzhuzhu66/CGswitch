@@ -483,6 +483,20 @@ let webMcpServers: McpServerSpec[] = [
 // 与后端一致：激活状态只由“应用”显式建立，添加/捕获供应商不激活
 let webActiveProfileId: string | null = null;
 const webBalanceCache: Record<string, ProfileBalanceInfo> = {};
+const webChatgptQuota: ProfileBalanceInfo = {
+  currency: "",
+  total_balance: "",
+  granted_balance: "",
+  topped_up_balance: "",
+  usage_percent: 18,
+  usage_reset: "3h12m",
+  usage_reset_at: Date.now() + 3 * 60 * 60 * 1000 + 12 * 60 * 1000,
+  usage_label: "5小时",
+  weekly_usage_percent: 42,
+  weekly_reset: "4d8h",
+  weekly_reset_at: Date.now() + 4 * 86_400_000 + 8 * 3_600_000,
+  weekly_label: "7天",
+};
 
 function databaseBackupName(date = new Date()): string {
   const pad = (value: number, length = 2) => String(value).padStart(length, "0");
@@ -706,6 +720,10 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
     case "get_profile_balance": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
+      // 与后端一致：官方 ChatGPT 配置按其固定登录来源查询额度。
+      if (profile.kind === "official") {
+        return { is_available: true, balance_infos: [webChatgptQuota], latency_ms: 210 } as T;
+      }
       if (!balanceQueryProviders.has(profile.provider ?? "")) {
         throw new Error("该供应商不支持余额查询");
       }
@@ -798,6 +816,9 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       }
       return undefined as T;
     }
+    case "auth_get_quota":
+      // 与后端一致：Settings 的 Codex/OAuth 账号均返回官方额度窗口。
+      return { is_available: true, balance_infos: [webChatgptQuota], latency_ms: 210 } as T;
     case "duplicate_profile": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");

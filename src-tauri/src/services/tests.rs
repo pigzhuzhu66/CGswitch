@@ -893,19 +893,26 @@ async fn balance_rejects_unsupported_or_keyless() {
     std::fs::create_dir_all(&paths.codex_home).unwrap();
     std::fs::write(paths.codex_config(), "model = \"glm-5.3\"\n").unwrap();
     let context = AppContext::new(paths).unwrap();
+    let oauth = crate::auth::codex_oauth::CodexOAuthManager::new(context.database.clone());
 
     // 不支持余额/用量查询的供应商拒绝
     let zhipu = context
         .add_builtin_profile("zhipu", None, Some("zai-key"), None, None)
         .unwrap();
-    let error = context.get_profile_balance(&zhipu.id).await.unwrap_err();
+    let error = context
+        .get_profile_balance(&zhipu.id, &oauth)
+        .await
+        .unwrap_err();
     assert!(error.0.contains("该供应商不支持余额/用量查询"));
 
     // MiniMax 但只有占位符密钥（未配置真实密钥）拒绝
     let keyless = context
         .add_builtin_profile("minimax", None, None, None, None)
         .unwrap();
-    let error = context.get_profile_balance(&keyless.id).await.unwrap_err();
+    let error = context
+        .get_profile_balance(&keyless.id, &oauth)
+        .await
+        .unwrap_err();
     assert!(error.0.contains("没有配置 API 密钥"));
 }
 
@@ -973,6 +980,89 @@ fn minimax_remains_converts_remaining_to_used_percent() {
         connections::used_percent(empty.current_interval_remaining_percent),
         None
     );
+}
+
+#[test]
+fn chatgpt_quota_maps_windows_to_remaining_display_data() {
+    let reset_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        + 3_600;
+    let info = connections::chatgpt_quota_info(connections::ChatgptUsageResponse {
+        rate_limit: Some(connections::ChatgptRateLimit {
+            primary_window: Some(connections::ChatgptRateLimitWindow {
+                used_percent: Some(18.0),
+                limit_window_seconds: Some(18_000),
+                reset_at: Some(reset_at),
+            }),
+            secondary_window: Some(connections::ChatgptRateLimitWindow {
+                used_percent: Some(42.0),
+                limit_window_seconds: Some(2_592_000),
+                reset_at: Some(reset_at + 86_400),
+            }),
+        }),
+    })
+    .unwrap();
+
+    assert_eq!(info.usage_percent, Some(18));
+    assert_eq!(info.usage_label.as_deref(), Some("5小时"));
+    assert!(info.usage_reset.is_some());
+    assert_eq!(info.usage_reset_at, Some(reset_at * 1_000));
+    assert_eq!(info.weekly_usage_percent, Some(42));
+    assert_eq!(info.weekly_label.as_deref(), Some("30天"));
+    assert!(info.weekly_reset.is_some());
+    assert_eq!(info.weekly_reset_at, Some((reset_at + 86_400) * 1_000));
+}
+
+#[test]
+fn chatgpt_quota_uses_a_seven_day_primary_window_without_faking_five_hours() {
+    let reset_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        + 86_400;
+    let info = connections::chatgpt_quota_info(connections::ChatgptUsageResponse {
+        rate_limit: Some(connections::ChatgptRateLimit {
+            primary_window: Some(connections::ChatgptRateLimitWindow {
+                used_percent: Some(62.0),
+                limit_window_seconds: Some(604_800),
+                reset_at: Some(reset_at),
+            }),
+            secondary_window: None,
+        }),
+    })
+    .unwrap();
+
+    assert_eq!(info.usage_percent, Some(62));
+    assert_eq!(info.usage_label.as_deref(), Some("7天"));
+    assert!(info.usage_reset.is_some());
+    assert_eq!(info.usage_reset_at, Some(reset_at * 1_000));
+    assert_eq!(info.weekly_usage_percent, None);
+    assert_eq!(info.weekly_label, None);
+}
+
+#[test]
+fn chatgpt_quota_skips_empty_primary_window() {
+    let info = connections::chatgpt_quota_info(connections::ChatgptUsageResponse {
+        rate_limit: Some(connections::ChatgptRateLimit {
+            primary_window: Some(connections::ChatgptRateLimitWindow {
+                used_percent: None,
+                limit_window_seconds: Some(18_000),
+                reset_at: None,
+            }),
+            secondary_window: Some(connections::ChatgptRateLimitWindow {
+                used_percent: Some(62.0),
+                limit_window_seconds: Some(604_800),
+                reset_at: None,
+            }),
+        }),
+    })
+    .unwrap();
+
+    assert_eq!(info.usage_percent, Some(62));
+    assert_eq!(info.usage_label.as_deref(), Some("7天"));
+    assert_eq!(info.weekly_usage_percent, None);
 }
 
 #[test]

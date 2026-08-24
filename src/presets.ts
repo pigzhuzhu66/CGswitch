@@ -13,7 +13,7 @@ export interface BuiltinPreset {
 /** 支持余额/用量查询的供应商（以 provider_id 键控）；加供应商时在这里加一行即可 */
 export const balanceQueryProviders = new Set(["deepseek", "minimax"]);
 
-/** 余额/用量胶囊变色（cc-switch 同款阈值：已用 <70% 绿 / 70-89% 橙 / ≥90% 红；负余额红色） */
+/** 余额/用量胶囊变色（已用 <70% 绿 / 70-89% 橙 / ≥90% 红；负余额红色） */
 export function balanceChipClass(
   usagePercent: number | null,
   failed: boolean,

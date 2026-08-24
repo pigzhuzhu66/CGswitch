@@ -553,7 +553,7 @@ pub fn consolidate_mcp_blocks(text: &str) -> String {
         return text.to_string();
     }
     // 锚点 = 最后一个 mcp 块的位置：收拢后 mcp 连续块落在这里，
-    // 之前的非 mcp 表（如全部 plugins）自然连成一组，与 cc-switch 的模块化布局一致
+    // 之前的非 mcp 表（如全部 plugins）自然连成一组
     let anchor = blocks
         .iter()
         .rposition(|(is_mcp, _, _)| *is_mcp)
