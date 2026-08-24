@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { loadPlugins } from "../../app/managementDataCache";
+import { AppDisclosure } from "../../components/AppDisclosure";
 import { AppSelect } from "../../components/AppSelect";
 import { EmptyStateCard } from "../../components/EmptyStateCard";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
@@ -676,45 +677,43 @@ function PluginMarketplaceView({
         <div className="space-y-4">
           <div className="apple-group">
             <div className="apple-panel-section">
-              <div className={`apple-disclosure ${recommendedOpen ? "apple-disclosure--open" : ""}`}>
-                <button type="button" className="apple-disclosure__summary" aria-expanded={recommendedOpen} onClick={() => setRecommendedOpen((open) => !open)}>
+              <AppDisclosure
+                open={recommendedOpen}
+                onOpenChange={setRecommendedOpen}
+                summary={(
                   <span className="min-w-0">
                     <span className="field-label block">推荐市场</span>
-                    {recommendedOpen ? <span className="muted mt-1 block break-words text-sm">这些市场采用 Codex 官方 marketplace.json 规范，添加后进入目录即可浏览和安装。</span> : null}
+                    <span className="muted mt-1 block break-words text-sm">这些市场采用 Codex 官方 marketplace.json 规范，添加后进入目录即可浏览和安装。</span>
                   </span>
-                  <ChevronRight className="apple-disclosure__icon ml-auto" size={18} strokeWidth={2} aria-hidden="true" />
-                </button>
-                <div className="apple-disclosure__content" aria-hidden={!recommendedOpen} inert={!recommendedOpen}>
-                  <div className="apple-disclosure__body">
-                    <div className="mt-2 space-y-2">
-                      {recommendedMarketplaces.map((recommended) => {
-                        const configured = marketplaces.find((marketplace) => marketplace.name === recommended.name);
-                        return (
-                          <div key={recommended.name} className="rounded-[var(--radius-control)] px-2.5 py-2 shadow-[0_0_0_1px_var(--panel-ring)]">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold">{recommended.displayName}</span>
-                                  {configured ? <span className="apple-chip">已安装</span> : null}
-                                </div>
-                                <div className="muted mt-0.5 break-words text-sm">{recommended.description}</div>
-                                <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                                  <span className="mono muted meta-xs break-all">{recommended.source}</span>
-                                  <SourceLink source={recommended.source} />
-                                </div>
-                              </div>
-                              <button type="button" className="apple-action-button app-button--primary shrink-0" disabled={Boolean(adding) || !marketplacesLoaded} onClick={() => void browseRecommended(recommended)}>
-                                {adding === recommended.name ? <LoadingSpinner /> : <ChevronRight className="h-4 w-4" strokeWidth={2} />}
-                                {configured ? "浏览插件" : "添加并浏览"}
-                              </button>
+                )}
+              >
+                <div className="mt-2 space-y-2">
+                  {recommendedMarketplaces.map((recommended) => {
+                    const configured = marketplaces.find((marketplace) => marketplace.name === recommended.name);
+                    return (
+                      <div key={recommended.name} className="rounded-[var(--radius-control)] px-2.5 py-2 shadow-[0_0_0_1px_var(--panel-ring)]">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{recommended.displayName}</span>
+                              {configured ? <span className="apple-chip">已安装</span> : null}
+                            </div>
+                            <div className="muted mt-0.5 break-words text-sm">{recommended.description}</div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                              <span className="mono muted meta-xs break-all">{recommended.source}</span>
+                              <SourceLink source={recommended.source} />
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                          <button type="button" className="apple-action-button app-button--primary shrink-0" disabled={Boolean(adding) || !marketplacesLoaded} onClick={() => void browseRecommended(recommended)}>
+                            {adding === recommended.name ? <LoadingSpinner /> : <ChevronRight className="h-4 w-4" strokeWidth={2} />}
+                            {configured ? "浏览插件" : "添加并浏览"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              </AppDisclosure>
             </div>
           </div>
           <div className="apple-group">

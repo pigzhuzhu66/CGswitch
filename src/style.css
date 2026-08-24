@@ -1119,6 +1119,39 @@ body.drag-active * {
   background: var(--selection-bg);
 }
 
+.mcp-sync-diff {
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--panel-bg);
+  box-shadow: 0 0 0 1px var(--panel-ring);
+}
+
+.mcp-sync-diff.apple-disclosure--open .apple-disclosure__body { padding-top: 0; }
+
+.mcp-sync-diff .apple-disclosure__summary {
+  min-height: var(--control-height);
+  padding: 0.625rem 0.75rem;
+  background: color-mix(in srgb, var(--sidebar-bg) 34%, var(--panel-bg));
+}
+
+.mcp-sync-diff .apple-disclosure__summary:hover,
+.mcp-sync-diff .apple-disclosure__summary:focus-visible {
+  background: var(--selection-bg);
+}
+
+.mcp-sync-diff__detail {
+  border-top: 1px solid var(--panel-divider);
+  background: color-mix(in srgb, var(--sidebar-bg) 22%, var(--panel-bg));
+  padding: 0.75rem;
+}
+
+.mcp-sync-diff__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  color: var(--text-secondary);
+}
+
 .apple-editor-shell {
   overflow: hidden;
   border-radius: var(--radius-control);

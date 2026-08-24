@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppDialog } from "../../components/AppDialog";
+import { AppDisclosure } from "../../components/AppDisclosure";
 import type { McpSyncDiffEntry, McpSyncPreview } from "../../types";
 
 type SyncDirection = "live-to-db" | "db-to-live";
@@ -15,6 +16,7 @@ interface McpSyncDialogProps {
 const fieldLabels: Record<string, string> = { enabled: "启用状态", startup_timeout_sec: "启动超时秒", tool_timeout_sec: "工具超时秒", command: "启动命令", args: "启动参数", env: "环境变量", url: "服务地址", bearer_token_env_var: "令牌环境变量", http_headers: "HTTP 头", env_http_headers: "环境变量 HTTP 头" };
 const valueText = (value: unknown) => value === null ? "未设置" : typeof value === "string" ? value : JSON.stringify(value);
 const kindText = (entry: McpSyncDiffEntry) => entry.kind === "live_only" ? "外部新增" : entry.kind === "db_only" ? "配置文件缺失" : entry.unmodeled_only ? "仅格式差异" : "内容被修改";
+const detailFallback = (entry: McpSyncDiffEntry) => entry.kind === "live_only" ? "该配置仅存在于 config.toml，数据库中没有对应记录。" : entry.kind === "db_only" ? "该配置仅存在于数据库，config.toml 中没有对应记录。" : "存在未建模差异，当前没有可显示的字段明细。";
 
 export default function McpSyncDialog({ open, preview, previewError, busy, onClose, onApply }: McpSyncDialogProps) {
   const [step, setStep] = useState<"diff" | "confirm">("diff");
@@ -109,16 +111,44 @@ export default function McpSyncDialog({ open, preview, previewError, busy, onClo
               {entries.map((entry) => {
                 const isExpanded = expanded.has(entry.name);
                 return (
-                  <div key={entry.name} className="apple-group">
-                    <button type="button" className="flex w-full items-center gap-2 bg-black/4 px-3 py-2 text-left transition-colors dark:bg-white/6" aria-expanded={isExpanded} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(entry.name)) next.delete(entry.name); else next.add(entry.name); return next; })}>
-                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <AppDisclosure
+                    key={entry.name}
+                    className="mcp-sync-diff"
+                    open={isExpanded}
+                    onOpenChange={(next) => setExpanded((current) => {
+                      const updated = new Set(current);
+                      if (next) updated.add(entry.name); else updated.delete(entry.name);
+                      return updated;
+                    })}
+                    summary={(
+                      <>
                         <span className={`apple-chip ${entry.kind === "live_only" || entry.unmodeled_only ? "chip-warn" : "chip-danger"}`}>{kindText(entry)}</span>
-                        <span className="truncate font-semibold">{entry.name}</span>
-                      </span>
-                      <span className="muted shrink-0 text-xs">{isExpanded ? "收起" : "查看明细"}</span>
-                    </button>
-                    {isExpanded ? <div className="mono space-y-1 border-t border-[var(--panel-divider)] bg-black/4 p-3 meta-xs leading-relaxed break-all dark:bg-white/6">{entry.changed_fields.length ? entry.changed_fields.map((diff) => <div key={diff.field}>{fieldLabels[diff.field] ?? diff.field}：数据库 {valueText(diff.db)} → config.toml {valueText(diff.live)}</div>) : entry.unmodeled_only ? <p>建模字段全部相同，差异只在注释 / 格式 / 未建模键。</p> : <p className="whitespace-pre-wrap">{entry.live_toml ?? entry.db_toml}</p>}</div> : null}
-                  </div>
+                        <span className="min-w-0 flex-1 truncate font-semibold">{entry.name}</span>
+                      </>
+                    )}
+                  >
+                    <div className="mcp-sync-diff__detail">
+                      {entry.changed_fields.length ? (
+                        <div className="grid gap-2.5">
+                          {entry.changed_fields.map((diff) => (
+                            <div key={diff.field} className="grid gap-1">
+                              <div className="field-label">{fieldLabels[diff.field] ?? diff.field}</div>
+                              <div className="mcp-sync-diff__values meta-xs">
+                                <span>数据库：<code className="mono">{valueText(diff.db)}</code></span>
+                                <span>config.toml：<code className="mono">{valueText(diff.live)}</code></span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : entry.unmodeled_only ? (
+                        <p className="muted m-0 text-sm">建模字段全部相同，差异只在注释、格式或未建模键。</p>
+                      ) : entry.live_toml?.trim() || entry.db_toml?.trim() ? (
+                        <pre className="mono muted m-0 whitespace-pre-wrap break-all meta-xs">{entry.live_toml ?? entry.db_toml}</pre>
+                      ) : (
+                        <p className="muted m-0 text-sm">{detailFallback(entry)}</p>
+                      )}
+                    </div>
+                  </AppDisclosure>
                 );
               })}
             </div>

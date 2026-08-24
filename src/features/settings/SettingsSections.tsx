@@ -1,9 +1,10 @@
-import { ChevronRight, Database, DatabaseBackup, Download, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, Save, Sun, Upload } from "lucide-react";
+import { Database, DatabaseBackup, Download, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, Save, Sun, Upload } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api, isTauri } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { AppDialog } from "../../components/AppDialog";
+import { AppDisclosure } from "../../components/AppDisclosure";
 import { AppSelect } from "../../components/AppSelect";
 import { AppSwitch } from "../../components/AppSwitch";
 import { TrashIcon } from "../../components/TrashIcon";
@@ -60,21 +61,23 @@ export function SettingsAdvanced({ form, onPatch, paths, backupsEpoch, onOpenPat
 
   return (
     <div className="apple-group mt-[var(--gap-section)]">
-      <div className={`apple-disclosure ${backupOpen ? "apple-disclosure--open" : ""}`}>
-        <section className="apple-panel-section">
-          <button type="button" className="apple-disclosure__summary" aria-expanded={backupOpen} onClick={() => setBackupOpen((open) => !open)}>
-            <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
-              <Database className="h-[18px] w-[18px]" strokeWidth={2} />
-            </span>
-            <span className="min-w-0">
-              <span className="setting-title block">数据备份</span>
-              <span className="setting-description mt-0.5 block">管理本地数据库备份，支持导入、导出和自动备份</span>
-            </span>
-            <ChevronRight className="apple-disclosure__icon ml-auto" size={18} strokeWidth={2} aria-hidden="true" />
-          </button>
-          <div className="apple-disclosure__content" aria-hidden={!backupOpen} inert={!backupOpen}>
-            <div className="apple-disclosure__body">
-              <div className="border-t border-[var(--panel-divider)] pt-4">
+      <section className="apple-panel-section">
+        <AppDisclosure
+          open={backupOpen}
+          onOpenChange={setBackupOpen}
+          summary={(
+            <>
+              <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
+                <Database className="h-[18px] w-[18px]" strokeWidth={2} />
+              </span>
+              <span className="min-w-0">
+                <span className="setting-title block">数据备份</span>
+                <span className="setting-description mt-0.5 block">管理本地数据库备份，支持导入、导出和自动备份</span>
+              </span>
+            </>
+          )}
+        >
+          <div className="border-t border-[var(--panel-divider)] pt-4">
                 <div className="title-sm">备份操作</div>
                 <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <button type="button" className="apple-action-button" disabled={exporting} onClick={() => void createImmediateBackup()}>
@@ -141,10 +144,8 @@ export function SettingsAdvanced({ form, onPatch, paths, backupsEpoch, onOpenPat
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        </section>
-      </div>
+        </AppDisclosure>
+      </section>
       <AppDialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null); }} title="重命名备份" footer={<><button type="button" className="apple-action-button" onClick={() => setRenameTarget(null)}>取消</button><button type="button" className="apple-action-button app-button--primary" disabled={renaming || !renameText.trim()} onClick={() => void submitRename()}>保存</button></>}><input className="app-input" maxLength={80} placeholder="输入新的备份标题" value={renameText} onChange={(event) => setRenameText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) void submitRename(); }} /></AppDialog>
     </div>
   );
