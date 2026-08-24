@@ -2,8 +2,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter};
-
 use crate::auth::codex_oauth::{parse_external_auth_json, ManagedAccount};
 use crate::builtin;
 use crate::codex::{config as codex_config, process as codex_process};

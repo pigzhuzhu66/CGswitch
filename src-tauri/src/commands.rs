@@ -553,8 +553,8 @@ pub async fn apply_profile(
 }
 
 #[tauri::command]
-pub fn restart_codex(app: AppHandle, state: State<'_, AppContext>) -> AppResult<()> {
-    state.restart_codex(&app)
+pub fn restart_codex(state: State<'_, AppContext>) -> AppResult<()> {
+    state.restart_codex()
 }
 
 /// MCP 服务器管理：直接读写 live ~/.codex/config.toml 的 [mcp_servers.*] 段。

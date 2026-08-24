@@ -1,15 +1,8 @@
 use super::storage::{backup_keep_count, DATABASE_BACKUP_PREFIX};
 use super::{
-    app_err, atomic_write, codex_process, now_ms, prune_backups, AppContext, AppHandle, AppResult,
-    Emitter, Path, PathInfo, Settings,
+    app_err, atomic_write, codex_process, now_ms, prune_backups, AppContext, AppResult, Path,
+    PathInfo, Settings,
 };
-
-fn emit(app: &AppHandle, stage: &str, message: Option<&str>) {
-    let _ = app.emit(
-        "restart-progress",
-        serde_json::json!({ "stage": stage, "message": message }),
-    );
-}
 
 fn open_in_file_explorer(path: &Path) -> AppResult<()> {
     #[cfg(windows)]
@@ -67,17 +60,14 @@ fn open_in_file_explorer(path: &Path) -> AppResult<()> {
 }
 
 impl AppContext {
-    pub fn restart_codex(&self, app: &AppHandle) -> AppResult<()> {
+    pub fn restart_codex(&self) -> AppResult<()> {
         let _guard = self
             .operation
             .lock()
             .map_err(|_| app_err!("操作锁已损坏"))?;
-        emit(app, "stopping", None);
-
         let process_ids = codex_process::find_process_ids(None);
         if !process_ids.is_empty() {
             codex_process::terminate_process_ids(&process_ids);
-            emit(app, "waiting", None);
             // 固定等待 5 秒（可配置的“重启等待超时”已移除）
             let exited = codex_process::wait_for_exit(&process_ids, 5_000, 100);
             if !exited {
@@ -89,12 +79,10 @@ impl AppContext {
                     Some(message),
                     &now_ms().to_string(),
                 )?;
-                emit(app, "error", Some(message));
                 return Err(app_err!("{message}"));
             }
         }
 
-        emit(app, "launching", None);
         let result = codex_process::launch_codex(None);
         let status = if result.is_ok() { "success" } else { "failed" };
         let message = result.as_ref().err().map(|error| error.0.clone());
@@ -105,16 +93,7 @@ impl AppContext {
             message.as_deref(),
             &now_ms().to_string(),
         )?;
-        match result {
-            Ok(()) => {
-                emit(app, "success", None);
-                Ok(())
-            }
-            Err(error) => {
-                emit(app, "error", Some(&error.0));
-                Err(error)
-            }
-        }
+        result
     }
 
     pub fn settings(&self) -> AppResult<Settings> {

@@ -1,12 +1,13 @@
 import { Camera, Plus, RefreshCw, Server } from "lucide-react";
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { AppDialog } from "../../components/AppDialog";
 import { EmptyStateCard } from "../../components/EmptyStateCard";
-import type { AppState, AuthStatus, ProfileBalanceInfo, ProfileSummary, RestartStage } from "../../types";
+import { LoadingSpinner } from "../../components/LoadingSpinner";
+import type { AppState, AuthStatus, ProfileBalanceInfo, ProfileSummary } from "../../types";
 import ProfileCard, { getCachedProfileBalance, getCachedProfileBalanceError, ProfileCardActions, ProfileCardContent } from "./ProfileCard";
 import ProfileEdit from "./ProfileEdit";
 
@@ -14,17 +15,6 @@ interface ProfilesViewProps {
   state: AppState;
   activationEpoch: number;
   onRefresh: () => Promise<void>;
-}
-
-const progressByStage: Record<RestartStage, number> = { idle: 0, stopping: 18, waiting: 48, launching: 82, success: 100, error: 100 };
-const textByStage: Record<RestartStage, string> = { idle: "空闲", stopping: "正在停止 Codex", waiting: "等待进程退出", launching: "正在启动 Codex", success: "重启成功", error: "重启失败" };
-const RESTART_CARD_DURATION = 360;
-
-interface RestartProgressCardProps {
-  stage: RestartStage;
-  message: string;
-  visible: boolean;
-  onHidden: () => void;
 }
 
 function ProfileDragPreview({ profile, width, height, active, busy, subscriptionAuthed, subscriptionAccount, subscriptionSource, boundAccount, balanceInfo, balanceError, onOpenAdmin }: { profile: ProfileSummary; width: number | null; height: number | null; active: boolean; busy: boolean; subscriptionAuthed: boolean; subscriptionAccount: string | null; subscriptionSource: "desktop" | "oauth" | null; boundAccount: string | null; balanceInfo: ProfileBalanceInfo | null; balanceError: string; onOpenAdmin: () => void }) {
@@ -48,45 +38,11 @@ function ProfileDragPreview({ profile, width, height, active, busy, subscription
   );
 }
 
-function RestartProgressCard({ stage, message, visible, onHidden }: RestartProgressCardProps) {
-  const revealRef = useRef<HTMLDivElement>(null);
-
-  // 出场：grid 收起过渡结束后卸载；transitionend 丢失时用定时器兜底
-  useEffect(() => {
-    if (visible) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      onHidden();
-      return;
-    }
-    const node = revealRef.current;
-    if (!node) {
-      onHidden();
-      return;
-    }
-    const finish = (event?: TransitionEvent) => {
-      if (event && (event.target !== node || event.propertyName !== "grid-template-rows")) return;
-      onHidden();
-    };
-    node.addEventListener("transitionend", finish as EventListener);
-    const timer = window.setTimeout(() => finish(), RESTART_CARD_DURATION + 80);
-    return () => {
-      node.removeEventListener("transitionend", finish as EventListener);
-      window.clearTimeout(timer);
-    };
-  }, [visible, onHidden]);
-
-  return <div ref={revealRef} className={`restart-card-reveal${visible ? " restart-card-reveal--open" : ""}`} aria-hidden={!visible}><div className="restart-card-reveal__inner"><div className="apple-group mb-[var(--gap-page)] px-4 py-3"><div className="flex items-center justify-between gap-3"><div className="font-semibold">重启进度</div><span className={`apple-chip ${stage === "error" ? "chip-danger" : stage === "success" ? "chip-success" : ""}`}>{textByStage[stage]}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-black/8 dark:bg-white/8"><div className={`h-full rounded-full transition-[width] duration-300 ${stage === "error" ? "bg-danger" : stage === "success" ? "bg-success" : "bg-accent"}`} style={{ width: `${progressByStage[stage]}%` }} /></div>{message ? <p className="muted mt-3 text-sm">{message}</p> : null}</div></div></div>;
-}
-
 export default function ProfilesView({ state, activationEpoch, onRefresh }: ProfilesViewProps) {
   const feedback = useFeedback();
   const [items, setItems] = useState(state.profiles);
   const [busy, setBusy] = useState(false);
-  const [restartStage, setRestartStage] = useState<RestartStage>("idle");
-  const [restartMessage, setRestartMessage] = useState("");
-  const [restartCardStage, setRestartCardStage] = useState<RestartStage>("idle");
-  const [restartCardMounted, setRestartCardMounted] = useState(false);
-  const [restartCardVisible, setRestartCardVisible] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [editingProfile, setEditingProfile] = useState<ProfileSummary | null>(null);
   const [creatingProfile, setCreatingProfile] = useState(false);
   const [modal, setModal] = useState<"capture" | "rename" | null>(null);
@@ -98,7 +54,6 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
   const [draggedProfileHeight, setDraggedProfileHeight] = useState<number | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>(state.auth_status);
   const nameInput = useRef<HTMLInputElement>(null);
-  const previousRestartStage = useRef<RestartStage>("idle");
   const dragHoverReleaseRef = useRef<(() => void) | null>(null);
   const duplicatingProfileRef = useRef(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor));
@@ -112,39 +67,8 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
   }, []);
 
   useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void api.onRestartProgress((payload) => {
-      if (!disposed) {
-        setRestartStage(payload.stage);
-        setRestartMessage(payload.message ?? "");
-      }
-    }).then((cleanup) => {
-      if (disposed) cleanup();
-      else unlisten = cleanup;
-    });
-    void api.authGetStatus().then((status) => { if (!disposed) setAuthStatus(status); }).catch(() => undefined);
-    return () => { disposed = true; unlisten?.(); };
+    void api.authGetStatus().then(setAuthStatus).catch(() => undefined);
   }, []);
-
-  useEffect(() => {
-    if (restartStage !== "success") return;
-    const timer = window.setTimeout(() => setRestartStage("idle"), 1200);
-    return () => window.clearTimeout(timer);
-  }, [restartStage]);
-
-  useEffect(() => {
-    if (restartStage === "idle") {
-      if (previousRestartStage.current !== "idle") setRestartCardVisible(false);
-    } else {
-      setRestartCardStage(restartStage);
-      setRestartCardMounted(true);
-      setRestartCardVisible(true);
-    }
-    previousRestartStage.current = restartStage;
-  }, [restartStage]);
-
-  const onRestartCardHidden = useCallback(() => setRestartCardMounted(false), []);
 
   const releaseCardHoverSuppression = () => {
     const release = dragHoverReleaseRef.current;
@@ -234,17 +158,17 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
   const restart = async (force = false) => {
     if (busy && !force) return;
     setBusy(true);
-    setRestartStage("stopping");
-    setRestartMessage("");
+    setRestarting(true);
     try {
       await api.restartCodex();
       feedback.success("Codex 已重启");
       await onRefresh();
     } catch (error) {
-      setRestartStage("error");
-      setRestartMessage(String(error));
       feedback.error(String(error));
-    } finally { setBusy(false); }
+    } finally {
+      setRestarting(false);
+      setBusy(false);
+    }
   };
 
   const applyProfile = async (profile: ProfileSummary) => {
@@ -315,9 +239,10 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
         <div className="flex flex-wrap items-center gap-2">
           <div className="apple-toolbar-group">
             <button type="button" className="apple-action-button apple-action-button--quaternary"
-              disabled={busy || (restartStage !== "idle" && restartStage !== "success" && restartStage !== "error")}
+              disabled={busy}
               title="重启 Codex" onClick={() => void restart(false)}>
-              <RefreshCw className="h-4 w-4" strokeWidth={2} />重启 Codex
+              {restarting ? <LoadingSpinner size="md" /> : <RefreshCw className="h-4 w-4" strokeWidth={2} />}
+              {restarting ? "重启中…" : "重启 Codex"}
             </button>
             <button type="button" className="apple-icon-button text-accent" disabled={busy}
               title="捕获当前配置" aria-label="捕获当前配置" onClick={openCapture}>
@@ -331,7 +256,6 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
         </div>
       </header>
       <div className="apple-edit-content">
-        {restartCardMounted ? <RestartProgressCard stage={restartCardStage} message={restartMessage} visible={restartCardVisible} onHidden={onRestartCardHidden} /> : null}
         <div>{items.length === 0 ? <EmptyStateCard icon={<Server className="h-5 w-5" strokeWidth={1.8} />}><p className="muted">还没有供应商配置。可以添加内置官方供应商，或先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。</p></EmptyStateCard> : <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragCancel={onDragCancel} onDragEnd={onDragEnd}><SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}><div className="profile-list relative space-y-[var(--gap-page)] will-change-transform">{items.map((profile) => <ProfileCard key={profile.id} profile={profile} active={profile.id === state.active_profile_id} dragHover={profile.id === dragHoverProfileId} busy={busy} activationEpoch={activationEpoch} subscriptionAuthed={authStatus.authenticated} subscriptionAccount={subscriptionAccount} subscriptionSource={subscriptionSource} boundAccount={boundAccountLogin(profile)} balanceCache={state.balance_cache} onApply={() => void applyProfile(profile)} onRename={() => openRename(profile)} onEdit={() => setEditingProfile(profile)} onRemove={() => void removeProfile(profile)} onDuplicate={() => void duplicateProfile(profile)} />)}</div></SortableContext><DragOverlay dropAnimation={null}>{draggedProfile ? <ProfileDragPreview profile={draggedProfile} width={draggedProfileWidth} height={draggedProfileHeight} active={draggedProfile.id === state.active_profile_id} busy={busy} subscriptionAuthed={authStatus.authenticated} subscriptionAccount={subscriptionAccount} subscriptionSource={subscriptionSource} boundAccount={boundAccountLogin(draggedProfile)} balanceInfo={getCachedProfileBalance(draggedProfile.id, state.balance_cache?.[draggedProfile.id] ?? null)} balanceError={getCachedProfileBalanceError(draggedProfile.id)} onOpenAdmin={() => void api.openUrl(draggedProfile.admin_url!).catch((error) => feedback.error(String(error)))} /> : null}</DragOverlay></DndContext>}</div>
       </div>
       <AppDialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null); }} title={modal === "capture" ? "保存当前配置快照" : "重命名供应商"} initialFocusRef={nameInput} footer={<><button type="button" className="apple-action-button" onClick={() => setModal(null)}>取消</button><button type="button" className="apple-action-button app-button--primary" disabled={busy || !profileName.trim()} onClick={() => void submitModal()}>保存</button></>}>
