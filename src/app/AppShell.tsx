@@ -35,6 +35,7 @@ export default function AppShell() {
       if (isTauri && !stateRef.current?.settings.silent_start) {
         try {
           await appWindow?.show();
+          await appWindow?.setFocus();
         } catch {
           // 内容初始化不依赖窗口显示成功。
         }

@@ -537,18 +537,6 @@ body.drag-settling .profile-card-actions {
   pointer-events: none !important;
 }
 
-/* 供应商卡片行间分割线：按相邻卡片绘制，不依赖 item index 或组件属性透传 */
-.profile-list > [data-draggable] + [data-draggable] {
-  border-top: 1px solid;
-  border-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--panel-divider) 56px,
-    var(--panel-divider) calc(100% - 56px),
-    transparent 100%
-  ) 1;
-}
-
 /* 重启进度卡展开/收起：布局推移只由外层 grid 行高（0fr↔1fr）一个属性承担，
    卡片本体只动 transform + opacity（合成器线程）。替代逐帧 JS 写
    height/margin/padding 的方案——那种方式每帧触发整页 reflow，且 rAF 回调
@@ -883,6 +871,43 @@ body.drag-settling .profile-card-actions {
   border-radius: var(--radius-card);
   background: var(--panel-bg);
   box-shadow: 0 0 0 1px var(--panel-ring);
+}
+
+/* 已激活卡片：1px 内描边 + 内发光，发光是激活态专属信号。 */
+.apple-group.is-active {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    inset 0 0 18px 0 color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+:root.dark .apple-group.is-active {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent),
+    inset 0 0 22px 0 color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* 悬停：描边加深到 75%（dark 90%），不引入发光。
+   避免和激活态视觉混淆——发光专属激活。 */
+.apple-group:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+
+:root.dark .apple-group:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 90%, transparent);
+}
+
+/* 激活 + 悬停：描边跟随 hover 加深，发光保留。
+   特异性 0,0,3,0 高于 .apple-group:hover 的 0,0,2,0，强制不被覆盖。 */
+.apple-group.is-active:hover {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent),
+    inset 0 0 18px 0 color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+:root.dark .apple-group.is-active:hover {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 90%, transparent),
+    inset 0 0 22px 0 color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .apple-segmented-control { background: var(--input-bg); }

@@ -129,7 +129,7 @@ export default function ProfileCard({
       ref={sortable.setNodeRef}
       data-draggable
       style={style}
-      className={`group flex cursor-pointer select-none flex-col gap-4 px-5 py-4 transition-colors sm:flex-row sm:items-center sm:justify-between ${sortable.isDragging ? "opacity-35" : active ? "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--selection-bg)_70%,transparent),transparent_65%)]" : "hover:bg-black/3 dark:hover:bg-white/4"}`}
+      className={`apple-group${active ? " is-active" : ""} group flex cursor-pointer select-none flex-col gap-4 px-5 py-4.5 transition-colors sm:flex-row sm:items-center sm:justify-between ${sortable.isDragging ? "opacity-35" : active ? "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--selection-bg)_60%,transparent),transparent_65%)]" : "hover:bg-black/3 dark:hover:bg-white/4"}`}
       title="单击编辑"
       onClick={onEdit}
     >
@@ -141,7 +141,6 @@ export default function ProfileCard({
         <div className="min-w-0 flex-1">
           <div className="flex min-h-7 items-center gap-2">
             <h3 className="title-md cursor-pointer truncate leading-normal transition-colors hover:text-accent" title="点击重命名" onClick={(event) => { event.stopPropagation(); onRename(); }}>{profile.name}</h3>
-            {active ? <span className="inline-flex items-center rounded-full bg-success px-2 py-0.5 text-xs font-semibold leading-none text-white">活动</span> : null}
             {!profile.provider ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${subscriptionAuthed ? "bg-accent/10 text-accent" : "bg-black/5 muted dark:bg-white/6"}`} title={subscriptionTitle} aria-label={subscriptionTitle}>
               {subscriptionSourceKind === "desktop" ? <Monitor className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" /> : <KeyRound className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />}
             </span> : null}
@@ -158,7 +157,7 @@ export default function ProfileCard({
         </div>
       </div>
       <div className="profile-card-actions pointer-events-none flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.preventDefault()}>
-        <button type="button" className="apple-action-button app-button--primary" disabled={busy || active} onClick={onApply}>{active ? "已应用" : "应用"}</button>
+        <button type="button" className="apple-action-button app-button--primary" disabled={busy || active} onClick={onApply}>{active ? "已激活" : "激活"}</button>
         <button type="button" className="apple-icon-button text-[var(--text-secondary)] hover:bg-[var(--profile-chip-bg)] hover:text-accent" title="复制供应商" aria-label="复制供应商" onClick={onDuplicate}><Copy className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden="true" /></button>
         <button type="button" className={`apple-icon-button enabled:hover:bg-[var(--profile-chip-bg)] disabled:cursor-not-allowed disabled:opacity-40 ${connectionDimmed ? "text-[var(--text-secondary)]" : "text-accent"}`} disabled={(!profile.provider && !subscriptionAuthed) || busy || testing} title={connectionTitle} aria-label="测试连通性" onClick={() => void testConnection()}>{testing ? <LoadingSpinner size="md" /> : <Wifi className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden="true" />}</button>
         <button type="button" className="apple-icon-button text-[var(--danger)]/60 enabled:hover:bg-[var(--danger)]/10 enabled:hover:text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-40" disabled={busy || active} title="删除" aria-label="删除" onClick={onRemove}><TrashIcon /></button>
