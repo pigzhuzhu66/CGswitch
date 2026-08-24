@@ -12,6 +12,11 @@ impl AppContext {
         Ok(())
     }
 
+    /// 读取当前 Codex 官方认证文件，用于编辑页只读预览。
+    pub fn read_codex_auth_json(&self) -> Option<String> {
+        read_optional_text(&self.paths.codex_home.join("auth.json"))
+    }
+
     /// 识别 Codex 官方外部认证（~/.codex/auth.json，由 codex login 生成）。
     /// 只读识别、不导入数据库；不是有效的 ChatGPT 订阅认证时返回 None。
     pub fn external_codex_auth(&self) -> AppResult<Option<ManagedAccount>> {

@@ -62,7 +62,6 @@ export default function McpSyncDialog({ open, preview, previewError, busy, onClo
             {dbToLive ? previewError ? "配置文件无法解析；写入前会自动备份原文件。" : "只替换 config.toml 的 MCP 配置段，其他配置保留。" : "读取当前 config.toml，把差异写入数据库。"}
           </span>
         </span>
-        <span className="muted shrink-0 text-xs">{dbToLive ? "数据库 → 文件" : "文件 → 数据库"}</span>
       </button>
     );
   };

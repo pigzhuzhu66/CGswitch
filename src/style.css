@@ -26,6 +26,7 @@
   /* 状态徽标文字：比 --success 深一档，浅底上保证对比度；深色主题换亮绿 */
   --success-text: #248a3d;
   --chip-success: #30d158;
+  --toast-icon-foreground: #1c1c1e;
   --profile-chip-bg: rgb(0 0 0 / 0.04);
   --input-bg: #f5f5f5;
   --profile-meta-text: rgba(60, 60, 67, 0.68);
@@ -90,6 +91,7 @@
   --selection-bg: rgba(0, 122, 255, 0.16);
   --success-text: #6ee7a0;
   --chip-success: #63e68a;
+  --toast-icon-foreground: #ffffff;
   --profile-chip-bg: #1e1e1e;
   --input-bg: #1e1e1e;
   --profile-meta-text: rgba(255, 255, 255, 0.62);
@@ -525,16 +527,33 @@ main:has(.apple-scroll-page) {
   overflow: hidden;
 }
 
+.profile-card-actions--dragging {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.profile-card-actions > .apple-action-button {
+  height: var(--icon-button-size);
+  font-weight: 600;
+}
+
+.profile-list > .apple-group.is-drag-hover h3,
+.profile-drag-preview.is-drag-hover h3 {
+  color: var(--accent);
+  transition: none;
+}
+
+.profile-list > .apple-group.is-drag-hover .profile-card-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transition: none;
+}
+
 /* 拖拽期间全局禁止文本选中，防止路过卡片时标题/内容被框选 */
 body.drag-active,
 body.drag-active * {
   user-select: none !important;
   -webkit-user-select: none !important;
-}
-
-body.drag-settling .profile-card-actions {
-  opacity: 0 !important;
-  pointer-events: none !important;
 }
 
 /* 重启进度卡展开/收起：布局推移只由外层 grid 行高（0fr↔1fr）一个属性承担，
@@ -894,12 +913,19 @@ body.drag-settling .profile-card-actions {
   background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
 }
 
+.codex-status__signal-dot {
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 .codex-status--running .codex-status__signal {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
-.codex-status--running .codex-status__signal svg {
+.codex-status--running .codex-status__signal-dot {
   animation: codex-status-breathe 2.8s ease-in-out infinite;
   transform-box: fill-box;
   transform-origin: center;
@@ -926,7 +952,7 @@ body.drag-settling .profile-card-actions {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .codex-status--running .codex-status__signal svg { animation: none; }
+  .codex-status--running .codex-status__signal-dot { animation: none; }
 }
 
 .apple-group {
@@ -1312,7 +1338,7 @@ button:focus-visible {
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel-bg) 88%, white);
   box-shadow: 0 3px 6px -4px rgb(0 0 0 / 0.12), 0 6px 16px 0 rgb(0 0 0 / 0.08), 0 9px 28px 8px rgb(0 0 0 / 0.05);
-  padding: 10px 20px;
+  padding: 10px 12px;
   color: inherit;
   font-size: 14px;
   line-height: 1.6;
@@ -1346,26 +1372,51 @@ button:focus-visible {
 }
 
 .app-toast__icon {
+  box-sizing: border-box;
   flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
   margin: 0 10px 0 0;
+  padding: 3px;
+  border-radius: 50%;
   opacity: var(--toast-opacity);
   transition: opacity 220ms ease-out;
   transition-delay: var(--toast-transition-delay);
 }
 
-.app-toast__icon--success { color: var(--success); }
-.app-toast__icon--error { color: var(--danger); }
-.app-toast__icon--warning { color: var(--warning); }
-.app-toast__icon--info { color: var(--accent); }
+.app-toast__icon--success { color: var(--toast-icon-foreground); background: var(--success); }
+.app-toast__icon--error { color: var(--toast-icon-foreground); background: var(--danger); }
+.app-toast__icon--warning { color: var(--toast-icon-foreground); background: var(--warning); }
+.app-toast__icon--info { color: var(--toast-icon-foreground); background: var(--accent); }
 
 .app-toast__content {
   display: inline-block;
+  flex: 0 1 auto;
   min-width: 0;
   font-size: inherit;
   line-height: inherit;
   opacity: var(--toast-opacity);
   transition: opacity 220ms ease-out;
   transition-delay: var(--toast-transition-delay);
+}
+
+.app-toast__close {
+  display: grid;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  opacity: var(--toast-opacity);
+  transition: background-color var(--motion-fast) ease-out, color var(--motion-fast) ease-out, opacity 220ms ease-out;
+  transition-delay: 0ms, 0ms, var(--toast-transition-delay);
+}
+
+.app-toast__close:hover {
+  background: var(--profile-chip-bg);
+  color: inherit;
 }
 
 .app-select {

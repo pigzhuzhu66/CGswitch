@@ -472,7 +472,7 @@ let webMcpServers: McpServerSpec[] = [
     env_http_headers: {},
   },
 ];
-// 与后端一致：激活状态只由“应用/捕获”显式建立，添加供应商不激活
+// 与后端一致：激活状态只由“应用”显式建立，添加/捕获供应商不激活
 let webActiveProfileId: string | null = null;
 const webBalanceCache: Record<string, ProfileBalanceInfo> = {};
 
@@ -540,8 +540,6 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         updated_at: now,
       };
       webProfiles.push(profile);
-      // 捕获即建立“当前 live = 该供应商”的显式关联
-      webActiveProfileId = profile.id;
       return profile as T;
     }
     case "add_builtin_profile": {
@@ -996,6 +994,14 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       return undefined as T;
     case "auth_get_status":
       return { authenticated: false, default_account_id: null, accounts: [], external: null } as T;
+    case "auth_preview": {
+      const accountId = typeof args?.accountId === "string" ? args.accountId : "desktop-preview";
+      return JSON.stringify({
+        auth_mode: "chatgpt",
+        OPENAI_API_KEY: null,
+        tokens: { account_id: accountId, access_token: "<preview-only>" },
+      }, null, 2) as T;
+    }
     case "set_profile_account": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (profile) {

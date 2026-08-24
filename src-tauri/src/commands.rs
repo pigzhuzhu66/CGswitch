@@ -713,6 +713,26 @@ pub async fn auth_get_status(
 }
 
 #[tauri::command]
+pub async fn auth_preview(
+    account_id: Option<String>,
+    app: State<'_, AppContext>,
+    oauth: State<'_, CodexOAuthState>,
+) -> Result<Option<String>, String> {
+    let Some(account_id) = account_id else {
+        return Ok(app.read_codex_auth_json());
+    };
+    let manager = oauth.0.read().await;
+    if let Some(cached) = manager.cached_auth_json(&account_id).await {
+        return Ok(Some(cached));
+    }
+    manager
+        .codex_auth_json(&account_id)
+        .await
+        .map(Some)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn auth_remove_account(
     account_id: String,
     state: State<'_, CodexOAuthState>,

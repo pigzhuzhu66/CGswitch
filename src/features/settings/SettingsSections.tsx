@@ -42,7 +42,7 @@ export function SettingsAdvanced({ form, onPatch, paths, backupsEpoch, onOpenPat
   const exportBackupToFile = async () => {
     if (exporting) return;
     setExporting(true);
-    try { let directory: string | null = null; if (isTauri) { const result = await openDialog({ title: "选择导出目录", directory: true, multiple: false }); directory = typeof result === "string" ? result : null; if (!directory) return; } const path = await api.exportDatabaseTo(directory ?? "mock-export"); feedback.success(`数据文件已导出：${path}`); }
+    try { let directory: string | null = null; if (isTauri) { const result = await openDialog({ title: "选择导出目录", directory: true, multiple: false }); directory = typeof result === "string" ? result : null; if (!directory) return; } await api.exportDatabaseTo(directory ?? "mock-export"); feedback.success("数据文件已导出"); }
     catch (error) { feedback.error(String(error)); }
     finally { setExporting(false); }
   };

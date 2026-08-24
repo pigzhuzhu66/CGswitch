@@ -64,6 +64,8 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const [configInitial, setConfigInitial] = useState("");
   const [catalogInitial, setCatalogInitial] = useState("");
   const [authInitial, setAuthInitial] = useState("");
+  const [authPreviewOnly, setAuthPreviewOnly] = useState(false);
+  const [authPreviewReady, setAuthPreviewReady] = useState(false);
   const [configTouched, setConfigTouched] = useState(false);
   const [catalogTouched, setCatalogTouched] = useState(false);
   const [longContextEnabled, setLongContextEnabled] = useState(false);
@@ -75,6 +77,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const [editorDiagnostics, setEditorDiagnostics] = useState<EditorDiagnosticSummary>({ count: 0, firstLine: null });
   const [mcpSection, setMcpSection] = useState("");
   const initialized = useRef(false);
+  const authPreviewRequest = useRef(0);
   const editorRef = useRef<ConfigTextEditorHandle>(null);
 
   const selectedPreset = useMemo(() => builtinPresets.find((preset) => preset.kind === presetKind) ?? null, [presetKind]);
@@ -84,7 +87,6 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const showProviderFields = create ? (isCustom || Boolean(selectedPreset?.base_url)) : Boolean(detail?.provider);
   const showLongContextOverride = isOfficial;
   const supportsBalance = balanceQueryProviders.has(detail?.provider ?? "");
-  const hasProfileAuthOverride = !create && Boolean(detail?.raw_auth?.trim()) && !(authText !== authInitial && !authText.trim());
   const configDirty = normalizeNewlines(configText) !== normalizeNewlines(configInitial);
   const catalogDirty = normalizeNewlines(catalogText) !== normalizeNewlines(catalogInitial);
   const authDirty = normalizeNewlines(authText) !== normalizeNewlines(authInitial);
@@ -111,7 +113,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     if (!baseFragment) return "";
     return withMcpSection(patchProviderFields(baseFragment, baseUrl, apiKey), mcpSection);
   }, [apiKey, baseFragment, baseUrl, mcpSection]);
-  const canSave = !create || (isCustom ? Boolean(configText.trim()) : Boolean(selectedPreset));
+  const canSave = (!create || (isCustom ? Boolean(configText.trim()) : Boolean(selectedPreset))) && (!isOfficial || !authPreviewOnly || authPreviewReady);
   const accountOptions = [
     { label: externalAccount?.login ?? "自动选择账号", value: "" },
     ...authAccounts.map((account) => ({ label: account.login, value: account.id })),
@@ -120,6 +122,24 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     const desktop = option.value === "" && Boolean(externalAccount);
     const Icon = desktop ? Monitor : KeyRound;
     return <span className="inline-flex min-w-0 items-center gap-2"><Icon className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" /><span className="shrink-0 text-xs font-medium text-[var(--text-secondary)]">{desktop ? "桌面端认证" : "OAuth 认证"}</span><span className="text-[var(--text-secondary)]">·</span><span className="truncate">{option.label}</span></span>;
+  };
+  const refreshAuthPreview = async (accountId: string | null) => {
+    const requestId = ++authPreviewRequest.current;
+    setAuthPreviewOnly(true);
+    setAuthPreviewReady(false);
+    try {
+      const preview = await api.authPreview(accountId);
+      if (requestId !== authPreviewRequest.current) return;
+      setAuthText(preview ?? "");
+      setAuthInitial(preview ?? "");
+      setAuthPreviewReady(true);
+    } catch {
+      // 预览失败时保留当前内容，避免切换过程中出现错误提示或空白闪烁。
+    }
+  };
+  const selectAccount = (value: string) => {
+    setBoundAccountId(value);
+    if (!create) void refreshAuthPreview(value || null);
   };
 
   const loadAuthStatus = async () => {
@@ -168,6 +188,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           setShowBalance(loaded.show_balance);
           setLongContextEnabled(loaded.provider === null && hasLongContextOverride(loaded.raw_config ?? loaded.config_fragment));
           setSystemProxyEnabled(hasSystemProxyOverride(loaded.raw_config ?? loaded.config_fragment));
+          if (loaded.provider === null && !loaded.raw_auth) await refreshAuthPreview(loaded.account_id ?? null);
         } catch (error) {
           setLoadError(String(error));
         }
@@ -276,6 +297,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
 
   const formatCurrentDocument = async () => {
     if (formatting || saving) return;
+    if (activeTab === "auth" && authPreviewOnly) { feedback.info("认证预览不可编辑"); return; }
     const text = activeTab === "config" ? configText : activeTab === "auth" ? authText : catalogText;
     if (!text.trim()) { feedback.warning("当前文件没有内容"); return; }
     setFormatting(true);
@@ -344,7 +366,10 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
       } else {
         const hasProvider = Boolean(detail?.provider);
         await api.updateProfile(profile!.id, name, hasProvider ? baseUrl : undefined, hasProvider ? apiKey : undefined, adminUrl.trim() || undefined);
-        await api.updateProfileConfig(profile!.id, configText, liveCatalogPath && catalogDirty ? catalogText || null : null, !create && authDirty ? authText : null);
+        const authTextToSave = isOfficial && authPreviewOnly
+          ? detail?.raw_auth?.trim() ? "" : null
+          : authDirty ? authText : null;
+        await api.updateProfileConfig(profile!.id, configText, liveCatalogPath && catalogDirty ? catalogText || null : null, authTextToSave);
         if (isOfficial) await api.setProfileAccount(profile!.id, boundAccountId || null);
         feedback.success("供应商已更新");
       }
@@ -370,7 +395,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           <div className="apple-panel-section">
             <div className="flex items-center gap-4"><button type="button" className="relative grid h-[61px] w-[61px] shrink-0 place-items-center rounded-[16px] transition-opacity hover:opacity-80" title="点击更换图标" aria-label="更换图标" onClick={() => setPickingIcon(true)}><ProfileIconTile name={detail?.name ?? name} icon={selectedIcon} size="fill" /><span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-white shadow" aria-hidden="true"><Pencil className="h-2.5 w-2.5" strokeWidth={2} /></span></button><div className="min-w-0 flex-1"><div className="field-label mb-1.5">名称</div><input className="app-input" maxLength={50} placeholder="供应商名称" value={name} onChange={(event) => setName(event.target.value)} /></div></div>
             {showProviderFields ? <><label className="field-label mb-1.5 mt-4 block">请求地址</label><input className="app-input" placeholder="https://api.example.com/v1" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /><div className="mb-1.5 mt-4 flex items-center gap-2"><span className="field-label">API 密钥</span>{isOpenCode && create ? <button type="button" className="apple-inline-btn" onClick={() => void api.openUrl("https://opencode.ai/go?ref=APHY0DXATH").catch((error) => feedback.error(String(error)))}><ExternalLink className="h-3 w-3" strokeWidth={2} />获取 API 密钥</button> : null}<button type="button" className="apple-inline-btn" disabled={testing || !apiKey.trim() || !baseUrl.trim()} onClick={() => void testConnection()}>{testing ? <LoadingSpinner /> : <Wifi className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}测试连通</button></div><div className="app-input-action"><input className="app-input app-input--action" type={showApiKey ? "text" : "password"} placeholder="请输入 API 密钥" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /><button type="button" className="app-input-action__button" aria-label={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"} title={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"} aria-pressed={showApiKey} onClick={() => setShowApiKey((visible) => !visible)}>{showApiKey ? <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden="true" /> : <Eye className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}</button></div>{isOpenCode && create ? <p className="muted mt-2 flex items-start gap-1.5 text-xs"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} />使用此链接订阅 OpenCode Go，首月只需 $5，并可获得额外的 $5 额度！</p> : null}</> : null}
-            {isOfficial ? <div className="mt-4"><div className="field-subtitle mb-1.5">认证来源</div>{hasProfileAuthOverride ? <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--panel-ring)] bg-black/3 px-3 py-2.5 dark:bg-white/4"><div><div className="text-sm font-medium">配置内 auth.json</div><div className="muted mt-0.5 text-xs">应用时优先使用当前档案的认证文件</div></div><span className="text-xs font-medium text-accent">优先使用</span></div> : <AppSelect value={boundAccountId ?? ""} options={accountOptions} onChange={setBoundAccountId} placeholder={externalAccount ? "桌面端认证" : "自动选择账号"} renderLabel={renderAccountLabel} />}</div> : null}
+            {isOfficial ? <div className="mt-4"><div className="field-subtitle mb-1.5">认证来源</div><AppSelect value={boundAccountId ?? ""} options={accountOptions} onChange={selectAccount} placeholder={externalAccount ? "桌面端认证" : "自动选择账号"} renderLabel={renderAccountLabel} /></div> : null}
             {(!create || selectedPreset?.base_url) ? <div className="mt-4"><div className="mb-1.5 flex items-center gap-1"><span className="field-label">官网地址</span><button type="button" className="grid h-4 w-4 place-items-center rounded-full text-accent transition-colors hover:bg-(--profile-chip-bg) disabled:opacity-40" disabled={!adminUrl.trim()} onClick={() => void api.openUrl(adminUrl.trim()).catch((error) => feedback.error(String(error)))}><ExternalLink className="h-3.5 w-3.5" strokeWidth={2} /></button></div><input className="app-input" placeholder="https://console.example.com（可选）" value={adminUrl} onChange={(event) => setAdminUrl(event.target.value)} /></div> : null}
             {!create && supportsBalance ? <div className="mt-4 flex items-center justify-between gap-3"><div><div className="text-sm font-semibold">余额/用量查询</div><div className="muted mt-0.5 text-xs">窗口激活时自动刷新，点击数字手动刷新</div></div><AppSwitch checked={showBalance} onCheckedChange={(value) => void toggleBalance(value)} /></div> : null}
           </div>
@@ -394,11 +419,11 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
                   </div>
                 ) : null}
               </div>
-              <div className="mt-4 flex flex-col pr-1">{activeTab === "config" ? <ConfigTextEditor ref={editorRef} value={configText} language="toml" placeholder={create ? "选择供应商后显示配置预览" : "编辑 config.toml 内容，保存后仅写入该供应商；应用时才生效。"} onChange={(value) => setConfigText(value)} onDiagnostics={setEditorDiagnostics} /> : activeTab === "auth" ? <><ConfigTextEditor ref={editorRef} value={authText} language="json" placeholder="认证文件（~/.codex/auth.json）。" onChange={setAuthText} onDiagnostics={setEditorDiagnostics} />{detail?.raw_auth ? <p className="muted mt-2 text-xs">已保存自定义认证：清空并保存即可移除，应用时写入 ~/.codex/auth.json。</p> : null}</> : <ConfigTextEditor ref={editorRef} value={catalogText} language="json" placeholder="模型目录文件不存在或无法读取。" onChange={setCatalogText} onDiagnostics={setEditorDiagnostics} />}</div>
+              <div className="mt-4 flex flex-col pr-1">{activeTab === "config" ? <ConfigTextEditor ref={editorRef} value={configText} language="toml" placeholder={create ? "选择供应商后显示配置预览" : "编辑 config.toml 内容，保存后仅写入该供应商；应用时才生效。"} onChange={(value) => setConfigText(value)} onDiagnostics={setEditorDiagnostics} /> : activeTab === "auth" ? <ConfigTextEditor ref={editorRef} value={authText} language="json" readOnly={authPreviewOnly} placeholder="认证文件（~/.codex/auth.json）。" onChange={setAuthText} onDiagnostics={setEditorDiagnostics} /> : <ConfigTextEditor ref={editorRef} value={catalogText} language="json" placeholder="模型目录文件不存在或无法读取。" onChange={setCatalogText} onDiagnostics={setEditorDiagnostics} />}</div>
             </div>
         </div>
       </div>
-      <div className="apple-edit-toolbar apple-edit-toolbar--footer">{editorDiagnostics.count > 0 ? <button type="button" className="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg border border-[var(--danger)]/20 bg-(--danger)/10 px-2.5 py-1 text-xs chip-danger" aria-live="polite" onClick={() => editorRef.current?.focusFirstDiagnostic()}><span className="h-1.5 w-1.5 rounded-full bg-(--danger)" />{editorDiagnostics.count} 个错误{editorDiagnostics.firstLine !== null ? ` · 第 ${editorDiagnostics.firstLine} 行` : ""}</button> : null}<button type="button" className="apple-action-button" disabled={saving} title={formatTarget.title} onClick={() => void formatCurrentDocument()}><FormatIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />格式化</button><button type="button" className="apple-action-button" onClick={onBack}>取消</button><button type="button" className="apple-action-button app-button--primary" disabled={saving || !canSave} onClick={() => void save()}><Save className="h-4 w-4" strokeWidth={2} />{saving ? "保存中…" : "保存"}</button></div>
+      <div className="apple-edit-toolbar apple-edit-toolbar--footer">{editorDiagnostics.count > 0 ? <button type="button" className="mr-auto flex min-w-0 items-center gap-1.5 rounded-lg border border-[var(--danger)]/20 bg-(--danger)/10 px-2.5 py-1 text-xs chip-danger" aria-live="polite" onClick={() => editorRef.current?.focusFirstDiagnostic()}><span className="h-1.5 w-1.5 rounded-full bg-(--danger)" />{editorDiagnostics.count} 个错误{editorDiagnostics.firstLine !== null ? ` · 第 ${editorDiagnostics.firstLine} 行` : ""}</button> : null}<button type="button" className="apple-action-button" disabled={saving || (activeTab === "auth" && authPreviewOnly)} title={formatTarget.title} onClick={() => void formatCurrentDocument()}><FormatIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />格式化</button><button type="button" className="apple-action-button" onClick={onBack}>取消</button><button type="button" className="apple-action-button app-button--primary" disabled={saving || !canSave} onClick={() => void save()}><Save className="h-4 w-4" strokeWidth={2} />{saving ? "保存中…" : "保存"}</button></div>
     </section>
   );
 }

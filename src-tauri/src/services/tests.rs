@@ -357,7 +357,7 @@ fn manual_auth_clear_is_not_repopulated_by_focus_refresh() {
 }
 
 #[test]
-fn capture_sets_active_and_autosyncs_previous() {
+fn capture_keeps_active_and_autosyncs_previous() {
     let home = tempfile::tempdir().unwrap();
     let paths = crate::paths::from_home(home.path()).unwrap();
     paths.ensure().unwrap();
@@ -380,10 +380,11 @@ experimental_bearer_token = "secret"
     let profile_a = context.capture_profile("A").unwrap();
     assert_eq!(
         context.get_state().unwrap().active_profile_id.as_deref(),
-        Some(profile_a.id.as_str())
+        None
     );
+    context.apply_profile(&profile_a.id).unwrap();
 
-    // A 使用期间 live 累计了新键，再次捕获 B：A 快照被同步，激活转到 B
+    // A 使用期间 live 累计了新键，再次捕获 B：A 快照被同步，激活仍保持在 A
     write(
         r#"
 model = "glm-5.3"
@@ -402,6 +403,10 @@ new_field = "accumulated"
 
     let state = context.get_state().unwrap();
     assert_eq!(
+        state.active_profile_id.as_deref(),
+        Some(profile_a.id.as_str())
+    );
+    assert_ne!(
         state.active_profile_id.as_deref(),
         Some(profile_b.id.as_str())
     );
@@ -448,8 +453,7 @@ experimental_bearer_token = "secret-token"
     let context = AppContext::new(paths).unwrap();
     let profile = context.capture_profile("ZAI").unwrap();
 
-    // 捕获即设为使用中；先清掉激活状态，验证“未使用”只读库快照
-    context.database.set_active_profile(None).unwrap();
+    // 捕获默认不设为使用中；验证“未使用”只读库快照
     let inactive = context.get_profile(&profile.id).unwrap();
     assert_eq!(inactive.catalog_content, None);
     assert_eq!(inactive.auth_content, None);
@@ -878,6 +882,7 @@ experimental_bearer_token = "secret"
 "#,
     );
     let profile = context.capture_profile("ZAI").unwrap();
+    context.apply_profile(&profile.id).unwrap();
 
     // 外部把 live 换成另一套配置
     write(
@@ -964,6 +969,7 @@ fn show_balance_toggle_survives_live_sync() {
 
     let context = AppContext::new(paths).unwrap();
     let profile = context.capture_profile("ZAI").unwrap();
+    context.apply_profile(&profile.id).unwrap();
     assert!(!profile.show_balance); // 默认关闭
 
     context
@@ -996,7 +1002,7 @@ fn adding_preset_does_not_activate() {
     std::fs::write(paths.codex_config(), "model = \"glm-5.3\"\n").unwrap();
 
     let context = AppContext::new(paths).unwrap();
-    // 添加供应商是纯入库动作，绝不激活（只有手动应用/捕获才建立使用中）
+    // 添加供应商是纯入库动作，绝不激活（只有手动应用才建立使用中）
     context
         .add_builtin_profile("deepseek", None, Some("sk-test"), None, None)
         .unwrap();
@@ -2322,8 +2328,9 @@ base_url = "https://api.example"
     )
     .unwrap();
     let context = AppContext::new(paths).unwrap();
-    // 捕获的第三方供应商是使用中、快照无 auth；复制时应带上当前 live auth.json
+    // 捕获的第三方供应商默认未使用；显式应用后复制时应带上当前 live auth.json
     let profile = context.capture_profile("GLM").unwrap();
+    context.apply_profile(&profile.id).unwrap();
     assert!(context
         .database
         .profile(&profile.id)

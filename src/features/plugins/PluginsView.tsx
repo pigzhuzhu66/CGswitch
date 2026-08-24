@@ -243,7 +243,7 @@ function MarketplaceDetailView({
     try {
       await api.installMarketplacePlugin(marketplace.name, plugin.name);
       setPlugins((items) => items.map((item) => item.plugin_id === plugin.plugin_id ? { ...item, installed: true, enabled: true } : item));
-      feedback.success(`已安装 ${plugin.name}，重启 Codex 后生效`);
+      feedback.success(`已安装插件「${plugin.name}」，重启 Codex 后生效`);
       await onInstalled();
     } catch (reason) {
       feedback.error(String(reason));
@@ -265,7 +265,7 @@ function MarketplaceDetailView({
     try {
       await api.uninstallPlugin(plugin.name);
       setPlugins((items) => items.map((item) => item.plugin_id === plugin.plugin_id ? { ...item, installed: false, enabled: false } : item));
-      feedback.success(`已卸载 ${plugin.name}`);
+      feedback.success(`已卸载插件「${plugin.name}」`);
       await onInstalled();
     } catch (reason) {
       feedback.error(String(reason));
@@ -280,7 +280,7 @@ function MarketplaceDetailView({
     try {
       await onUpgrade(update);
       setPlugins((items) => items.map((item) => item.plugin_id === `${update.name}@${update.marketplace}` ? { ...item, version: update.version } : item));
-      feedback.success(`已升级 ${update.name}`);
+      feedback.success(`已升级插件「${update.name}」`);
       await onInstalled();
     } catch (reason) {
       feedback.error(String(reason));
@@ -404,7 +404,7 @@ function AddPluginView({
     setAdding(true);
     try {
       const marketplace = await api.addPluginMarketplace(url.trim());
-      feedback.success(`已添加插件市场「${marketplace.name}」`);
+      feedback.success(`已添加并进入插件市场「${marketplace.name}」`);
       await onMarketplaceAdded(marketplace);
     } catch (error) {
       feedback.error(String(error));
@@ -435,7 +435,7 @@ function AddPluginView({
     setInstalling(candidate.name);
     try {
       const summary = await api.installPlugin(url.trim(), candidate.sub_path || null);
-      feedback.success(`已安装 ${summary.display_name ?? summary.name}，重启 Codex 后生效`);
+      feedback.success(`已安装插件「${summary.display_name ?? summary.name}」，重启 Codex 后生效`);
       setPreview(null);
       await onInstalled();
     } catch (error) {
@@ -805,7 +805,7 @@ export default function PluginsView() {
     if (!confirmed) return;
     try {
       await api.uninstallPlugin(plugin.name);
-      feedback.success("插件已卸载");
+      feedback.success(`已卸载插件「${plugin.display_name ?? plugin.name}」`);
       await refresh(true);
     } catch (error) {
       feedback.error(String(error));

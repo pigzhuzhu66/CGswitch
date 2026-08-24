@@ -1,6 +1,6 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Toast from "@radix-ui/react-toast";
-import { CircleCheck, CircleX, Info, Trash2, TriangleAlert } from "lucide-react";
+import { Check, Info, Trash2, TriangleAlert, X } from "lucide-react";
 import { createContext, useCallback, useContext, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 type ToastTone = "success" | "error" | "warning" | "info";
@@ -35,8 +35,17 @@ interface ConfirmationState extends ConfirmOptions {
   resolve: (confirmed: boolean) => void;
 }
 
-const toastIcons = { success: CircleCheck, error: CircleX, warning: TriangleAlert, info: Info } as const;
+const toastIcons = { success: Check, error: X, warning: TriangleAlert, info: Info } as const;
 const MAX_TOASTS = 3;
+
+export function normalizeToastMessage(message: string) {
+  const normalized = message
+    .trim()
+    .replace(/^Error:\s*/i, "")
+    .replace(/连接失败[：:]\s*连接失败(?:[：:]\s*)?/g, "连接失败：")
+    .replace(/连接失败：\s*$/, "连接失败");
+  return normalized || "操作失败";
+}
 
 export function FeedbackProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastState[]>([]);
@@ -55,7 +64,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback((tone: ToastTone, message: string) => {
     const id = ++nextToastId.current;
-    setToasts((current) => [...current, { id, tone, message, open: true }].slice(-MAX_TOASTS));
+    setToasts((current) => [...current, { id, tone, message: normalizeToastMessage(message), open: true }].slice(-MAX_TOASTS));
     window.setTimeout(() => closeToast(id), 3000);
   }, [closeToast]);
 
@@ -113,8 +122,11 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
               style={toastStyle}
               className={`app-toast app-toast--${toast.tone}`}
             >
-              <ToastIcon className={`app-toast__icon app-toast__icon--${toast.tone}`} size={20} strokeWidth={2} aria-hidden="true" />
+              <ToastIcon className={`app-toast__icon app-toast__icon--${toast.tone}`} size={20} strokeWidth={2.5} aria-hidden="true" />
               <Toast.Description className="app-toast__content">{toast.message}</Toast.Description>
+              <Toast.Close className="app-toast__close" aria-label="关闭通知" title="关闭通知">
+                <X size={14} strokeWidth={2.5} aria-hidden="true" />
+              </Toast.Close>
             </Toast.Root>
           );
         })}

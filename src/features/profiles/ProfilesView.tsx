@@ -1,4 +1,4 @@
-import { Camera, CircleDot, Plus, RefreshCw, Server } from "lucide-react";
+import { Camera, Plus, RefreshCw, Server } from "lucide-react";
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -6,9 +6,8 @@ import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { AppDialog } from "../../components/AppDialog";
 import { EmptyStateCard } from "../../components/EmptyStateCard";
-import { ProfileIconTile } from "../../components/ProfileIconTile";
-import type { AppState, AuthStatus, ProfileSummary, RestartStage } from "../../types";
-import ProfileCard from "./ProfileCard";
+import type { AppState, AuthStatus, ProfileBalanceInfo, ProfileSummary, RestartStage } from "../../types";
+import ProfileCard, { getCachedProfileBalance, getCachedProfileBalanceError, ProfileCardActions, ProfileCardContent } from "./ProfileCard";
 import ProfileEdit from "./ProfileEdit";
 
 interface ProfilesViewProps {
@@ -28,8 +27,25 @@ interface RestartProgressCardProps {
   onHidden: () => void;
 }
 
-function ProfileDragPreview({ profile, width, active }: { profile: ProfileSummary; width: number | null; active: boolean }) {
-  return <div className={`drag-dragging profile-drag-preview${active ? " is-active bg-[linear-gradient(90deg,color-mix(in_srgb,var(--selection-bg)_60%,transparent),transparent_65%)]" : ""}`} style={{ width: width ? `${width}px` : undefined }}><div className="flex items-center gap-3 px-5 py-4.5"><ProfileIconTile name={profile.name} icon={profile.icon} /><div className="min-w-0"><div className="title-md truncate">{profile.name}</div><div className="muted mt-1 flex items-center gap-1"><span className="apple-chip">{profile.model ?? "未设置"}</span>{profile.provider ? <span className="apple-chip">{profile.provider}</span> : null}<span className="apple-chip">{profile.reasoning_effort ?? "默认"}</span></div></div></div></div>;
+function ProfileDragPreview({ profile, width, height, active, busy, subscriptionAuthed, subscriptionAccount, subscriptionSource, boundAccount, balanceInfo, balanceError, onOpenAdmin }: { profile: ProfileSummary; width: number | null; height: number | null; active: boolean; busy: boolean; subscriptionAuthed: boolean; subscriptionAccount: string | null; subscriptionSource: "desktop" | "oauth" | null; boundAccount: string | null; balanceInfo: ProfileBalanceInfo | null; balanceError: string; onOpenAdmin: () => void }) {
+  const stateClass = active ? "is-active is-drag-hover" : "is-drag-hover";
+  const connectionDimmed = !profile.provider ? !subscriptionAuthed : !profile.has_key;
+  const connectionTitle = !profile.provider ? subscriptionAuthed ? "测试订阅认证连通性" : "尚未认证 ChatGPT 订阅" : !profile.has_key ? "缺少 API 密钥，点击查看提示" : "测试连通性";
+  return (
+    <div className={`drag-dragging apple-group profile-drag-preview group flex cursor-pointer select-none flex-col gap-4 px-5 py-4.5 sm:flex-row sm:items-center sm:justify-between ${stateClass}`} style={{ width: width ? `${width}px` : undefined, height: height ? `${height}px` : undefined }}>
+      <ProfileCardContent
+        profile={profile}
+        subscriptionAuthed={subscriptionAuthed}
+        subscriptionAccount={subscriptionAccount}
+        subscriptionSource={subscriptionSource}
+        boundAccount={boundAccount}
+        balanceInfo={balanceInfo}
+        balanceError={balanceError}
+        onOpenAdmin={onOpenAdmin}
+      />
+      <ProfileCardActions active={active} busy={busy} connectionDimmed={connectionDimmed} connectionTitle={connectionTitle} testing={false} dragging />
+    </div>
+  );
 }
 
 function RestartProgressCard({ stage, message, visible, onHidden }: RestartProgressCardProps) {
@@ -77,7 +93,9 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
   const [modalProfile, setModalProfile] = useState<ProfileSummary | null>(null);
   const [profileName, setProfileName] = useState("");
   const [draggedProfileId, setDraggedProfileId] = useState<string | null>(null);
+  const [dragHoverProfileId, setDragHoverProfileId] = useState<string | null>(null);
   const [draggedProfileWidth, setDraggedProfileWidth] = useState<number | null>(null);
+  const [draggedProfileHeight, setDraggedProfileHeight] = useState<number | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>(state.auth_status);
   const nameInput = useRef<HTMLInputElement>(null);
   const previousRestartStage = useRef<RestartStage>("idle");
@@ -89,7 +107,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
   useEffect(() => setAuthStatus(state.auth_status), [state.auth_status]);
 
   useEffect(() => () => {
-    document.body.classList.remove("drag-active", "drag-settling");
+    document.body.classList.remove("drag-active");
     dragHoverReleaseRef.current?.();
   }, []);
 
@@ -137,9 +155,8 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
     releaseCardHoverSuppression();
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement && activeElement.classList.contains("drag-handle")) activeElement.blur();
-    document.body.classList.add("drag-settling");
     const release = () => {
-      document.body.classList.remove("drag-settling");
+      setDragHoverProfileId(null);
       window.removeEventListener("pointermove", release);
       if (dragHoverReleaseRef.current === release) dragHoverReleaseRef.current = null;
     };
@@ -162,6 +179,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
     suppressCardHover();
     setDraggedProfileId(null);
     setDraggedProfileWidth(null);
+    setDraggedProfileHeight(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldItems = items;
@@ -176,8 +194,13 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
   const onDragStart = ({ active }: DragStartEvent) => {
     releaseCardHoverSuppression();
     document.body.classList.add("drag-active");
+    const source = [...document.querySelectorAll<HTMLElement>("[data-profile-id]")]
+      .find((node) => node.dataset.profileId === String(active.id));
+    const sourceRect = source?.getBoundingClientRect();
     setDraggedProfileId(String(active.id));
-    setDraggedProfileWidth(active.rect.current.initial?.width ?? null);
+    setDragHoverProfileId(String(active.id));
+    setDraggedProfileWidth(active.rect.current.initial?.width ?? sourceRect?.width ?? null);
+    setDraggedProfileHeight(active.rect.current.initial?.height ?? sourceRect?.height ?? null);
   };
 
   const onDragCancel = () => {
@@ -185,6 +208,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
     suppressCardHover();
     setDraggedProfileId(null);
     setDraggedProfileWidth(null);
+    setDraggedProfileHeight(null);
   };
 
   const openCapture = () => { setModal("capture"); setModalProfile(null); setProfileName(""); };
@@ -196,7 +220,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
     try {
       if (modal === "capture") {
         await api.captureProfile(profileName.trim());
-        feedback.success("已捕获并设为使用中");
+        feedback.success("捕获成功");
       } else if (modalProfile) {
         await api.renameProfile(modalProfile.id, profileName.trim());
         feedback.success("供应商已重命名");
@@ -228,7 +252,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
     setBusy(true);
     try {
       await api.applyProfile(profile.id);
-      feedback.success("模型配置已应用");
+      feedback.success("切换成功");
       if (state.settings.auto_restart) await restart(true);
       await onRefresh();
     } catch (error) { feedback.error(String(error)); }
@@ -282,7 +306,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
             aria-live="polite"
             aria-atomic="true"
           >
-            <span className="codex-status__signal" aria-hidden="true"><CircleDot className="h-3.5 w-3.5" strokeWidth={2} /></span>
+            <span className="codex-status__signal" aria-hidden="true"><span className="codex-status__signal-dot" /></span>
             <span className="codex-status__name">Codex</span>
             <span className="codex-status__divider" aria-hidden="true" />
             <span className="codex-status__label">{state.codex.running ? "运行中" : "未运行"}</span>
@@ -308,7 +332,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
       </header>
       <div className="apple-edit-content">
         {restartCardMounted ? <RestartProgressCard stage={restartCardStage} message={restartMessage} visible={restartCardVisible} onHidden={onRestartCardHidden} /> : null}
-        <div>{items.length === 0 ? <EmptyStateCard icon={<Server className="h-5 w-5" strokeWidth={1.8} />}><p className="muted">还没有供应商配置。可以添加内置官方供应商，或先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。</p></EmptyStateCard> : <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragCancel={onDragCancel} onDragEnd={onDragEnd}><SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}><div className="profile-list relative space-y-[var(--gap-page)] will-change-transform">{items.map((profile) => <ProfileCard key={profile.id} profile={profile} active={profile.id === state.active_profile_id} busy={busy} activationEpoch={activationEpoch} subscriptionAuthed={authStatus.authenticated} subscriptionAccount={subscriptionAccount} subscriptionSource={subscriptionSource} boundAccount={boundAccountLogin(profile)} balanceCache={state.balance_cache} onApply={() => void applyProfile(profile)} onRename={() => openRename(profile)} onEdit={() => setEditingProfile(profile)} onRemove={() => void removeProfile(profile)} onDuplicate={() => void duplicateProfile(profile)} />)}</div></SortableContext><DragOverlay dropAnimation={null}>{draggedProfile ? <ProfileDragPreview profile={draggedProfile} width={draggedProfileWidth} active={draggedProfile.id === state.active_profile_id} /> : null}</DragOverlay></DndContext>}</div>
+        <div>{items.length === 0 ? <EmptyStateCard icon={<Server className="h-5 w-5" strokeWidth={1.8} />}><p className="muted">还没有供应商配置。可以添加内置官方供应商，或先把 ~/.codex/config.toml 调整到目标状态，再点击“捕获当前配置”。</p></EmptyStateCard> : <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragCancel={onDragCancel} onDragEnd={onDragEnd}><SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}><div className="profile-list relative space-y-[var(--gap-page)] will-change-transform">{items.map((profile) => <ProfileCard key={profile.id} profile={profile} active={profile.id === state.active_profile_id} dragHover={profile.id === dragHoverProfileId} busy={busy} activationEpoch={activationEpoch} subscriptionAuthed={authStatus.authenticated} subscriptionAccount={subscriptionAccount} subscriptionSource={subscriptionSource} boundAccount={boundAccountLogin(profile)} balanceCache={state.balance_cache} onApply={() => void applyProfile(profile)} onRename={() => openRename(profile)} onEdit={() => setEditingProfile(profile)} onRemove={() => void removeProfile(profile)} onDuplicate={() => void duplicateProfile(profile)} />)}</div></SortableContext><DragOverlay dropAnimation={null}>{draggedProfile ? <ProfileDragPreview profile={draggedProfile} width={draggedProfileWidth} height={draggedProfileHeight} active={draggedProfile.id === state.active_profile_id} busy={busy} subscriptionAuthed={authStatus.authenticated} subscriptionAccount={subscriptionAccount} subscriptionSource={subscriptionSource} boundAccount={boundAccountLogin(draggedProfile)} balanceInfo={getCachedProfileBalance(draggedProfile.id, state.balance_cache?.[draggedProfile.id] ?? null)} balanceError={getCachedProfileBalanceError(draggedProfile.id)} onOpenAdmin={() => void api.openUrl(draggedProfile.admin_url!).catch((error) => feedback.error(String(error)))} /> : null}</DragOverlay></DndContext>}</div>
       </div>
       <AppDialog open={modal !== null} onOpenChange={(open) => { if (!open) setModal(null); }} title={modal === "capture" ? "保存当前配置快照" : "重命名供应商"} initialFocusRef={nameInput} footer={<><button type="button" className="apple-action-button" onClick={() => setModal(null)}>取消</button><button type="button" className="apple-action-button app-button--primary" disabled={busy || !profileName.trim()} onClick={() => void submitModal()}>保存</button></>}>
         <div className="space-y-4"><p className="muted text-sm">{modal === "capture" ? "为当前 Codex 配置创建快照，切换供应商后可一键恢复。" : "输入新的供应商名称。"}</p><input ref={nameInput} className="app-input" maxLength={50} placeholder="例如：DeepSeek 日常" value={profileName} onChange={(event) => setProfileName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) void submitModal(); }} /></div>

@@ -43,7 +43,7 @@ impl AppContext {
         let _ = self.sync_active_profile_auth();
         let settings = self.settings()?;
         let profiles = self.database.profiles()?;
-        // 激活状态只来自手动应用/捕获（显式状态或应用事件），不做 live 配置推断，
+        // 激活状态只来自手动应用（显式状态或应用事件），不做 live 配置推断，
         // 避免“添加供应商”被误判成“正在使用”。
         let active_profile_id = match self.active_profile_state()? {
             Some(id) if profiles.iter().any(|profile| profile.id == id) => Some(id),
@@ -115,17 +115,16 @@ impl AppContext {
             .map(|text| text.trim_end().to_string());
         let timestamp = now_ms().to_string();
         let summary = self.database.insert_profile(&name, &payload, &timestamp)?;
-        // 捕获即建立“当前 live = 该供应商”的显式关联：先把旧激活供应商的使用中累计改动
-        // 同步回其快照，再把捕获结果设为使用中（捕获到的是什么就用什么，不比对内容）
+        // 捕获只保存快照；保留当前激活供应商，并把它在 live 中的累计改动同步回快照。
         if let Some(document) = self.live_document() {
-            self.autosync_active_profile(&summary.id, &document)?;
+            self.sync_active_profile_document(&document)?;
+            self.sync_active_profile_auth()?;
         }
-        self.database.set_active_profile(Some(&summary.id))?;
         self.database.record_event(
             Some(&summary.id),
             "capture",
             "success",
-            Some("captured live configuration and set active"),
+            Some("captured live configuration"),
             &timestamp,
         )?;
         Ok(summary)
