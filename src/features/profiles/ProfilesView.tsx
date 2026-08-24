@@ -1,4 +1,4 @@
-import { Camera, Plus, RefreshCw, Server } from "lucide-react";
+import { Camera, CircleDot, Plus, RefreshCw, Server } from "lucide-react";
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -275,7 +275,19 @@ export default function ProfilesView({ state, activationEpoch, onRefresh }: Prof
   return (
     <section className="apple-scroll-page mx-auto w-full max-w-none">
       <header className="apple-page-bar flex-wrap justify-between gap-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm"><span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${state.codex.running ? "border-success/25 bg-success/10 text-[var(--success-text)] dark:border-success/30 dark:bg-success/10" : "border-[var(--panel-border)] bg-black/4 muted dark:bg-white/6"}`}><span className="relative flex h-2 w-2"><span className={`relative inline-flex h-2 w-2 rounded-full ${state.codex.running ? "bg-success shadow-[0_0_6px_1px_rgba(52,199,89,0.45)]" : "bg-black/40 dark:bg-white/40"}`} /></span>Codex {state.codex.running ? "运行中" : "未运行"}</span></div>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <span
+            className={`codex-status codex-status--${state.codex.running ? "running" : "stopped"} text-xs font-medium`}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span className="codex-status__signal" aria-hidden="true"><CircleDot className="h-3.5 w-3.5" strokeWidth={2} /></span>
+            <span className="codex-status__name">Codex</span>
+            <span className="codex-status__divider" aria-hidden="true" />
+            <span className="codex-status__label">{state.codex.running ? "运行中" : "未运行"}</span>
+          </span>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="apple-toolbar-group">
             <button type="button" className="apple-action-button apple-action-button--quaternary"

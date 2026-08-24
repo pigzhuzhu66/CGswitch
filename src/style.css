@@ -866,6 +866,69 @@ body.drag-settling .profile-card-actions {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.codex-status {
+  display: inline-flex;
+  height: 1.75rem;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--panel-ring);
+  border-radius: 999px;
+  padding-inline: 0.5rem;
+  color: inherit;
+  background: color-mix(in srgb, var(--panel-bg) 90%, transparent);
+  white-space: nowrap;
+}
+
+.codex-status--running {
+  border-color: color-mix(in srgb, var(--success) 24%, var(--panel-ring));
+  background: color-mix(in srgb, var(--success) 4%, var(--panel-bg));
+}
+
+.codex-status__signal {
+  display: grid;
+  width: 1.125rem;
+  height: 1.125rem;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+}
+
+.codex-status--running .codex-status__signal {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.codex-status--running .codex-status__signal svg {
+  animation: codex-status-breathe 2.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.codex-status__name {
+  color: inherit;
+}
+
+.codex-status__divider {
+  width: 1px;
+  height: 0.75rem;
+  background: currentColor;
+  opacity: 0.28;
+}
+
+.codex-status__label {
+  color: currentColor;
+}
+
+@keyframes codex-status-breathe {
+  0%, 100% { opacity: 0.82; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-status--running .codex-status__signal svg { animation: none; }
+}
+
 .apple-group {
   overflow: hidden;
   border-radius: var(--radius-card);
