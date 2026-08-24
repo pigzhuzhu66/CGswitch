@@ -17,6 +17,7 @@ const appWindow = isTauri ? getCurrentWindow() : null;
 
 export default function AppShell() {
   const [view, setView] = useState<AppView>("profiles");
+  const [settingsInitialSection, setSettingsInitialSection] = useState<"general" | "account">("general");
   const [profilesReset, setProfilesReset] = useState(0);
   const [mcpReset, setMcpReset] = useState(0);
   const [skillCache, setSkillCache] = useState<SkillSummary[] | null>(null);
@@ -120,6 +121,11 @@ export default function AppShell() {
     setView("skills");
   };
 
+  const goSettings = (section: "general" | "account" = "general") => {
+    setSettingsInitialSection(section);
+    setView("settings");
+  };
+
   const navClass = (active: boolean) =>
     `apple-sidebar-nav-button ${active ? "bg-(--selection-bg) font-semibold text-accent" : "font-normal hover:bg-black/5 dark:hover:bg-white/8"}`;
 
@@ -184,7 +190,7 @@ export default function AppShell() {
               </button>
             </nav>
             <div className="absolute inset-x-1.5 bottom-4">
-              <button ref={sidebar.settingsNavRef} type="button" className={navClass(view === "settings")} aria-label="设置" onClick={() => setView("settings")} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
+              <button ref={sidebar.settingsNavRef} type="button" className={navClass(view === "settings")} aria-label="设置" onClick={() => goSettings()} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
                 <SettingsIcon strokeWidth={2} aria-hidden="true" />
                 <span className="apple-sidebar-label" aria-hidden={sidebar.sidebarCollapsed}>设置</span>
                 {sidebar.sidebarCollapsed && sidebar.sidebarFlyoutArmed ? <span className="apple-sidebar-flyout" aria-hidden="true">设置</span> : null}
@@ -203,7 +209,7 @@ export default function AppShell() {
                 {loadError ? <p className="muted mt-4 text-sm">{loadError}</p> : null}
               </div>
             ) : view === "profiles" ? (
-              <ProfilesView key={profilesReset} state={state} activationEpoch={activationEpoch} onRefresh={refresh} />
+              <ProfilesView key={profilesReset} state={state} activationEpoch={activationEpoch} onRefresh={refresh} onManageChatgptAccounts={() => goSettings("account")} />
             ) : view === "mcp" ? (
               <McpView key={mcpReset} />
             ) : view === "plugins" ? (
@@ -211,7 +217,7 @@ export default function AppShell() {
             ) : view === "skills" ? (
               <SkillsView cachedSkills={skillCache} onSkillsChange={setSkillCache} />
             ) : (
-              <SettingsView state={state} onPreviewTheme={previewTheme} onRefresh={refresh} onSaved={updateSettings} onHome={goProfiles} />
+              <SettingsView state={state} onPreviewTheme={previewTheme} onRefresh={refresh} onSaved={updateSettings} onHome={goProfiles} initialSection={settingsInitialSection} />
             )}
           </main>
         </div>

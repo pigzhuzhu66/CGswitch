@@ -25,7 +25,10 @@ interface ProfileEditProps {
   create?: boolean;
   onBack: () => void;
   onChanged: () => void;
+  onManageChatgptAccounts: () => void;
 }
+
+const manageChatgptAccountsValue = "__manage_chatgpt_accounts__";
 
 function hasLongContextOverride(text: string) {
   return /^\s*model_context_window\s*=/m.test(text) && /^\s*model_auto_compact_token_limit\s*=/m.test(text);
@@ -39,7 +42,7 @@ function normalizeNewlines(text: string) {
   return text.replace(/\r\n/g, "\n");
 }
 
-export default function ProfileEdit({ profile, create = false, onBack, onChanged }: ProfileEditProps) {
+export default function ProfileEdit({ profile, create = false, onBack, onChanged, onManageChatgptAccounts }: ProfileEditProps) {
   const feedback = useFeedback();
   const [detail, setDetail] = useState<ProfileDetail | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -53,7 +56,6 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const [showApiKey, setShowApiKey] = useState(false);
   const [adminUrl, setAdminUrl] = useState("");
   const [authAccounts, setAuthAccounts] = useState<ManagedAccount[]>([]);
-  const [externalAccount, setExternalAccount] = useState<ManagedAccount | null>(null);
   const [boundAccountId, setBoundAccountId] = useState<string | null>(null);
   const [selectedIcon, setSelectedIcon] = useState<string | null>(profile?.icon ?? null);
   const [presetKind, setPresetKind] = useState(create ? "custom" : "");
@@ -87,6 +89,9 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const showProviderFields = create ? (isCustom || Boolean(selectedPreset?.base_url)) : Boolean(detail?.provider);
   const showLongContextOverride = isOfficial;
   const supportsBalance = balanceQueryProviders.has(detail?.provider ?? "");
+  const authSource = create
+    ? boundAccountId ? "oauth" : "desktop"
+    : detail?.auth_source ?? (detail?.account_id ? "oauth" : "desktop");
   const configDirty = normalizeNewlines(configText) !== normalizeNewlines(configInitial);
   const catalogDirty = normalizeNewlines(catalogText) !== normalizeNewlines(catalogInitial);
   const authDirty = normalizeNewlines(authText) !== normalizeNewlines(authInitial);
@@ -104,10 +109,11 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const tabs = useMemo(() => {
     const list: { id: EditTab; label: string; title?: string }[] = [{ id: "config", label: "config.toml" }];
     if (liveCatalogPath) list.push({ id: "models", label: catalogFileName, title: liveCatalogPath });
-    if (!create) list.push({ id: "auth", label: "auth.json" });
-    else if (isCustom) list.push({ id: "auth", label: "auth.json" });
+    if (!create || isCustom || (isOfficial && authSource === "desktop")) {
+      list.push({ id: "auth", label: "auth.json" });
+    }
     return list;
-  }, [catalogFileName, create, isCustom, liveCatalogPath]);
+  }, [authSource, catalogFileName, create, isCustom, isOfficial, liveCatalogPath]);
   const baseFragment = create ? selectedPreset?.fragment ?? "" : detail?.config_fragment ?? "";
   const liveConfigFragment = useMemo(() => {
     if (!baseFragment) return "";
@@ -115,15 +121,23 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   }, [apiKey, baseFragment, baseUrl, mcpSection]);
   const canSave = (!create || (isCustom ? Boolean(configText.trim()) : Boolean(selectedPreset))) && (!isOfficial || !authPreviewOnly || authPreviewReady);
   const accountOptions = [
-    { label: externalAccount?.login ?? "自动选择账号", value: "" },
+    { label: "Codex登录", value: "" },
     ...authAccounts.map((account) => ({ label: account.login, value: account.id })),
+    { label: "+ 添加或管理ChatGPT 账号", value: manageChatgptAccountsValue },
+  ];
+  const oauthAccountOptions = [
+    ...authAccounts.map((account) => ({ label: account.login, value: account.id })),
+    { label: "+ 添加或管理ChatGPT 账号", value: manageChatgptAccountsValue },
   ];
   const renderAccountLabel = (option: { label: string; value: string }) => {
-    const desktop = option.value === "" && Boolean(externalAccount);
+    if (option.value === manageChatgptAccountsValue) {
+      return <span className="font-medium text-accent">{option.label}</span>;
+    }
+    const desktop = option.value === "";
     const Icon = desktop ? Monitor : KeyRound;
-    return <span className="inline-flex min-w-0 items-center gap-2"><Icon className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" /><span className="shrink-0 text-xs font-medium text-[var(--text-secondary)]">{desktop ? "桌面端认证" : "OAuth 认证"}</span><span className="text-[var(--text-secondary)]">·</span><span className="truncate">{option.label}</span></span>;
+    return <span className="inline-flex min-w-0 items-center gap-2"><Icon className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" /><span className="shrink-0 text-xs font-medium text-[var(--text-secondary)]">{desktop ? "Codex登录" : "OAuth登录"}</span>{desktop ? null : <><span className="text-[var(--text-secondary)]">·</span><span className="truncate">{option.label}</span></>}</span>;
   };
-  const refreshAuthPreview = async (accountId: string | null) => {
+  const refreshAuthPreview = async (accountId: string) => {
     const requestId = ++authPreviewRequest.current;
     setAuthPreviewOnly(true);
     setAuthPreviewReady(false);
@@ -138,18 +152,21 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     }
   };
   const selectAccount = (value: string) => {
-    setBoundAccountId(value);
-    if (!create) void refreshAuthPreview(value || null);
+    if (value === manageChatgptAccountsValue) {
+      onManageChatgptAccounts();
+      return;
+    }
+    setBoundAccountId(value || null);
+    if (create && value && activeTab === "auth") setActiveTab("config");
+    if (!create && authSource === "oauth" && value) void refreshAuthPreview(value);
   };
 
   const loadAuthStatus = async () => {
     try {
       const status = await api.authGetStatus();
       setAuthAccounts(status.accounts);
-      setExternalAccount(status.external);
     } catch {
       setAuthAccounts([]);
-      setExternalAccount(null);
     }
   };
 
@@ -176,19 +193,32 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           setName(loaded.name);
           setConfigText(loaded.raw_config ?? loaded.config_fragment);
           setCatalogText(loaded.raw_catalog ?? loaded.catalog_content ?? "");
-          setAuthText(loaded.raw_auth ?? loaded.auth_content ?? "");
+          setAuthText(loaded.raw_auth ?? "");
           setConfigInitial(loaded.raw_config ?? loaded.config_fragment);
           setCatalogInitial(loaded.raw_catalog ?? loaded.catalog_content ?? "");
-          setAuthInitial(loaded.raw_auth ?? loaded.auth_content ?? "");
+          setAuthInitial(loaded.raw_auth ?? "");
           setBaseUrl(loaded.base_url ?? "");
           setApiKey(loaded.api_key ?? "");
           setAdminUrl(loaded.admin_url ?? "");
           setSelectedIcon(loaded.icon);
-          setBoundAccountId(loaded.account_id ?? "");
+          setBoundAccountId(loaded.account_id);
           setShowBalance(loaded.show_balance);
           setLongContextEnabled(loaded.provider === null && hasLongContextOverride(loaded.raw_config ?? loaded.config_fragment));
           setSystemProxyEnabled(hasSystemProxyOverride(loaded.raw_config ?? loaded.config_fragment));
-          if (loaded.provider === null && !loaded.raw_auth) await refreshAuthPreview(loaded.account_id ?? null);
+          if (loaded.provider === null) {
+            const source = loaded.auth_source ?? (loaded.account_id ? "oauth" : "desktop");
+            if (source === "oauth") {
+              setAuthPreviewOnly(true);
+              if (loaded.account_id) {
+                await refreshAuthPreview(loaded.account_id);
+              } else {
+                setAuthPreviewReady(false);
+              }
+            } else {
+              setAuthPreviewOnly(false);
+              setAuthPreviewReady(true);
+            }
+          }
         } catch (error) {
           setLoadError(String(error));
         }
@@ -251,8 +281,11 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     const preset = builtinPresets.find((item) => item.kind === kind);
     if (!preset) return;
     setPresetKind(kind);
+    if (kind !== "chatgpt") setBoundAccountId(null);
     setConfigTouched(false);
     setCatalogTouched(false);
+    setAuthText("");
+    setAuthInitial("");
     setName(preset.name);
     setBaseUrl(preset.base_url);
     setApiKey("");
@@ -361,16 +394,20 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
         const created = await api.addBuiltinProfile(presetKind, baseUrl.trim() || undefined, apiKey.trim() || undefined, adminUrl.trim() || undefined, isOfficial ? boundAccountId || undefined : undefined);
         const customName = name.trim();
         if (customName && customName !== selectedPreset?.name) await api.renameProfile(created.id, customName);
-        if (configTouched || catalogTouched) await api.updateProfileConfig(created.id, configText, liveCatalogPath ? catalogText || null : null, null);
+        const authTextToSave = isOfficial && authSource === "desktop" && authDirty ? authText : null;
+        if (configTouched || catalogTouched || authTextToSave !== null) {
+          await api.updateProfileConfig(created.id, configText, liveCatalogPath ? catalogText || null : null, authTextToSave);
+        }
         feedback.success("内置供应商已添加");
       } else {
         const hasProvider = Boolean(detail?.provider);
         await api.updateProfile(profile!.id, name, hasProvider ? baseUrl : undefined, hasProvider ? apiKey : undefined, adminUrl.trim() || undefined);
-        const authTextToSave = isOfficial && authPreviewOnly
-          ? detail?.raw_auth?.trim() ? "" : null
-          : authDirty ? authText : null;
+        const authTextToSave = isOfficial && authSource === "desktop" && authDirty ? authText : null;
         await api.updateProfileConfig(profile!.id, configText, liveCatalogPath && catalogDirty ? catalogText || null : null, authTextToSave);
-        if (isOfficial) await api.setProfileAccount(profile!.id, boundAccountId || null);
+        if (isOfficial && authSource === "oauth") {
+          if (!boundAccountId) throw new Error("OAuth 配置必须绑定一个订阅账号");
+          await api.setProfileAccount(profile!.id, boundAccountId);
+        }
         feedback.success("供应商已更新");
       }
       onChanged();
@@ -395,7 +432,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           <div className="apple-panel-section">
             <div className="flex items-center gap-4"><button type="button" className="relative grid h-[61px] w-[61px] shrink-0 place-items-center rounded-[16px] transition-opacity hover:opacity-80" title="点击更换图标" aria-label="更换图标" onClick={() => setPickingIcon(true)}><ProfileIconTile name={detail?.name ?? name} icon={selectedIcon} size="fill" /><span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-white shadow" aria-hidden="true"><Pencil className="h-2.5 w-2.5" strokeWidth={2} /></span></button><div className="min-w-0 flex-1"><div className="field-label mb-1.5">名称</div><input className="app-input" maxLength={50} placeholder="供应商名称" value={name} onChange={(event) => setName(event.target.value)} /></div></div>
             {showProviderFields ? <><label className="field-label mb-1.5 mt-4 block">请求地址</label><input className="app-input" placeholder="https://api.example.com/v1" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /><div className="mb-1.5 mt-4 flex items-center gap-2"><span className="field-label">API 密钥</span>{isOpenCode && create ? <button type="button" className="apple-inline-btn" onClick={() => void api.openUrl("https://opencode.ai/go?ref=APHY0DXATH").catch((error) => feedback.error(String(error)))}><ExternalLink className="h-3 w-3" strokeWidth={2} />获取 API 密钥</button> : null}<button type="button" className="apple-inline-btn" disabled={testing || !apiKey.trim() || !baseUrl.trim()} onClick={() => void testConnection()}>{testing ? <LoadingSpinner /> : <Wifi className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}测试连通</button></div><div className="app-input-action"><input className="app-input app-input--action" type={showApiKey ? "text" : "password"} placeholder="请输入 API 密钥" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /><button type="button" className="app-input-action__button" aria-label={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"} title={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"} aria-pressed={showApiKey} onClick={() => setShowApiKey((visible) => !visible)}>{showApiKey ? <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden="true" /> : <Eye className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}</button></div>{isOpenCode && create ? <p className="muted mt-2 flex items-start gap-1.5 text-xs"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} />使用此链接订阅 OpenCode Go，首月只需 $5，并可获得额外的 $5 额度！</p> : null}</> : null}
-            {isOfficial ? <div className="mt-4"><div className="field-subtitle mb-1.5">认证来源</div><AppSelect value={boundAccountId ?? ""} options={accountOptions} onChange={selectAccount} placeholder={externalAccount ? "桌面端认证" : "自动选择账号"} renderLabel={renderAccountLabel} /></div> : null}
+            {isOfficial ? <div className="mt-4"><div className="field-subtitle mb-1.5">登录方式</div>{create ? <AppSelect value={boundAccountId ?? ""} options={accountOptions} onChange={selectAccount} placeholder="Codex登录" renderLabel={renderAccountLabel} /> : authSource === "oauth" ? <AppSelect value={boundAccountId ?? ""} options={oauthAccountOptions} onChange={selectAccount} placeholder="选择 OAuth 登录账号" renderLabel={renderAccountLabel} /> : <div className="flex min-h-9 min-w-0 items-center gap-2 rounded-xl px-3 shadow-[0_0_0_1px_var(--panel-ring)]"><Monitor className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" /><span className="shrink-0 text-xs font-medium text-[var(--text-secondary)]">Codex登录</span>{detail?.desktop_login ? <><span className="muted" aria-hidden="true">·</span><span className="min-w-0 truncate text-xs font-medium text-[var(--text-secondary)]" title={detail.desktop_login}>{detail.desktop_login}</span></> : null}</div>}</div> : null}
             {(!create || selectedPreset?.base_url) ? <div className="mt-4"><div className="mb-1.5 flex items-center gap-1"><span className="field-label">官网地址</span><button type="button" className="grid h-4 w-4 place-items-center rounded-full text-accent transition-colors hover:bg-(--profile-chip-bg) disabled:opacity-40" disabled={!adminUrl.trim()} onClick={() => void api.openUrl(adminUrl.trim()).catch((error) => feedback.error(String(error)))}><ExternalLink className="h-3.5 w-3.5" strokeWidth={2} /></button></div><input className="app-input" placeholder="https://console.example.com（可选）" value={adminUrl} onChange={(event) => setAdminUrl(event.target.value)} /></div> : null}
             {!create && supportsBalance ? <div className="mt-4 flex items-center justify-between gap-3"><div><div className="text-sm font-semibold">余额/用量查询</div><div className="muted mt-0.5 text-xs">窗口激活时自动刷新，点击数字手动刷新</div></div><AppSwitch checked={showBalance} onCheckedChange={(value) => void toggleBalance(value)} /></div> : null}
           </div>

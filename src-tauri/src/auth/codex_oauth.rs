@@ -715,8 +715,8 @@ impl CodexOAuthManager {
     }
 }
 
-/// Tauri 托管状态
-pub struct CodexOAuthState(pub Arc<RwLock<CodexOAuthManager>>);
+/// Tauri 托管状态。管理器自身已按账号与数据类型细粒度加锁，外层不再持有跨网络的读写锁。
+pub struct CodexOAuthState(pub Arc<CodexOAuthManager>);
 
 fn sorted_accounts(
     accounts: &HashMap<String, CodexAccountData>,

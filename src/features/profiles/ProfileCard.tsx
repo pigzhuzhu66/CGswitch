@@ -28,9 +28,6 @@ interface ProfileCardProps {
   busy: boolean;
   activationEpoch: number;
   subscriptionAuthed: boolean;
-  subscriptionAccount: string | null;
-  subscriptionSource: "desktop" | "oauth" | null;
-  boundAccount: string | null;
   balanceCache?: Record<string, ProfileBalanceInfo>;
   onApply: () => void;
   onRename: () => void;
@@ -42,9 +39,6 @@ interface ProfileCardProps {
 interface ProfileCardContentProps {
   profile: ProfileSummary;
   subscriptionAuthed: boolean;
-  subscriptionAccount: string | null;
-  subscriptionSource: "desktop" | "oauth" | null;
-  boundAccount: string | null;
   balanceInfo: ProfileBalanceInfo | null;
   balanceError: string;
   onRefreshBalance?: () => void;
@@ -55,9 +49,6 @@ interface ProfileCardContentProps {
 export function ProfileCardContent({
   profile,
   subscriptionAuthed,
-  subscriptionAccount,
-  subscriptionSource,
-  boundAccount,
   balanceInfo,
   balanceError,
   onRefreshBalance,
@@ -65,12 +56,8 @@ export function ProfileCardContent({
   onRename,
 }: ProfileCardContentProps) {
   const supportsBalance = balanceQueryProviders.has(profile.provider ?? "");
-  const subscriptionSourceKind = !subscriptionAuthed ? null : boundAccount ? "oauth" : subscriptionSource ?? "oauth";
-  const subscriptionTitle = !subscriptionAuthed
-    ? "ChatGPT 尚未完成认证，请到设置页登录"
-    : boundAccount
-      ? `OAuth 认证账号：${boundAccount}`
-      : `${subscriptionSourceKind === "desktop" ? "桌面端认证" : "OAuth 认证"}${subscriptionAccount ? `账号：${subscriptionAccount}` : ""}`;
+  const authSource = profile.auth_source ?? (profile.account_id ? "oauth" : "desktop");
+  const authTitle = `${authSource === "desktop" ? "Codex登录" : "OAuth登录"}${subscriptionAuthed ? "" : "（未登录）"}`;
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -78,8 +65,8 @@ export function ProfileCardContent({
       <div className="profile-card-content__text min-w-0 flex-1">
         <div className="flex min-h-7 items-center gap-2">
           <h3 className="title-md cursor-pointer truncate leading-normal transition-colors hover:text-accent group-hover:text-accent" title="点击重命名" onClick={(event) => { event.stopPropagation(); onRename?.(); }}>{profile.name}</h3>
-          {!profile.provider ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${subscriptionAuthed ? "bg-accent/10 text-accent" : "bg-black/5 muted dark:bg-white/6"}`} title={subscriptionTitle} aria-label={subscriptionTitle}>
-            {subscriptionSourceKind === "desktop" ? <Monitor className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" /> : <KeyRound className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />}
+          {!profile.provider ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${subscriptionAuthed ? "bg-accent/10 text-accent" : "bg-black/5 muted dark:bg-white/6"}`} title={authTitle} aria-label={authTitle}>
+            {authSource === "desktop" ? <Monitor className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" /> : <KeyRound className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />}
           </span> : null}
         </div>
         <div className="profile-card-meta muted mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
@@ -127,9 +114,6 @@ export default function ProfileCard({
   busy,
   activationEpoch,
   subscriptionAuthed,
-  subscriptionAccount,
-  subscriptionSource,
-  boundAccount,
   balanceCache,
   onApply,
   onRename,
@@ -229,9 +213,6 @@ export default function ProfileCard({
       <ProfileCardContent
         profile={profile}
         subscriptionAuthed={subscriptionAuthed}
-        subscriptionAccount={subscriptionAccount}
-        subscriptionSource={subscriptionSource}
-        boundAccount={boundAccount}
         balanceInfo={balanceInfo}
         balanceError={balanceError}
         onRefreshBalance={fetchBalance}

@@ -638,6 +638,14 @@ fn summary(
             ProfileKind::Official
         },
         account_id: account_id.map(str::to_string),
+        auth_source: payload.effective_auth_source(
+            if payload.provider_id.is_some() {
+                ProfileKind::ThirdParty
+            } else {
+                ProfileKind::Official
+            },
+            account_id,
+        ),
         model: display_text(payload.model_values.get("model")),
         provider: payload.provider_id.clone(),
         reasoning_effort: display_text(payload.model_values.get("model_reasoning_effort")),

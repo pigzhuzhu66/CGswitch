@@ -28,6 +28,14 @@ impl ProfileKind {
     }
 }
 
+/// 官方 ChatGPT 配置的固定认证来源；OAuth 账号只能在 OAuth 来源内切换。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthSource {
+    Desktop,
+    Oauth,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct ProfilePayload {
     #[serde(default)]
@@ -39,16 +47,19 @@ pub struct ProfilePayload {
     /// 内置官方供应商类型（deepseek/minimax/zhipu/chatgpt）；普通捕获的供应商为 None。
     #[serde(default)]
     pub builtin: Option<String>,
+    /// 官方配置创建时确定的认证来源；旧数据缺失时由 account_id 兼容推断。
+    #[serde(default)]
+    pub auth_source: Option<AuthSource>,
     /// 供应商自己保存的完整 config 原文（内置供应商可全量编辑；普通供应商无该字段）。
     #[serde(default)]
     pub raw_config: Option<String>,
     /// 供应商自己保存的 models.json 原文（编辑后随供应商应用写入 ~/.codex）。
     #[serde(default)]
     pub raw_catalog: Option<String>,
-    /// 供应商自己保存的 auth.json 原文（编辑后随供应商应用写入 ~/.codex/auth.json）。
+    /// Desktop/第三方供应商保存的 auth.json 原文；OAuth 官方档案不吸收 live 快照。
     #[serde(default)]
     pub raw_auth: Option<String>,
-    /// None = 未明确设置；Some(true) = 跟随 live auth 自动同步；Some(false) = 用户手动接管。
+    /// 历史快照标记；Some(false) 表示用户明确手动接管认证内容。
     #[serde(default)]
     pub auth_auto_sync: Option<bool>,
     /// 模型提供方的管理后台网址（卡片显示跳转按钮）。
@@ -57,6 +68,23 @@ pub struct ProfilePayload {
     /// 供应商级开关：是否在卡片显示并自动刷新余额/用量（默认关，用户自行开启）。
     #[serde(default = "default_false")]
     pub show_balance: bool,
+}
+
+impl ProfilePayload {
+    pub fn effective_auth_source(
+        &self,
+        kind: ProfileKind,
+        account_id: Option<&str>,
+    ) -> Option<AuthSource> {
+        if kind != ProfileKind::Official {
+            return None;
+        }
+        Some(self.auth_source.unwrap_or(if account_id.is_some() {
+            AuthSource::Oauth
+        } else {
+            AuthSource::Desktop
+        }))
+    }
 }
 
 fn default_false() -> bool {
@@ -140,6 +168,7 @@ pub struct ProfileSummary {
     pub kind: ProfileKind,
     /// 官方档案绑定的订阅账号；第三方恒为 None。
     pub account_id: Option<String>,
+    pub auth_source: Option<AuthSource>,
     pub model: Option<String>,
     pub provider: Option<String>,
     pub reasoning_effort: Option<String>,
@@ -178,6 +207,9 @@ pub struct ProfileDetail {
     pub name: String,
     /// 官方档案绑定的订阅账号；第三方恒为 None。
     pub account_id: Option<String>,
+    pub auth_source: Option<AuthSource>,
+    /// Desktop 配置自身 auth.json 解析出的登录账号；OAuth 由 account_id 管理。
+    pub desktop_login: Option<String>,
     pub icon: Option<String>,
     pub provider: Option<String>,
     pub base_url: Option<String>,
@@ -185,7 +217,6 @@ pub struct ProfileDetail {
     pub model_values: std::collections::BTreeMap<String, String>,
     pub config_fragment: String,
     pub raw_config: Option<String>,
-    pub auth_content: Option<String>,
     pub catalog_content: Option<String>,
     pub raw_catalog: Option<String>,
     pub raw_auth: Option<String>,

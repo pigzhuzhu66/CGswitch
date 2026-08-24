@@ -10,6 +10,16 @@ fn chatgpt_test_context() -> (tempfile::TempDir, AppContext) {
     (home, context)
 }
 
+fn chatgpt_auth(account_id: &str, access_token: &str) -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+    let payload =
+        URL_SAFE_NO_PAD.encode(format!(r#"{{"chatgpt_account_id":"{account_id}"}}"#).as_bytes());
+    format!(
+        r#"{{"auth_mode":"chatgpt","tokens":{{"id_token":"e30.{payload}.sig","access_token":"{access_token}"}}}}"#
+    )
+}
+
 #[test]
 fn live_codex_auth_is_available_for_matching_account_only() {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -201,45 +211,169 @@ new_field = "accumulated"
 }
 
 #[test]
-fn apply_profile_snapshots_active_official_live_auth_before_switching() {
-    let account_one_auth = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1"}}"#;
+fn desktop_profile_syncs_and_restores_auth_snapshot() {
     let (_home, context) = chatgpt_test_context();
-    std::fs::write(context.paths.codex_home.join("auth.json"), account_one_auth).unwrap();
-    let profile_one = context
+    let profile = context
         .add_builtin_profile("chatgpt", None, None, None, None)
         .unwrap();
-    let profile_two = context
-        .add_builtin_profile("chatgpt", None, None, None, None)
-        .unwrap();
-
-    context.apply_profile(&profile_one.id).unwrap();
-    context.apply_profile(&profile_two.id).unwrap();
-    std::fs::write(
-        context.paths.codex_home.join("auth.json"),
-        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-2"}}"#,
-    )
-    .unwrap();
-
     assert_eq!(
         context
             .database
-            .profile(&profile_one.id)
+            .profile(&profile.id)
             .unwrap()
             .payload
-            .raw_auth
-            .as_deref(),
-        Some(account_one_auth)
+            .auth_source,
+        Some(crate::models::AuthSource::Desktop)
     );
 
-    context.apply_profile(&profile_one.id).unwrap();
+    // 创建只写数据库；激活空快照会清理当前 live 认证。
+    let initial_live = chatgpt_auth("desktop-account", "initial-live");
+    std::fs::write(context.paths.codex_home.join("auth.json"), &initial_live).unwrap();
+    context.apply_profile(&profile.id).unwrap();
+    assert!(!context.paths.codex_home.join("auth.json").exists());
+
+    // 官方认证完成后，聚焦/刷新把新文件回写当前 Desktop 档案。
+    let refreshed_live = chatgpt_auth("desktop-account", "refreshed-live");
+    std::fs::write(context.paths.codex_home.join("auth.json"), &refreshed_live).unwrap();
+    context.get_state().unwrap();
+    assert_eq!(
+        context
+            .database
+            .profile(&profile.id)
+            .unwrap()
+            .payload
+            .raw_auth,
+        Some(refreshed_live.clone())
+    );
+    assert_eq!(
+        context
+            .get_profile(&profile.id)
+            .unwrap()
+            .desktop_login
+            .as_deref(),
+        Some("desktop-account")
+    );
+
+    // 再次激活恢复数据库快照。
+    std::fs::remove_file(context.paths.codex_home.join("auth.json")).unwrap();
+    context.apply_profile(&profile.id).unwrap();
     assert_eq!(
         std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
-        account_one_auth
+        refreshed_live
     );
 }
 
 #[test]
-fn get_state_syncs_active_official_live_auth_after_focus_refresh() {
+fn desktop_profile_restores_saved_auth_snapshot_even_when_manual() {
+    let (_home, context) = chatgpt_test_context();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+    let mut stored = context.database.profile(&profile.id).unwrap();
+    stored.payload.raw_auth = Some(chatgpt_auth("desktop-account", "stale-snapshot"));
+    stored.payload.auth_auto_sync = Some(false);
+    context
+        .database
+        .update_profile(&profile.id, &stored.name, &stored.payload, "2")
+        .unwrap();
+    let live_auth = chatgpt_auth("desktop-account", "desktop-live");
+    std::fs::write(context.paths.codex_home.join("auth.json"), &live_auth).unwrap();
+
+    context.apply_profile(&profile.id).unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
+        chatgpt_auth("desktop-account", "stale-snapshot")
+    );
+}
+
+#[test]
+fn apply_bound_oauth_profile_leaves_auth_for_oauth_writer() {
+    let (_home, context) = chatgpt_test_context();
+    context
+        .database
+        .upsert_account(&crate::database::StoredAccount {
+            id: "oauth-account".into(),
+            email: None,
+            id_token: None,
+            refresh_token: "refresh-token".into(),
+            auth_json: None,
+            authenticated_at: 1,
+        })
+        .unwrap();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, Some("oauth-account"))
+        .unwrap();
+    assert_eq!(
+        context
+            .database
+            .profile(&profile.id)
+            .unwrap()
+            .payload
+            .auth_source,
+        Some(crate::models::AuthSource::Oauth)
+    );
+    let mut stored = context.database.profile(&profile.id).unwrap();
+    stored.payload.raw_auth = Some(chatgpt_auth("oauth-account", "stale-snapshot"));
+    stored.payload.auth_auto_sync = Some(false);
+    context
+        .database
+        .update_profile(&profile.id, &stored.name, &stored.payload, "2")
+        .unwrap();
+    let live_auth = chatgpt_auth("desktop-account", "desktop-live");
+    std::fs::write(context.paths.codex_home.join("auth.json"), &live_auth).unwrap();
+
+    context.apply_profile(&profile.id).unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
+        live_auth
+    );
+}
+
+#[test]
+fn auth_source_is_fixed_and_oauth_accounts_can_switch() {
+    let (_home, context) = chatgpt_test_context();
+    for id in ["oauth-one", "oauth-two"] {
+        context
+            .database
+            .upsert_account(&crate::database::StoredAccount {
+                id: id.into(),
+                email: None,
+                id_token: None,
+                refresh_token: format!("refresh-{id}"),
+                auth_json: None,
+                authenticated_at: 1,
+            })
+            .unwrap();
+    }
+    let desktop = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+    assert!(context
+        .set_profile_account(&desktop.id, Some("oauth-one"))
+        .is_err());
+    assert_eq!(context.bound_account_id(&desktop.id).unwrap(), None);
+
+    let oauth = context
+        .add_builtin_profile("chatgpt", None, None, None, Some("oauth-one"))
+        .unwrap();
+    context
+        .set_profile_account(&oauth.id, Some("oauth-two"))
+        .unwrap();
+    assert_eq!(
+        context.bound_account_id(&oauth.id).unwrap().as_deref(),
+        Some("oauth-two")
+    );
+    assert!(context.set_profile_account(&oauth.id, None).is_err());
+    assert_eq!(
+        context.profile_auth_source(&oauth.id).unwrap(),
+        Some(crate::models::AuthSource::Oauth)
+    );
+}
+
+#[test]
+fn get_state_syncs_desktop_auth_into_profile_snapshot() {
     let (_home, context) = chatgpt_test_context();
     let profile = context
         .add_builtin_profile("chatgpt", None, None, None, None)
@@ -253,23 +387,106 @@ fn get_state_syncs_active_official_live_auth_after_focus_refresh() {
     .unwrap();
     context.get_state().unwrap();
 
-    std::fs::write(
-        context.paths.codex_home.join("auth.json"),
-        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1-refreshed"}}"#,
-    )
-    .unwrap();
-    context.get_state().unwrap();
-
     let stored = context.database.profile(&profile.id).unwrap();
-    assert_eq!(stored.payload.auth_auto_sync, Some(true));
     assert_eq!(
-        stored.payload.raw_auth.as_deref(),
-        Some(r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1-refreshed"}}"#)
+        stored.payload.raw_auth,
+        Some(r#"{"auth_mode":"chatgpt","tokens":{"access_token":"account-1"}}"#.into())
     );
 }
 
 #[test]
-fn focus_refresh_does_not_cross_sync_bound_auth_accounts() {
+fn focus_refresh_keeps_last_desktop_snapshot_when_live_auth_is_invalid() {
+    let (_home, context) = chatgpt_test_context();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, None)
+        .unwrap();
+    context.apply_profile(&profile.id).unwrap();
+
+    let valid_auth = chatgpt_auth("desktop-account", "valid-access");
+    std::fs::write(context.paths.codex_home.join("auth.json"), &valid_auth).unwrap();
+    context.get_state().unwrap();
+
+    std::fs::write(context.paths.codex_home.join("auth.json"), "{invalid-json").unwrap();
+    context.get_state().unwrap();
+
+    assert_eq!(
+        context
+            .database
+            .profile(&profile.id)
+            .unwrap()
+            .payload
+            .raw_auth,
+        Some(valid_auth)
+    );
+}
+
+#[tokio::test]
+async fn oauth_activation_and_account_switch_write_only_the_bound_account_snapshot() {
+    let (_home, context) = chatgpt_test_context();
+    let oauth_auth = chatgpt_auth("oauth-account", "oauth-access");
+    let second_oauth_auth = chatgpt_auth("oauth-second", "oauth-second-access");
+    context
+        .database
+        .upsert_account(&crate::database::StoredAccount {
+            id: "oauth-account".into(),
+            email: None,
+            id_token: None,
+            refresh_token: "refresh-token".into(),
+            auth_json: Some(oauth_auth.clone()),
+            authenticated_at: 1,
+        })
+        .unwrap();
+    context
+        .database
+        .upsert_account(&crate::database::StoredAccount {
+            id: "oauth-second".into(),
+            email: None,
+            id_token: None,
+            refresh_token: "second-refresh-token".into(),
+            auth_json: Some(second_oauth_auth.clone()),
+            authenticated_at: 2,
+        })
+        .unwrap();
+    let profile = context
+        .add_builtin_profile("chatgpt", None, None, None, Some("oauth-account"))
+        .unwrap();
+    let oauth = crate::auth::codex_oauth::CodexOAuthManager::new(context.database.clone());
+
+    context
+        .apply_profile_with_auth(&profile.id, &oauth)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
+        oauth_auth
+    );
+    assert_eq!(
+        context
+            .database
+            .profile(&profile.id)
+            .unwrap()
+            .payload
+            .raw_auth,
+        None
+    );
+
+    context
+        .set_profile_account_and_apply_active(&profile.id, Some("oauth-second"), &oauth)
+        .await
+        .unwrap();
+    assert_eq!(
+        context.bound_account_id(&profile.id).unwrap().as_deref(),
+        Some("oauth-second")
+    );
+    assert_eq!(
+        std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
+        second_oauth_auth
+    );
+}
+
+#[test]
+fn focus_refresh_keeps_oauth_auth_out_of_profile_snapshot() {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
     let (_home, context) = chatgpt_test_context();
@@ -314,16 +531,7 @@ fn focus_refresh_does_not_cross_sync_bound_auth_accounts() {
     context.get_state().unwrap();
 
     let stored = context.database.profile(&profile.id).unwrap();
-    assert!(stored
-        .payload
-        .raw_auth
-        .as_deref()
-        .is_some_and(|auth| auth.contains("account-1")));
-    assert!(!stored
-        .payload
-        .raw_auth
-        .as_deref()
-        .is_some_and(|auth| auth.contains("account-2")));
+    assert_eq!(stored.payload.raw_auth, None);
 }
 
 #[test]
@@ -456,7 +664,6 @@ experimental_bearer_token = "secret-token"
     // 捕获默认不设为使用中；验证“未使用”只读库快照
     let inactive = context.get_profile(&profile.id).unwrap();
     assert_eq!(inactive.catalog_content, None);
-    assert_eq!(inactive.auth_content, None);
 
     // 使用中：live 文件是唯一事实源
     context.apply_profile(&profile.id).unwrap();
@@ -469,39 +676,6 @@ experimental_bearer_token = "secret-token"
     assert_eq!(
         detail.catalog_content.as_deref(),
         Some(r#"{"models":[{"id":"glm-5.3","api_key":"sk-secret"}]}"#)
-    );
-    // 第三方档案不把 live 的 Codex 官方认证预填进编辑页
-    assert_eq!(detail.auth_content, None);
-}
-
-#[test]
-fn active_chatgpt_profile_reads_live_auth_without_empty_override() {
-    let home = tempfile::tempdir().unwrap();
-    let paths = crate::paths::from_home(home.path()).unwrap();
-    paths.ensure().unwrap();
-    std::fs::create_dir_all(&paths.codex_home).unwrap();
-    std::fs::write(paths.codex_config(), "model = \"gpt-5.6\"\n").unwrap();
-    let live_auth = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"live"}}"#;
-    std::fs::write(paths.codex_home.join("auth.json"), live_auth).unwrap();
-
-    let context = AppContext::new(paths).unwrap();
-    let profile = context
-        .add_builtin_profile("chatgpt", None, None, None, None)
-        .unwrap();
-    let mut stored = context.database.profile(&profile.id).unwrap();
-    stored.payload.raw_auth = Some("{\n}".into());
-    context
-        .database
-        .update_profile(&profile.id, &stored.name, &stored.payload, "2")
-        .unwrap();
-    context.apply_profile(&profile.id).unwrap();
-
-    let detail = context.get_profile(&profile.id).unwrap();
-    assert_eq!(detail.raw_auth, None);
-    assert_eq!(detail.auth_content.as_deref(), Some(live_auth));
-    assert_eq!(
-        std::fs::read_to_string(context.paths.codex_home.join("auth.json")).unwrap(),
-        live_auth
     );
 }
 
@@ -530,7 +704,6 @@ fn update_profile_config_clears_active_live_auth_when_editor_is_empty() {
         .unwrap();
 
     assert_eq!(updated.raw_auth, None);
-    assert_eq!(updated.auth_content, None);
     assert!(!context.paths.codex_home.join("auth.json").exists());
 }
 
@@ -1924,7 +2097,7 @@ fn apply_minimax_inserts_catalog_line_and_writes_catalog() {
 }
 
 #[test]
-fn apply_chatgpt_writes_official_default_and_keeps_auth() {
+fn apply_chatgpt_writes_official_default_and_clears_empty_desktop_auth() {
     let home = tempfile::tempdir().unwrap();
     let paths = crate::paths::from_home(home.path()).unwrap();
     paths.ensure().unwrap();
@@ -1946,10 +2119,7 @@ fn apply_chatgpt_writes_official_default_and_keeps_auth() {
         std::fs::read(context.paths.codex_config()).unwrap(),
         crate::builtin::CHATGPT_CONFIG
     );
-    assert_eq!(
-        std::fs::read(context.paths.codex_home.join("auth.json")).unwrap(),
-        b"{\"login\":\"kept\"}"
-    );
+    assert!(!context.paths.codex_home.join("auth.json").exists());
     assert!(!context.paths.codex_home.join("models.json").exists());
 }
 

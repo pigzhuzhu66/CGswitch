@@ -54,6 +54,7 @@ const webProfiles: ProfileSummary[] = [
     name: "官方默认",
     kind: "official",
     account_id: null,
+    auth_source: "desktop",
     model: "gpt-5.6",
     provider: null,
     reasoning_effort: "medium",
@@ -374,6 +375,7 @@ interface WebDetail {
   raw_config?: string | null;
   raw_catalog?: string | null;
   raw_auth?: string | null;
+  desktop_login?: string | null;
 }
 
 const webDetails: Record<string, WebDetail> = {
@@ -418,6 +420,8 @@ function webProfileDetail(id: string): ProfileDetail {
     id: profile.id,
     name: profile.name,
     account_id: profile.account_id,
+    auth_source: profile.auth_source ?? (profile.account_id ? "oauth" : profile.kind === "official" ? "desktop" : null),
+    desktop_login: detail?.desktop_login ?? null,
     icon: profile.icon,
     provider: profile.provider,
     base_url: detail?.base_url ?? null,
@@ -425,9 +429,6 @@ function webProfileDetail(id: string): ProfileDetail {
     model_values: detail?.model_values ?? {},
     config_fragment: detail?.config_fragment ?? "",
     raw_config: detail?.raw_config ?? null,
-    auth_content: detail?.api_key
-      ? '{\n  "OPENAI_API_KEY": "sk-demo-real-value"\n}'
-      : null,
     catalog_content: detail?.model_values.model_catalog_json
       ? '{\n  "models": [\n    { "id": "glm-5.3", "name": "GLM 5.3" }\n  ]\n}'
       : null,
@@ -565,6 +566,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         name: preset.name,
         kind: preset.provider ? "third_party" : "official",
         account_id: preset.provider ? null : (typeof args?.accountId === "string" ? args.accountId : null),
+        auth_source: preset.provider ? null : (typeof args?.accountId === "string" && args.accountId ? "oauth" : "desktop"),
         model: preset.model,
         provider: preset.provider,
         reasoning_effort: stripTomlQuotes(preset.model_values.model_reasoning_effort) || null,
@@ -828,6 +830,10 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
     case "update_profile_config": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (!profile) throw new Error("供应商配置不存在");
+      const source = profile.auth_source ?? (profile.account_id ? "oauth" : profile.kind === "official" ? "desktop" : null);
+      if (profile.kind === "official" && source === "oauth" && typeof args?.authText === "string") {
+        throw new Error("OAuth 配置的认证由账号选择管理，不能编辑 Desktop auth.json");
+      }
       const detail = webDetails[profile.id];
       if (detail) {
         if (typeof args?.configText === "string") detail.raw_config = args.configText;
@@ -994,6 +1000,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       return undefined as T;
     }
     case "apply_profile":
+      // 与后端一致：官方档案的认证来源在创建时固定；Web mock 不操作本机 auth.json。
       webActiveProfileId = typeof args?.id === "string" ? args.id : null;
       await new Promise((resolve) => setTimeout(resolve, 500));
       return undefined as T;
@@ -1005,7 +1012,10 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
     case "auth_get_status":
       return { authenticated: false, default_account_id: null, accounts: [], external: null } as T;
     case "auth_preview": {
-      const accountId = typeof args?.accountId === "string" ? args.accountId : "desktop-preview";
+      if (typeof args?.accountId !== "string" || !args.accountId) {
+        throw new Error("OAuth 账号不能为空");
+      }
+      const accountId = args.accountId;
       return JSON.stringify({
         auth_mode: "chatgpt",
         OPENAI_API_KEY: null,
@@ -1014,9 +1024,11 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
     }
     case "set_profile_account": {
       const profile = webProfiles.find((item) => item.id === args?.id);
-      if (profile) {
-        profile.account_id = typeof args?.accountId === "string" ? args.accountId : null;
-      }
+      if (!profile) throw new Error("供应商配置不存在");
+      const source = profile.auth_source ?? (profile.account_id ? "oauth" : profile.kind === "official" ? "desktop" : null);
+      if (source !== "oauth") throw new Error("Desktop 配置不能切换为 OAuth，请新建 ChatGPT 配置");
+      if (typeof args?.accountId !== "string" || !args.accountId) throw new Error("OAuth 配置必须绑定一个订阅账号");
+      profile.account_id = args.accountId;
       return undefined as T;
     }
     case "open_url":

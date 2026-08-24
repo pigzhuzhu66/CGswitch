@@ -152,7 +152,7 @@ export const api = {
   authPollForAccount: (deviceCode: string) =>
     call<ManagedAccount | null>("auth_poll_for_account", { deviceCode }),
   authGetStatus: () => call<AuthStatus>("auth_get_status"),
-  authPreview: (accountId: string | null) => call<string | null>("auth_preview", { accountId }),
+  authPreview: (accountId: string) => call<string | null>("auth_preview", { accountId }),
   authRemoveAccount: (accountId: string) =>
     call<void>("auth_remove_account", { accountId }),
   openUrl: (url: string) => call<void>("open_url", { url }),

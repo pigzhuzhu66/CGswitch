@@ -16,13 +16,13 @@ import type { AppState, PathInfo, Settings } from "../../types";
 import ChatGPTAccount from "./ChatGPTAccount";
 import { SettingsAbout, SettingsAdvanced, SettingsGeneral } from "./SettingsSections";
 
-interface SettingsViewProps { state: AppState; onPreviewTheme: (theme: Settings["theme"]) => void; onRefresh: () => Promise<void>; onSaved: (settings: Settings) => void; onHome: () => void; }
 type Section = "general" | "codex" | "account" | "advanced" | "about";
+interface SettingsViewProps { state: AppState; onPreviewTheme: (theme: Settings["theme"]) => void; onRefresh: () => Promise<void>; onSaved: (settings: Settings) => void; onHome: () => void; initialSection?: Section; }
 
-export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved, onHome }: SettingsViewProps) {
+export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved, onHome, initialSection = "general" }: SettingsViewProps) {
   const feedback = useFeedback();
   const [form, setForm] = useState<Settings>(state.settings);
-  const [section, setSection] = useState<Section>("general");
+  const [section, setSection] = useState<Section>(initialSection);
   const [saving, setSaving] = useState(false);
   const [backupsEpoch, setBackupsEpoch] = useState(0);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
@@ -30,6 +30,7 @@ export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
 
   useEffect(() => setForm(state.settings), [state.settings]);
+  useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => { void api.getSettings().then((settings) => { setForm(settings); onSaved(settings); }).catch((error) => feedback.error(String(error))); }, []);
   useEffect(() => { const button = tabBar.current?.querySelector<HTMLElement>(`[data-section="${section}"]`); if (button) setIndicator({ left: button.offsetLeft, width: button.offsetWidth }); }, [section]);
 
