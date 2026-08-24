@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## [0.8.1] - 2026-08-25
+
+### 修复
+- 官方订阅档案切换前吸收 Codex 运行中产生的同账号 OAuth auth.json，避免被异步 token 刷新覆盖较新的切换
+- OAuth token 读取与刷新改为同一账号串行化，杜绝并发刷新导致的凭据错乱
+- 解析官方 auth.json 时同步提取 refresh_token / id_token，激活 OAuth 配置必须经 refresh_token 重新验证，不再直接复用旧缓存
+- 桌面端认证清空语义调整：清空 auth 视为移除旧快照等待下次桌面认证，遗留空快照会在下次 focus refresh 时被重新填充
+- 切换按钮文案统一为「切换 / 使用中」，切换成功提示追加「重启Codex生效」以反映自动重启流程
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v0.8.1-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v0.8.1-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v0.8.1-macOS-x64.dmg`
+
 ## [0.8.0] - 2026-08-25
 
 ### 新增
