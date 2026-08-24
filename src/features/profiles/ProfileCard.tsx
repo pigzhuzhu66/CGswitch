@@ -75,7 +75,7 @@ export function ProfileCardContent({
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <ProfileIconTile name={profile.name} icon={profile.icon} />
-      <div className="min-w-0 flex-1">
+      <div className="profile-card-content__text min-w-0 flex-1">
         <div className="flex min-h-7 items-center gap-2">
           <h3 className="title-md cursor-pointer truncate leading-normal transition-colors hover:text-accent group-hover:text-accent" title="点击重命名" onClick={(event) => { event.stopPropagation(); onRename?.(); }}>{profile.name}</h3>
           {!profile.provider ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${subscriptionAuthed ? "bg-accent/10 text-accent" : "bg-black/5 muted dark:bg-white/6"}`} title={subscriptionTitle} aria-label={subscriptionTitle}>
