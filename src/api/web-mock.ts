@@ -11,6 +11,7 @@ import type {
   SkillSummary,
   SkillCandidate,
   ProfileBalanceInfo,
+  ProfileConnectionResult,
   ProfileDetail,
   ProfileSummary,
   Settings,
@@ -315,6 +316,49 @@ function connectionErrorFromBody(value: unknown): string | null {
   return null;
 }
 
+function isOpenCodeGoBaseUrl(baseUrl: string): boolean {
+  return baseUrl.replace(/\/+$/, "").toLowerCase() === "https://opencode.ai/zen/go/v1";
+}
+
+async function testOpenCodeConnection(
+  baseUrl: string,
+  apiKey: string,
+): Promise<ProfileConnectionResult> {
+  const start = Date.now();
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/responses`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "deepseek-v4-flash",
+        input: "ping",
+        max_output_tokens: 0,
+      }),
+    });
+    const latency_ms = Date.now() - start;
+    const body = await res.text();
+    const probeValidationRejection =
+      [400, 422].includes(res.status) && body.toLowerCase().includes("max_output_tokens");
+    const ok = res.ok || probeValidationRejection;
+    return {
+      ok,
+      latency_ms,
+      status: res.status,
+      error: ok ? null : res.status === 401 || res.status === 403 ? "API 密钥无效" : `接口返回 HTTP ${res.status}`,
+    };
+  } catch {
+    return {
+      ok: false,
+      latency_ms: null,
+      status: null,
+      error: "连接失败：浏览器跨域限制无法真实请求，请用桌面版验证",
+    };
+  }
+}
+
 interface WebDetail {
   base_url: string | null;
   api_key: string | null;
@@ -575,6 +619,9 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const baseUrl = String(args?.baseUrl ?? "");
       if (!apiKey.trim()) throw new Error("请填写 API 密钥");
       if (!baseUrl.trim()) throw new Error("请填写调用地址");
+      if (isOpenCodeGoBaseUrl(baseUrl.trim())) {
+        return (await testOpenCodeConnection(baseUrl.trim(), apiKey.trim())) as T;
+      }
       const url = `${baseUrl.replace(/\/+$/, "")}/models`;
       const start = Date.now();
       try {
@@ -602,6 +649,9 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       if (!apiKey.trim()) throw new Error("请填写 API 密钥");
       const baseUrl = args?.baseUrl !== undefined ? String(args.baseUrl) : "https://api.example.com";
       if (!baseUrl.trim()) throw new Error("请填写调用地址");
+      if (isOpenCodeGoBaseUrl(baseUrl.trim())) {
+        return (await testOpenCodeConnection(baseUrl.trim(), apiKey.trim())) as T;
+      }
       // 网页调试模式做真实请求，避免“随便填都能成功”的假象；
       // 跨域被浏览器拦截时明确提示用桌面版验证
       const url = `${baseUrl.replace(/\/+$/, "")}/models`;

@@ -112,6 +112,62 @@ pub(crate) fn connection_error_from_body(value: &serde_json::Value) -> Option<St
     None
 }
 
+/// OpenCode Go 的 `/models` 不校验密钥，使用无效参数探针触发鉴权后的请求校验。
+async fn test_opencode_connection(
+    base_url: &str,
+    api_key: &str,
+) -> AppResult<ProfileConnectionResult> {
+    let responses_url = format!("{}/responses", base_url.trim_end_matches('/'));
+    let client = http_client()?;
+    let start = std::time::Instant::now();
+    let response = client
+        .post(&responses_url)
+        .bearer_auth(api_key)
+        .json(&serde_json::json!({
+            "model": "deepseek-v4-flash",
+            "input": "ping",
+            "max_output_tokens": 0,
+        }))
+        .send()
+        .await;
+
+    match response {
+        Ok(response) => {
+            let status = response.status();
+            let latency_ms = Some(start.elapsed().as_millis());
+            let body = response.text().await.unwrap_or_default();
+            let probe_validation_rejection =
+                matches!(
+                    status,
+                    reqwest::StatusCode::BAD_REQUEST | reqwest::StatusCode::UNPROCESSABLE_ENTITY
+                ) && body.to_ascii_lowercase().contains("max_output_tokens");
+            let ok = status.is_success() || probe_validation_rejection;
+            let error = if ok {
+                None
+            } else if status == reqwest::StatusCode::UNAUTHORIZED
+                || status == reqwest::StatusCode::FORBIDDEN
+            {
+                Some("API 密钥无效".to_string())
+            } else {
+                Some(format!("接口返回 HTTP {status}"))
+            };
+
+            Ok(ProfileConnectionResult {
+                ok,
+                latency_ms,
+                status: Some(status.as_u16()),
+                error,
+            })
+        }
+        Err(error) => Ok(ProfileConnectionResult {
+            ok: false,
+            latency_ms: None,
+            status: error.status().map(|status| status.as_u16()),
+            error: Some(reqwest_error_message(&error)),
+        }),
+    }
+}
+
 /// 余额/用量请求公共骨架：统一处理 401/403、错误提取与网络错误；
 /// 各家只提供 URL 和成功响应的解析。
 async fn query_balance_endpoint(
@@ -189,8 +245,15 @@ async fn query_deepseek_balance(
 
 /// MiniMax Coding Plan 用量查询：GET {base}/api/openplatform/coding_plan/remains。
 /// 接口形态以用户实测可用的 statusline.ps1 为准（国内版 Coding Plan）。
-/// GET {base}/models 带密钥的连通性测试核心，与 profile 无关（创建态表单直接复用）。
+/// 供应商连通性测试核心，与 profile 无关（创建态表单直接复用）。
 async fn test_models_endpoint(base_url: &str, api_key: &str) -> AppResult<ProfileConnectionResult> {
+    if base_url
+        .trim_end_matches('/')
+        .eq_ignore_ascii_case("https://opencode.ai/zen/go/v1")
+    {
+        return test_opencode_connection(base_url, api_key).await;
+    }
+
     let models_url = format!("{}/models", base_url.trim_end_matches('/'));
     let client = http_client()?;
 
@@ -363,7 +426,7 @@ pub(crate) fn format_reset(ms: i64, with_days: bool) -> Option<String> {
 }
 
 impl AppContext {
-    /// 验证供应商密钥连通性：请求 OpenAI 兼容的 GET {base}/models（带 Bearer 密钥），
+    /// 验证供应商密钥连通性：默认请求 OpenAI 兼容的 GET {base}/models，OpenCode Go 使用鉴权探针，
     /// 2xx 视为可用，401/403 视为密钥无效，返回延迟 / HTTP 状态 / 错误信息。
     /// 表单传入的地址/密钥实时生效（传了就用传的，空的直接报错）；
     /// 不传才回退已保存值（卡片上的测试按钮走这条）。
