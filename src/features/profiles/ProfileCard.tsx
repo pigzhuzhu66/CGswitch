@@ -140,7 +140,7 @@ export default function ProfileCard({
         <ProfileIconTile name={profile.name} icon={profile.icon} />
         <div className="min-w-0 flex-1">
           <div className="flex min-h-7 items-center gap-2">
-            <h3 className="title-md cursor-pointer truncate leading-normal transition-colors hover:text-accent" title="点击重命名" onClick={(event) => { event.stopPropagation(); onRename(); }}>{profile.name}</h3>
+            <h3 className="title-md cursor-pointer truncate leading-normal transition-colors hover:text-accent group-hover:text-accent" title="点击重命名" onClick={(event) => { event.stopPropagation(); onRename(); }}>{profile.name}</h3>
             {!profile.provider ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${subscriptionAuthed ? "bg-accent/10 text-accent" : "bg-black/5 muted dark:bg-white/6"}`} title={subscriptionTitle} aria-label={subscriptionTitle}>
               {subscriptionSourceKind === "desktop" ? <Monitor className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" /> : <KeyRound className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />}
             </span> : null}
