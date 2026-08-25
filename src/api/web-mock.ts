@@ -725,10 +725,10 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         return { is_available: true, balance_infos: [webChatgptQuota], latency_ms: 210 } as T;
       }
       if (!balanceQueryProviders.has(profile.provider ?? "")) {
-        throw new Error("该供应商不支持余额查询");
+        throw new Error("该供应商不支持余额/用量查询");
       }
       await new Promise((resolve) => setTimeout(resolve, 400));
-      if (profile.provider === "minimax") {
+      if (profile.provider === "minimax" || profile.provider === "ZAI") {
         return {
           is_available: true,
           balance_infos: [
@@ -739,8 +739,10 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
               topped_up_balance: "",
               usage_percent: 15,
               usage_reset: "2h23m",
+              usage_label: "5小时",
               weekly_usage_percent: 4,
               weekly_reset: "5d21h",
+              weekly_label: "7天",
             },
           ],
           latency_ms: 210,

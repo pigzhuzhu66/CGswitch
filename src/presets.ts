@@ -11,7 +11,10 @@ export interface BuiltinPreset {
 }
 
 /** 支持余额/用量查询的供应商（以 provider_id 键控）；加供应商时在这里加一行即可 */
-export const balanceQueryProviders = new Set(["deepseek", "minimax"]);
+export const balanceQueryProviders = new Set(["deepseek", "minimax", "ZAI"]);
+
+/** 文案使用“用量”的供应商；DeepSeek 保持“余额”，ChatGPT 额度单独处理。 */
+export const usageQueryProviders = new Set(["minimax", "ZAI"]);
 
 /** 余额/用量胶囊变色（已用 <70% 绿 / 70-89% 橙 / ≥90% 红；负余额红色） */
 export function balanceChipClass(

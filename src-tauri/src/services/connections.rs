@@ -38,6 +38,19 @@ struct MiniMaxRemainsResponse {
     model_remains: Vec<MiniMaxModelRemains>,
 }
 
+#[derive(Clone, Copy)]
+enum BalanceAuth {
+    Bearer,
+    Raw,
+}
+
+struct ZhipuQuotaWindow {
+    used_percent: u32,
+    reset: Option<String>,
+    reset_at: Option<i64>,
+    unit: Option<i64>,
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ChatgptUsageResponse {
     pub(crate) rate_limit: Option<ChatgptRateLimit>,
@@ -190,17 +203,29 @@ async fn test_opencode_connection(
     }
 }
 
-/// 余额/用量请求公共骨架：统一处理 401/403、错误提取与网络错误；
-/// 各家只提供 URL 和成功响应的解析。
+/// 余额/用量请求公共骨架：统一处理鉴权、401/403、错误提取与网络错误；
+/// 各家只提供 URL、鉴权方式和成功响应的解析。
 async fn query_balance_endpoint(
     client: &reqwest::Client,
     url: &str,
     api_key: &str,
     start: std::time::Instant,
     label: &str,
+    auth: BalanceAuth,
     parse: impl FnOnce(String, Option<u128>) -> AppResult<ProfileBalance>,
 ) -> AppResult<ProfileBalance> {
-    let response = client.get(url).bearer_auth(api_key).send().await;
+    let request = client.get(url);
+    let response = match auth {
+        BalanceAuth::Bearer => request.bearer_auth(api_key).send().await,
+        BalanceAuth::Raw => {
+            request
+                .header("Authorization", api_key)
+                .header("Accept-Language", "en-US,en")
+                .header("Content-Type", "application/json")
+                .send()
+                .await
+        }
+    };
     match response {
         Ok(response) => {
             let status = response.status();
@@ -252,6 +277,7 @@ async fn query_deepseek_balance(
         api_key,
         start,
         "余额",
+        BalanceAuth::Bearer,
         |body, latency_ms| {
             let parsed = serde_json::from_str::<DeepSeekBalanceResponse>(&body)
                 .map_err(|error| app_err!("余额接口响应解析失败: {error}"))?;
@@ -378,6 +404,7 @@ async fn query_minimax_balance(
         api_key,
         start,
         "用量",
+        BalanceAuth::Bearer,
         |body, latency_ms| {
             let parsed = serde_json::from_str::<MiniMaxRemainsResponse>(&body)
                 .map_err(|error| app_err!("用量接口响应解析失败: {error}"))?;
@@ -412,6 +439,122 @@ async fn query_minimax_balance(
                     weekly_reset_at: None,
                     weekly_label: None,
                 }],
+                latency_ms,
+            })
+        },
+    )
+    .await
+}
+
+fn zhipu_number(value: &serde_json::Value, key: &str) -> Option<f64> {
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_f64)
+        .or_else(|| value.get(key)?.as_str()?.parse().ok())
+}
+
+fn zhipu_integer(value: &serde_json::Value, key: &str) -> Option<i64> {
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_i64)
+        .or_else(|| value.get(key)?.as_str()?.parse().ok())
+}
+
+/// 智谱 GLM Coding Plan 配额响应：TOKENS_LIMIT 包含 5 小时和 7 天窗口。
+pub(crate) fn zhipu_quota_info(
+    value: &serde_json::Value,
+    now_ms: i64,
+) -> AppResult<ProfileBalanceInfo> {
+    let limits = value
+        .get("data")
+        .and_then(|data| data.get("limits"))
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| app_err!("用量查询失败：接口未返回限额数据"))?;
+    let windows = limits
+        .iter()
+        .filter(|limit| {
+            limit.get("type").and_then(serde_json::Value::as_str) == Some("TOKENS_LIMIT")
+        })
+        .filter_map(|limit| {
+            let used_percent = zhipu_number(limit, "percentage")?.clamp(0.0, 100.0).round() as u32;
+            let reset_at = zhipu_integer(limit, "nextResetTime").filter(|value| *value > 0);
+            let remaining_ms = reset_at.map(|value| value.saturating_sub(now_ms));
+            let unit = zhipu_integer(limit, "unit");
+            Some(ZhipuQuotaWindow {
+                used_percent,
+                reset: remaining_ms
+                    .and_then(|ms| format_reset(ms, unit == Some(6) || ms > 86_400_000)),
+                reset_at,
+                unit,
+            })
+        })
+        .collect::<Vec<_>>();
+    let primary = windows
+        .iter()
+        .find(|window| window.unit == Some(3))
+        .ok_or_else(|| app_err!("用量查询失败：接口未返回 5 小时窗口"))?;
+    let weekly = windows.iter().find(|window| window.unit == Some(6));
+
+    Ok(ProfileBalanceInfo {
+        currency: String::new(),
+        total_balance: String::new(),
+        granted_balance: String::new(),
+        topped_up_balance: String::new(),
+        usage_percent: Some(primary.used_percent),
+        usage_reset: primary.reset.clone(),
+        usage_reset_at: primary.reset_at,
+        usage_label: Some("5小时".to_string()),
+        weekly_usage_percent: weekly.map(|window| window.used_percent),
+        weekly_reset: weekly.and_then(|window| window.reset.clone()),
+        weekly_reset_at: weekly.and_then(|window| window.reset_at),
+        weekly_label: weekly.map(|_| "7天".to_string()),
+    })
+}
+
+fn provider_origin(base: &str) -> AppResult<String> {
+    let base = base.trim().trim_end_matches('/');
+    let authority_start = base
+        .find("://")
+        .map(|index| index + 3)
+        .ok_or_else(|| app_err!("用量查询失败：供应商调用地址无效"))?;
+    let origin_end = base[authority_start..]
+        .find('/')
+        .map(|index| authority_start + index)
+        .unwrap_or(base.len());
+    let origin = &base[..origin_end];
+    if !origin.starts_with("http://") && !origin.starts_with("https://") {
+        return Err(app_err!("用量查询失败：供应商调用地址无效"));
+    }
+    Ok(origin.to_string())
+}
+
+/// 智谱 GLM Coding Plan 用量查询：GET {origin}/api/monitor/usage/quota/limit。
+/// 鉴权值直接使用供应商配置中的 experimental_bearer_token，保持官方插件的请求格式。
+async fn query_zhipu_usage(
+    client: &reqwest::Client,
+    base: &str,
+    api_key: &str,
+    start: std::time::Instant,
+) -> AppResult<ProfileBalance> {
+    let url = format!("{}/api/monitor/usage/quota/limit", provider_origin(base)?);
+    query_balance_endpoint(
+        client,
+        &url,
+        api_key,
+        start,
+        "用量",
+        BalanceAuth::Raw,
+        |body, latency_ms| {
+            let value = serde_json::from_str::<serde_json::Value>(&body)
+                .map_err(|error| app_err!("用量接口响应解析失败: {error}"))?;
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            let info = zhipu_quota_info(&value, now_ms)?;
+            Ok(ProfileBalance {
+                is_available: true,
+                balance_infos: vec![info],
                 latency_ms,
             })
         },
@@ -745,7 +888,7 @@ impl AppContext {
             return query_chatgpt_quota(&access_token, account_id.as_deref()).await;
         }
         let provider = payload.provider_id.as_deref().unwrap_or_default();
-        if provider != "deepseek" && provider != "minimax" {
+        if provider != "deepseek" && provider != "minimax" && provider != "ZAI" {
             return Err(app_err!("该供应商不支持余额/用量查询"));
         }
         let body = payload
@@ -775,6 +918,15 @@ impl AppContext {
                 query_minimax_balance(
                     &client,
                     base.unwrap_or("https://api.minimaxi.com/v1"),
+                    &api_key,
+                    start,
+                )
+                .await
+            }
+            "ZAI" => {
+                query_zhipu_usage(
+                    &client,
+                    base.unwrap_or("https://open.bigmodel.cn/api/v1"),
                     &api_key,
                     start,
                 )

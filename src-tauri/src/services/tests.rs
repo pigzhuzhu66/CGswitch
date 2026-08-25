@@ -979,11 +979,11 @@ async fn balance_rejects_unsupported_or_keyless() {
     let oauth = crate::auth::codex_oauth::CodexOAuthManager::new(context.database.clone());
 
     // 不支持余额/用量查询的供应商拒绝
-    let zhipu = context
-        .add_builtin_profile("zhipu", None, Some("zai-key"), None, None)
+    let unsupported = context
+        .add_builtin_profile("opencode", None, Some("opencode-key"), None, None)
         .unwrap();
     let error = context
-        .get_profile_balance(&zhipu.id, &oauth)
+        .get_profile_balance(&unsupported.id, &oauth)
         .await
         .unwrap_err();
     assert!(error.0.contains("该供应商不支持余额/用量查询"));
@@ -1063,6 +1063,37 @@ fn minimax_remains_converts_remaining_to_used_percent() {
         connections::used_percent(empty.current_interval_remaining_percent),
         None
     );
+}
+
+#[test]
+fn zhipu_quota_maps_rolling_windows_to_usage() {
+    let now_ms = 1_800_000_000_000_i64;
+    let value = serde_json::json!({
+        "data": {
+            "limits": [
+                {
+                    "type": "TOKENS_LIMIT",
+                    "percentage": 32.4,
+                    "nextResetTime": now_ms + 8_580_000,
+                    "unit": 3
+                },
+                {
+                    "type": "TOKENS_LIMIT",
+                    "percentage": 44.6,
+                    "nextResetTime": now_ms + 507_600_000,
+                    "unit": 6
+                }
+            ]
+        }
+    });
+    let info = connections::zhipu_quota_info(&value, now_ms).unwrap();
+
+    assert_eq!(info.usage_percent, Some(32));
+    assert_eq!(info.usage_label.as_deref(), Some("5小时"));
+    assert_eq!(info.usage_reset.as_deref(), Some("2h23m"));
+    assert_eq!(info.weekly_usage_percent, Some(45));
+    assert_eq!(info.weekly_label.as_deref(), Some("7天"));
+    assert_eq!(info.weekly_reset.as_deref(), Some("5d21h"));
 }
 
 #[test]

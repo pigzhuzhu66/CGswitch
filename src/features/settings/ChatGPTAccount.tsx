@@ -55,14 +55,17 @@ function AccountQuota({ source, accountId, cachedBalance }: { source: "desktop" 
     try {
       const result = await api.authGetQuota(source, accountId);
       const info = result.balance_infos[0];
-      if (info) {
-        setQuota(info);
-        authQuotaCache.set(cacheKey, info);
-        // 复用现有持久化余额缓存，只用 auth 命名空间隔离账号。
-        void api.setProfileBalance(cacheKey, info);
-      }
+      if (!info) throw new Error("额度查询未返回数据");
+      setQuota(info);
+      authQuotaCache.set(cacheKey, info);
+      // 复用现有持久化余额缓存，只用 auth 命名空间隔离账号。
+      void api.setProfileBalance(cacheKey, info);
       setError("");
-    } catch (cause) { setError(String(cause)); }
+    } catch (cause) {
+      setQuota(null);
+      authQuotaCache.delete(cacheKey);
+      setError(String(cause));
+    }
     finally { setLoading(false); }
   };
 
@@ -76,7 +79,7 @@ function AccountQuota({ source, accountId, cachedBalance }: { source: "desktop" 
   const primaryLabel = quota?.usage_label ?? "额度";
   const weeklyLabel = quota?.weekly_label ?? "周期";
 
-  return <div className="mt-3 border-t border-[var(--panel-divider)] pt-2">{quota?.usage_percent != null ? <div className="space-y-2"><QuotaProgressBar label={primaryLabel} usedPercent={quota.usage_percent} resetAt={quota.usage_reset_at} onRefresh={() => void refresh()} loading={loading} />{quota.weekly_usage_percent != null ? <QuotaProgressBar label={weeklyLabel} usedPercent={quota.weekly_usage_percent} resetAt={quota.weekly_reset_at} /> : null}</div> : <p className={`mt-1 text-xs ${error ? "text-[var(--danger)]" : "muted"}`}>{error ? `额度查询失败：${error}` : "正在查询额度…"}</p>}</div>;
+  return <div className="mt-3 border-t border-[var(--panel-divider)] pt-2">{quota?.usage_percent != null ? <div className="space-y-2"><QuotaProgressBar label={primaryLabel} usedPercent={quota.usage_percent} resetAt={quota.usage_reset_at} onRefresh={() => void refresh()} loading={loading} />{quota.weekly_usage_percent != null ? <QuotaProgressBar label={weeklyLabel} usedPercent={quota.weekly_usage_percent} resetAt={quota.weekly_reset_at} /> : null}</div> : <p className={`mt-1 text-xs ${error ? "text-[var(--danger)]" : "muted"}`}>{error ? "额度查询失败" : "正在查询额度…"}</p>}</div>;
 }
 
 export default function ChatGPTAccount({ initialStatus, balanceCache }: { initialStatus: AuthStatus; balanceCache?: Record<string, ProfileBalanceInfo> }) {
