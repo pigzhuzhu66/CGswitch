@@ -1,10 +1,11 @@
-import { Database, DatabaseBackup, Download, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, Save, Sun, Upload } from "lucide-react";
+import { Database, DatabaseBackup, Download, ExternalLink, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, Save, Sun, Upload } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { api, isTauri } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { AppDialog } from "../../components/AppDialog";
 import { AppDisclosure } from "../../components/AppDisclosure";
+import { GithubMark } from "../../components/GithubMark";
 import { AppSelect } from "../../components/AppSelect";
 import { AppSwitch } from "../../components/AppSwitch";
 import { TrashIcon } from "../../components/TrashIcon";
@@ -154,5 +155,45 @@ export function SettingsAdvanced({ form, onPatch, paths, backupsEpoch, onOpenPat
 interface SettingsAboutProps { paths: PathInfo[]; onOpenPath: (item: PathInfo) => void; openingPath: string | null; }
 
 export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutProps) {
-  return <div className="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]"><div className="flex items-center gap-3"><img src="/logo.svg" alt="CGswitch" className="h-12 w-12 shrink-0 dark:invert" /><div><div className="apple-wordmark">CGswitch</div><div className="app-version mt-1.5">版本 {version.trim()}</div></div></div><hr className="my-4 border-0 border-t border-[var(--panel-divider)]" /><h2 className="setting-title">数据与路径</h2><p className="setting-description mt-1.5">常用数据位置，点击文件夹图标即可打开。</p><div className="mt-4 grid gap-2 sm:grid-cols-3">{paths.map((item) => <div key={item.label} className="flex min-w-0 items-center justify-between gap-3 rounded-[var(--radius-control-sm)] border border-[var(--panel-ring)] px-3 py-2.5"><div className="min-w-0"><div className="text-sm font-medium">{item.label}</div><div className="mono muted meta-xs mt-0.5 truncate" title={item.path}>{item.path}</div></div><button type="button" className="apple-icon-button shrink-0 text-[var(--text-secondary)] hover:text-accent disabled:opacity-40" disabled={Boolean(openingPath)} title={`打开${item.label}`} onClick={() => onOpenPath(item)}>{openingPath === item.path ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={2} /> : <FolderOpen className="h-4 w-4" strokeWidth={2} />}</button></div>)}</div></div>;
+  const feedback = useFeedback();
+  const openRepository = () => void api.openUrl("https://github.com/zeno528/CGSwitch").catch((error) => feedback.error(String(error)));
+
+  return (
+    <div className="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
+      <div className="flex items-center gap-3">
+        <img src="/logo.svg" alt="CGswitch" className="h-12 w-12 shrink-0 dark:invert" />
+        <div>
+          <div className="apple-wordmark">CGswitch</div>
+          <div className="app-version mt-1.5">版本 {version.trim()}</div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" className="apple-list-row min-w-0 flex-1 basis-48 cursor-pointer text-left transition-colors hover:bg-(--profile-chip-bg)" title="打开 GitHub 项目仓库" onClick={openRepository}>
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
+              <GithubMark className="h-[18px] w-[18px]" />
+            </span>
+            <span className="setting-title">GitHub</span>
+          </span>
+          <ExternalLink className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" strokeWidth={2} aria-hidden="true" />
+        </button>
+      </div>
+      <hr className="my-4 border-0 border-t border-[var(--panel-divider)]" />
+      <h2 className="setting-title">数据与路径</h2>
+      <p className="setting-description mt-1.5">常用数据位置，点击文件夹图标即可打开。</p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        {paths.map((item) => (
+          <div key={item.label} className="flex min-w-0 items-center justify-between gap-3 rounded-[var(--radius-control-sm)] border border-[var(--panel-ring)] px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{item.label}</div>
+              <div className="mono muted meta-xs mt-0.5 truncate" title={item.path}>{item.path}</div>
+            </div>
+            <button type="button" className="apple-icon-button shrink-0 text-[var(--text-secondary)] hover:text-accent disabled:opacity-40" disabled={Boolean(openingPath)} title={`打开${item.label}`} onClick={() => onOpenPath(item)}>
+              {openingPath === item.path ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={2} /> : <FolderOpen className="h-4 w-4" strokeWidth={2} />}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
