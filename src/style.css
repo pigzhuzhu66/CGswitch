@@ -519,6 +519,19 @@ main:has(.apple-scroll-page) {
 
 /* 拖拽跟手卡片（DragOverlay 克隆）：实底抬升、不透明，避免重影；
    scale 用独立属性不干扰 transform */
+@keyframes profile-drag-lift {
+  from {
+    opacity: 0.84;
+    scale: 1;
+    box-shadow: 0 0 0 1px var(--panel-ring);
+  }
+  to {
+    opacity: 1;
+    scale: 1.02;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  }
+}
+
 .drag-dragging {
   background: var(--panel-bg);
   border-radius: 12px;
@@ -526,6 +539,7 @@ main:has(.apple-scroll-page) {
   opacity: 1;
   scale: 1.02;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  animation: profile-drag-lift 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
   z-index: 10;
 }
 
@@ -560,6 +574,16 @@ body.drag-active,
 body.drag-active * {
   user-select: none !important;
   -webkit-user-select: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-list > .apple-group {
+    transition: none;
+  }
+
+  .drag-dragging {
+    animation: none;
+  }
 }
 
 .apple-sidebar-label {
@@ -929,27 +953,30 @@ body.drag-active * {
 }
 
 .profile-list > .apple-group.is-active {
-  box-shadow:
-    0 0 0 1px var(--panel-ring),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: none;
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.profile-list > .apple-group:not(.is-active):hover {
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .profile-drag-preview.is-active {
   box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.2),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+    0 12px 32px rgba(0, 0, 0, 0.2);
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 :root.dark .profile-list > .apple-group.is-active {
-  box-shadow:
-    0 0 0 1px var(--panel-ring),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent);
+  outline-color: color-mix(in srgb, var(--accent) 75%, transparent);
+}
+
+:root.dark .profile-list > .apple-group:not(.is-active):hover {
+  outline-color: color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
 :root.dark .profile-drag-preview.is-active {
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.2),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent);
+  outline-color: color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
 .apple-segmented-control { background: var(--input-bg); }

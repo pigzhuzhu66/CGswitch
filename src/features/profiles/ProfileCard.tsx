@@ -74,7 +74,7 @@ export function ProfileCardContent({
       <ProfileIconTile name={profile.name} icon={profile.icon} />
       <div className="profile-card-content__text min-w-0 flex-1">
         <div className="flex min-h-7 items-center gap-2">
-          <h3 className="title-md cursor-pointer truncate leading-normal transition-colors hover:text-accent group-hover:text-accent" title="点击重命名" onClick={(event) => { event.stopPropagation(); onRename?.(); }}>{profile.name}</h3>
+          <h3 className="title-md cursor-pointer truncate leading-normal transition-colors hover:text-accent" title="点击重命名" onClick={(event) => { event.stopPropagation(); onRename?.(); }}>{profile.name}</h3>
           {!profile.provider ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${subscriptionAuthed ? "bg-accent/10 text-accent" : "bg-black/5 muted dark:bg-white/6"}`} title={authTitle} aria-label={authTitle}>
             {authSource === "desktop" ? <Monitor className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" /> : <KeyRound className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />}
           </span> : null}
@@ -203,7 +203,7 @@ export default function ProfileCard({
     }
     if (profile.provider && !profile.has_key) {
       setConnectionState("fail");
-      feedback.warning(`「${profile.name}」还没有配置 API 密钥，请先填写后再测试`);
+      feedback.warning("还没有配置 API 密钥，请先填写后再测试");
       return;
     }
     setTesting(true);
@@ -211,14 +211,14 @@ export default function ProfileCard({
       const result = await api.testProfileConnection(profile.id);
       if (result.ok) {
         setConnectionState("ok");
-        feedback.success(`「${profile.name}」连接正常${result.latency_ms != null ? ` · ${result.latency_ms}ms` : ""}`);
+        feedback.success(`连接正常${result.latency_ms != null ? ` · ${result.latency_ms}ms` : ""}`);
       } else {
         setConnectionState("fail");
-        feedback.error(`「${profile.name}」连接失败：${result.error ?? "未知错误"}`);
+        feedback.error(`连接失败：${result.error ?? "未知错误"}`);
       }
     } catch (error) {
       setConnectionState("fail");
-      feedback.error(`「${profile.name}」测试失败：${String(error)}`);
+      feedback.error(`测试失败：${String(error)}`);
     } finally {
       setTesting(false);
     }
@@ -230,7 +230,7 @@ export default function ProfileCard({
       data-draggable
       data-profile-id={profile.id}
       style={style}
-      className={`apple-group${active ? " is-active" : ""}${dragHover ? " is-drag-hover" : ""} group flex cursor-pointer select-none flex-col gap-4 px-5 py-4.5 sm:flex-row sm:items-center sm:justify-between ${sortable.isDragging ? "invisible" : ""}`}
+      className={`apple-group${active ? " is-active" : ""}${dragHover ? " is-drag-hover" : ""} group flex cursor-pointer select-none flex-col gap-4 px-5 py-4.5 transition-opacity duration-150 sm:flex-row sm:items-center sm:justify-between ${sortable.isDragging ? "pointer-events-none opacity-0" : "opacity-100"}`}
       title="单击编辑"
       onClick={onEdit}
     >

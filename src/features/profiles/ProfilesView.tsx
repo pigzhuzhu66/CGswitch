@@ -1,4 +1,4 @@
-import { Camera, Plus, RefreshCw, Server } from "lucide-react";
+import { Camera, GripVertical, Plus, RefreshCw, Server } from "lucide-react";
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useEffect, useRef, useState } from "react";
@@ -24,6 +24,9 @@ function ProfileDragPreview({ profile, width, height, active, busy, subscription
   const connectionTitle = !profile.provider ? subscriptionAuthed ? "测试订阅认证连通性" : "尚未认证 ChatGPT 订阅" : !profile.has_key ? "缺少 API 密钥，点击查看提示" : "测试连通性";
   return (
     <div className={`drag-dragging apple-group profile-drag-preview group flex cursor-pointer select-none flex-col gap-4 px-5 py-4.5 sm:flex-row sm:items-center sm:justify-between ${stateClass}`} style={{ width: width ? `${width}px` : undefined, height: height ? `${height}px` : undefined }}>
+      <span className="drag-handle -ml-5 -mr-4 grid shrink-0 cursor-grabbing place-items-center self-center rounded-md py-1 pl-3 pr-3 muted sm:self-stretch" aria-hidden="true">
+        <GripVertical className="h-4 w-4" strokeWidth={2} />
+      </span>
       <ProfileCardContent
         profile={profile}
         subscriptionAuthed={subscriptionAuthed}
@@ -203,7 +206,7 @@ export default function ProfilesView({ state, activationEpoch, onRefresh, onMana
   const duplicateProfile = async (profile: ProfileSummary) => {
     if (busy || duplicatingProfileRef.current) return;
     duplicatingProfileRef.current = true;
-    try { const copy = await api.duplicateProfile(profile.id); feedback.success(`已复制为「${copy.name}」`); await onRefresh(); }
+    try { await api.duplicateProfile(profile.id); feedback.success("供应商已复制"); await onRefresh(); }
     catch (error) { feedback.error(String(error)); }
     finally { duplicatingProfileRef.current = false; }
   };

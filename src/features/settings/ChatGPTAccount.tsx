@@ -21,11 +21,51 @@ function quotaTitle(label: string) {
   return label === "7天" ? "每周使用限额" : `${label}使用限额`;
 }
 
-function QuotaProgressBar({ label, usedPercent, resetAt, onRefresh, loading }: { label: string; usedPercent: number; resetAt?: number | null; onRefresh?: () => void; loading?: boolean }) {
+function remainingPercent(usedPercent: number) {
+  return 100 - Math.min(100, Math.max(0, usedPercent));
+}
+
+const quotaProgressAnimationDuration = 1000;
+
+// Match ECharts' default first-render bar animation exactly.
+function cubicInOut(value: number) {
+  const doubled = value * 2;
+  if (doubled < 1) return 0.5 * doubled * doubled * doubled;
+  const shifted = doubled - 2;
+  return 0.5 * (shifted * shifted * shifted + 2);
+}
+
+function QuotaProgressBar({ label, usedPercent, resetAt, onRefresh, loading, animationRevision, animationFromRemaining }: { label: string; usedPercent: number; resetAt?: number | null; onRefresh?: () => void; loading?: boolean; animationRevision: number; animationFromRemaining?: number }) {
   const used = Math.min(100, Math.max(0, usedPercent));
-  const remaining = 100 - used;
+  const remaining = remainingPercent(usedPercent);
+  const animationStart = animationFromRemaining ?? 0;
+  const animationMax = Math.max(animationStart, remaining);
+  const animationStartScale = animationMax === 0 ? 1 : animationStart / animationMax;
+  const animationEndScale = animationMax === 0 ? 1 : remaining / animationMax;
   const fillClass = used >= 90 ? "bg-(--danger)" : used >= 70 ? "bg-(--warning)" : "bg-(--chip-success)";
   const reset = formatQuotaReset(resetAt);
+  const fillRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const fill = fillRef.current;
+    if (!fill || animationRevision === 0) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      fill.style.transform = `scaleX(${animationEndScale})`;
+      return;
+    }
+
+    const startedAt = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / quotaProgressAnimationDuration);
+      const current = animationStart + (remaining - animationStart) * cubicInOut(progress);
+      fill.style.transform = `scaleX(${animationMax === 0 ? 1 : current / animationMax})`;
+      if (progress < 1) frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [animationRevision]);
+
   return <div className="grid min-w-0 grid-cols-1 items-center gap-2 text-xs sm:grid-cols-[14rem_minmax(0,1fr)_auto] sm:gap-6">
     <div className="min-w-0">
       <div className="flex items-center gap-2">
@@ -36,7 +76,7 @@ function QuotaProgressBar({ label, usedPercent, resetAt, onRefresh, loading }: {
     </div>
     <div className="flex min-w-0 items-center">
       <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-black/6 dark:bg-white/8" role="progressbar" aria-label={`${quotaTitle(label)}剩余`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={remaining}>
-        <span className={`block h-full rounded-full transition-[width] duration-300 ${fillClass}`} style={{ width: `${remaining}%` }} />
+        <span ref={fillRef} key={animationRevision} className={`origin-left block h-full rounded-full ${fillClass}`} style={{ width: `${animationRevision ? animationMax : remaining}%`, transform: animationRevision ? `scaleX(${animationStartScale})` : undefined }} />
       </div>
     </div>
     <span className="meta-xs shrink-0 whitespace-nowrap">剩余 <span className={`font-semibold ${balanceChipClass(used, false)}`}>{remaining}%</span></span>
@@ -48,29 +88,44 @@ function AccountQuota({ source, accountId, cachedBalance }: { source: "desktop" 
   const [quota, setQuota] = useState<ProfileBalanceInfo | null>(() => authQuotaCache.get(cacheKey) ?? cachedBalance ?? null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [animationRevision, setAnimationRevision] = useState(0);
+  const [animationFromQuota, setAnimationFromQuota] = useState<ProfileBalanceInfo | null>(null);
+  const displayedQuotaRef = useRef(quota);
+  const loadingRef = useRef(false);
 
   const refresh = async () => {
-    if (loading) return;
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     try {
       const result = await api.authGetQuota(source, accountId);
       const info = result.balance_infos[0];
       if (!info) throw new Error("额度查询未返回数据");
+      const previousQuota = displayedQuotaRef.current;
+      displayedQuotaRef.current = info;
+      setAnimationFromQuota(previousQuota);
       setQuota(info);
+      setAnimationRevision((revision) => revision + 1);
       authQuotaCache.set(cacheKey, info);
       // 复用现有持久化余额缓存，只用 auth 命名空间隔离账号。
       void api.setProfileBalance(cacheKey, info);
       setError("");
     } catch (cause) {
+      displayedQuotaRef.current = null;
       setQuota(null);
       authQuotaCache.delete(cacheKey);
       setError(String(cause));
     }
-    finally { setLoading(false); }
+    finally {
+      loadingRef.current = false;
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    setQuota(authQuotaCache.get(cacheKey) ?? cachedBalance ?? null);
+    const nextQuota = authQuotaCache.get(cacheKey) ?? cachedBalance ?? null;
+    displayedQuotaRef.current = nextQuota;
+    setQuota(nextQuota);
     void refresh();
     // Cache identity changes are the only reload trigger; refresh keeps the latest value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,7 +134,7 @@ function AccountQuota({ source, accountId, cachedBalance }: { source: "desktop" 
   const primaryLabel = quota?.usage_label ?? "额度";
   const weeklyLabel = quota?.weekly_label ?? "周期";
 
-  return <div className="mt-3 border-t border-[var(--panel-divider)] pt-2">{quota?.usage_percent != null ? <div className="space-y-2"><QuotaProgressBar label={primaryLabel} usedPercent={quota.usage_percent} resetAt={quota.usage_reset_at} onRefresh={() => void refresh()} loading={loading} />{quota.weekly_usage_percent != null ? <QuotaProgressBar label={weeklyLabel} usedPercent={quota.weekly_usage_percent} resetAt={quota.weekly_reset_at} /> : null}</div> : <p className={`mt-1 text-xs ${error ? "text-[var(--danger)]" : "muted"}`}>{error ? "额度查询失败" : "正在查询额度…"}</p>}</div>;
+  return <div className="mt-3 border-t border-[var(--panel-divider)] pt-2">{quota?.usage_percent != null ? <div className="space-y-2"><QuotaProgressBar label={primaryLabel} usedPercent={quota.usage_percent} resetAt={quota.usage_reset_at} onRefresh={() => void refresh()} loading={loading} animationRevision={animationRevision} animationFromRemaining={animationFromQuota?.usage_percent == null ? undefined : remainingPercent(animationFromQuota.usage_percent)} />{quota.weekly_usage_percent != null ? <QuotaProgressBar label={weeklyLabel} usedPercent={quota.weekly_usage_percent} resetAt={quota.weekly_reset_at} animationRevision={animationRevision} animationFromRemaining={animationFromQuota?.weekly_usage_percent == null ? undefined : remainingPercent(animationFromQuota.weekly_usage_percent)} /> : null}</div> : <p className={`mt-1 text-xs ${error ? "text-[var(--danger)]" : "muted"}`}>{error ? "额度查询失败" : "正在查询额度…"}</p>}</div>;
 }
 
 export default function ChatGPTAccount({ initialStatus, balanceCache }: { initialStatus: AuthStatus; balanceCache?: Record<string, ProfileBalanceInfo> }) {
