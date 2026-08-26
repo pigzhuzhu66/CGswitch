@@ -12,9 +12,10 @@ const LABELS: Record<string, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   opencode: "OpenCode",
+  openrouter: "OpenRouter",
 };
 
-const THEME_INVERTED_IDS = new Set(["openai-chatgpt", "opencode", "xiaomi-mimo"]);
+const THEME_INVERTED_IDS = new Set(["openai-chatgpt", "opencode", "xiaomi-mimo", "openrouter"]);
 
 export interface ProviderIcon {
   id: string;

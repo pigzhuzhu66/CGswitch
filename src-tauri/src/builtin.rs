@@ -5,6 +5,7 @@ pub const KIND_MINIMAX: &str = "minimax";
 pub const KIND_ZHIPU: &str = "zhipu";
 pub const KIND_CHATGPT: &str = "chatgpt";
 pub const KIND_OPENCODE: &str = "opencode";
+pub const KIND_OPENROUTER: &str = "openrouter";
 
 pub const DEEPSEEK_CONFIG: &[u8] = include_bytes!("../assets/builtin/deepseek.toml");
 pub const DEEPSEEK_MODELS: &[u8] = include_bytes!("../assets/builtin/deepseek-models.json");
@@ -15,6 +16,7 @@ pub const ZHIPU_MODELS: &[u8] = include_bytes!("../assets/builtin/zhipu-models.j
 pub const CHATGPT_CONFIG: &[u8] = include_bytes!("../assets/builtin/chatgpt.toml");
 pub const OPENCODE_CONFIG: &[u8] = include_bytes!("../assets/builtin/opencode.toml");
 pub const OPENCODE_MODELS: &[u8] = include_bytes!("../assets/builtin/opencode-models.json");
+pub const OPENROUTER_CONFIG: &[u8] = include_bytes!("../assets/builtin/openrouter.toml");
 
 pub struct BuiltinTemplate {
     pub kind: &'static str,
@@ -30,7 +32,7 @@ pub struct BuiltinTemplate {
     pub insert_catalog_line: bool,
 }
 
-pub const BUILTINS: [BuiltinTemplate; 5] = [
+pub const BUILTINS: [BuiltinTemplate; 6] = [
     BuiltinTemplate {
         kind: KIND_DEEPSEEK,
         name: "DeepSeek",
@@ -78,6 +80,19 @@ pub const BUILTINS: [BuiltinTemplate; 5] = [
         config: OPENCODE_CONFIG,
         placeholder: Some("<你的 OpenCode API Key>".as_bytes()),
         catalog: Some(("models.json", OPENCODE_MODELS)),
+        insert_catalog_line: false,
+    },
+    // OpenRouter 官方支持 OpenAI 兼容 Responses API（有官方 Codex CLI 接入教程）。
+    // 其 Responses 为纯无状态，store:true 会被 400 拒绝，因此必须
+    // disable_response_storage。模型 slug 需带厂商前缀；聚合站模型众多，
+    // 不带静态目录，由编辑页"获取模型列表"（/api/v1/models）拉取
+    BuiltinTemplate {
+        kind: KIND_OPENROUTER,
+        name: "OpenRouter",
+        icon: "openrouter",
+        config: OPENROUTER_CONFIG,
+        placeholder: Some("<你的 OpenRouter API Key>".as_bytes()),
+        catalog: None,
         insert_catalog_line: false,
     },
 ];
@@ -157,6 +172,10 @@ mod tests {
         assert_eq!(
             OPENCODE_CONFIG,
             b"model = \"glm-5.2\"\nmodel_provider = \"opencode-go\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\nmodel_catalog_json = \"~/.codex/models.json\"\n\n[model_providers.opencode-go]\nname = \"OpenCode Go\"\nbase_url = \"https://opencode.ai/zen/go/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 OpenCode API Key>\""
+        );
+        assert_eq!(
+            OPENROUTER_CONFIG,
+            b"model = \"openai/gpt-5.6-sol\"\nmodel_provider = \"openrouter\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.openrouter]\nname = \"OpenRouter\"\nbase_url = \"https://openrouter.ai/api/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 OpenRouter API Key>\""
         );
     }
 

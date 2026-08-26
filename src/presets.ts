@@ -198,6 +198,32 @@ export const builtinPresets: BuiltinPreset[] = [
     ].join("\n"),
   },
   {
+    kind: "openrouter",
+    name: "OpenRouter",
+    provider: "openrouter",
+    icon: "openrouter",
+    base_url: "https://openrouter.ai/api/v1",
+    admin_url: "https://openrouter.ai/settings/keys",
+    model: "openai/gpt-5.6-sol",
+    // 聚合站模型众多，无静态目录；模型由编辑页"获取模型列表"拉取（slug 需带厂商前缀）
+    model_values: {
+      model: '"openai/gpt-5.6-sol"',
+      model_reasoning_effort: '"high"',
+    },
+    fragment: [
+      'model = "openai/gpt-5.6-sol"',
+      'model_provider = "openrouter"',
+      'model_reasoning_effort = "high"',
+      "disable_response_storage = true",
+      "",
+      "[model_providers.openrouter]",
+      'name = "OpenRouter"',
+      'base_url = "https://openrouter.ai/api/v1"',
+      'wire_api = "responses"',
+      'experimental_bearer_token = "<你的 OpenRouter API Key>"',
+    ].join("\n"),
+  },
+  {
     kind: "custom",
     name: "自定义",
     provider: null,
