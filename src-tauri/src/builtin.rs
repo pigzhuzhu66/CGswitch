@@ -6,6 +6,7 @@ pub const KIND_ZHIPU: &str = "zhipu";
 pub const KIND_CHATGPT: &str = "chatgpt";
 pub const KIND_OPENCODE: &str = "opencode";
 pub const KIND_OPENROUTER: &str = "openrouter";
+pub const KIND_MIMO: &str = "mimo";
 
 pub const DEEPSEEK_CONFIG: &[u8] = include_bytes!("../assets/builtin/deepseek.toml");
 pub const DEEPSEEK_MODELS: &[u8] = include_bytes!("../assets/builtin/deepseek-models.json");
@@ -17,6 +18,8 @@ pub const CHATGPT_CONFIG: &[u8] = include_bytes!("../assets/builtin/chatgpt.toml
 pub const OPENCODE_CONFIG: &[u8] = include_bytes!("../assets/builtin/opencode.toml");
 pub const OPENCODE_MODELS: &[u8] = include_bytes!("../assets/builtin/opencode-models.json");
 pub const OPENROUTER_CONFIG: &[u8] = include_bytes!("../assets/builtin/openrouter.toml");
+pub const MIMO_CONFIG: &[u8] = include_bytes!("../assets/builtin/mimo.toml");
+pub const MIMO_MODELS: &[u8] = include_bytes!("../assets/builtin/mimo-models.json");
 
 pub struct BuiltinTemplate {
     pub kind: &'static str,
@@ -32,7 +35,7 @@ pub struct BuiltinTemplate {
     pub insert_catalog_line: bool,
 }
 
-pub const BUILTINS: [BuiltinTemplate; 6] = [
+pub const BUILTINS: [BuiltinTemplate; 7] = [
     BuiltinTemplate {
         kind: KIND_DEEPSEEK,
         name: "DeepSeek",
@@ -93,6 +96,19 @@ pub const BUILTINS: [BuiltinTemplate; 6] = [
         config: OPENROUTER_CONFIG,
         placeholder: Some("<你的 OpenRouter API Key>".as_bytes()),
         catalog: None,
+        insert_catalog_line: false,
+    },
+    // 小米 MiMo：官方支持 Responses API 并提供 Codex 配置文档，config 与
+    // model-catalogs.json 均取自官方示例（web_search 按官方要求禁用；目录
+    // 不带 apply_patch_tool_type——该网关拒绝 freeform 自定义工具）。
+    // 默认走按量付费端点；Token Plan 用户需自行改 base_url（token-plan-cn.xiaomimimo.com/v1）
+    BuiltinTemplate {
+        kind: KIND_MIMO,
+        name: "小米 MiMo",
+        icon: "xiaomi-mimo",
+        config: MIMO_CONFIG,
+        placeholder: Some("<你的 MiMo API Key>".as_bytes()),
+        catalog: Some(("models.json", MIMO_MODELS)),
         insert_catalog_line: false,
     },
 ];
@@ -176,6 +192,10 @@ mod tests {
         assert_eq!(
             OPENROUTER_CONFIG,
             b"model = \"openai/gpt-5.6-sol\"\nmodel_provider = \"openrouter\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.openrouter]\nname = \"OpenRouter\"\nbase_url = \"https://openrouter.ai/api/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 OpenRouter API Key>\""
+        );
+        assert_eq!(
+            MIMO_CONFIG,
+            b"model = \"mimo-v2.5-pro\"\nmodel_provider = \"mimo\"\nmodel_reasoning_effort = \"high\"\nmodel_supports_reasoning_summaries = true\nmodel_reasoning_summary = \"none\"\nmodel_context_window = 1048576\nweb_search = \"disabled\"\nmodel_catalog_json = \"~/.codex/models.json\"\n\n[model_providers.mimo]\nname = \"mimo\"\nbase_url = \"https://api.xiaomimimo.com/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 MiMo API Key>\""
         );
     }
 
@@ -282,6 +302,49 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn mimo_catalog_follows_official_shape() {
+        // 官方 model-catalogs.json 的关键形状：拒绝 freeform 自定义工具
+        // （无 apply_patch_tool_type）、联网搜索关闭、推理档位 none/high
+        let catalog: serde_json::Value = serde_json::from_slice(MIMO_MODELS).unwrap();
+        let models = catalog["models"].as_array().unwrap();
+        assert_eq!(models.len(), 2);
+        for model in models {
+            assert!(model.get("apply_patch_tool_type").is_none());
+            assert_eq!(model["supports_search_tool"], false);
+            assert_eq!(model["supports_reasoning_summaries"], true);
+            assert_eq!(model["context_window"], 1_048_576);
+            let efforts: Vec<&str> = model["supported_reasoning_levels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|level| level["effort"].as_str().unwrap())
+                .collect();
+            assert_eq!(efforts, ["none", "high"]);
+        }
+        // v2.5 支持图片输入且原图高清，pro 纯文本
+        let by_slug = |slug: &str| {
+            models
+                .iter()
+                .find(|model| model["slug"] == slug)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(
+            by_slug("mimo-v2.5")["input_modalities"].to_string(),
+            r#"["text","image"]"#
+        );
+        assert_eq!(by_slug("mimo-v2.5")["supports_image_detail_original"], true);
+        assert_eq!(
+            by_slug("mimo-v2.5-pro")["input_modalities"].to_string(),
+            r#"["text"]"#
+        );
+        assert_eq!(
+            by_slug("mimo-v2.5-pro")["supports_image_detail_original"],
+            false
+        );
     }
 
     #[test]
