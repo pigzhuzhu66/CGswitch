@@ -38,22 +38,14 @@ CGswitch 是一个面向 Codex / ChatGPT 桌面应用的配置管理工具。
       编辑、测试、切换、恢复
 ```
 
-## 界面预览
-
-<p align="center">
-  <img src="docs/screenshots/cgswitch-dark.jpg" width="49%" alt="CGSwitch 深色主题界面" />
-  <img src="docs/screenshots/cgswitch-light.jpg" width="49%" alt="CGSwitch 浅色主题界面" />
-</p>
-
-<p align="center"><sub>深色主题 · 浅色主题</sub></p>
-
 ## 功能
 
 ### 配置档案
 
 - 捕获当前 `~/.codex/config.toml`，保存为可随时恢复的档案
-- 内置 DeepSeek、MiniMax、智谱、ChatGPT、OpenCode 模板
+- 内置 DeepSeek、MiniMax、智谱、ChatGPT、OpenCode、OpenRouter、小米 MiMo 模板
 - 支持自定义供应商和自定义 `config.toml`
+- 新建自定义供应商时 config.toml / models.json / auth.json 三个槽位选填，填了才保存
 - 重命名、复制、排序、删除档案
 - 为档案设置供应商图标、管理后台地址和显示名称
 
@@ -62,6 +54,7 @@ CGswitch 是一个面向 Codex / ChatGPT 桌面应用的配置管理工具。
 - 在应用内编辑 `config.toml`、`models.json` 和 `auth.json`
 - CodeMirror 编辑器提供 TOML / JSON 语法高亮
 - 保存前校验 TOML / JSON 格式
+- 从供应商的 /models 端点获取可用模型列表，直接在下拉中选择
 - 应用配置时只更新相关字段，尽量保留 MCP、插件、注释等其他内容
 - 支持绑定 ChatGPT 订阅账号到指定档案
 
@@ -71,6 +64,7 @@ CGswitch 是一个面向 Codex / ChatGPT 桌面应用的配置管理工具。
 - 测试 ChatGPT 订阅认证是否有效
 - 查看 DeepSeek 余额
 - 查看 MiniMax 余额或 Token Plan 用量与重置时间
+- 查看智谱 GLM 用量（5 小时 / 7 天窗口），用量类供应商统一展示「用量」
 - 余额和用量支持按供应商开启，成功结果会在本地缓存
 
 ### ChatGPT 账号
@@ -160,15 +154,7 @@ pnpm build:debug
 
 调试产物位于 `src-tauri/target/debug/bundle/`。
 
-### 发布前检查
-
-```bash
-pnpm typecheck
-pnpm build
-pnpm check:rust
-```
-
-确认开发窗口中的页面和交互无误，并完成以上检查后，再构建发布包：
+### 构建发布包
 
 ```bash
 pnpm tauri build
