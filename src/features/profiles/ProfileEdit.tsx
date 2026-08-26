@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye, EyeOff, ExternalLink, FileBraces, Info, KeyRound, Monitor, Pencil, Save, Settings, Wifi } from "lucide-react";
+import { ArrowLeft, Download, Eye, EyeOff, ExternalLink, FileBraces, Info, KeyRound, Monitor, Pencil, Save, Settings, Webhook, Wifi } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
@@ -14,7 +14,7 @@ import {
   customConfigTemplate,
   usageQueryProviders,
 } from "../../presets";
-import { patchProviderFields, readProviderFields, resolveAuthSource, withMcpSection } from "./profileEditText";
+import { patchModelValue, patchProviderFields, readModelValue, readProviderFields, resolveAuthSource, withMcpSection } from "./profileEditText";
 import type { EditorDiagnosticSummary, ManagedAccount, ProfileDetail, ProfileSummary } from "../../types";
 import ProfileIconEdit from "./ProfileIconEdit";
 
@@ -54,6 +54,9 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const [modelValue, setModelValue] = useState("");
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
   const [adminUrl, setAdminUrl] = useState("");
   const [authAccounts, setAuthAccounts] = useState<ManagedAccount[]>([]);
   const [boundAccountId, setBoundAccountId] = useState<string | null>(null);
@@ -186,6 +189,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
         setCatalogText(customCatalogTemplate);
         setConfigInitial(withMcpSection(customConfigTemplate, initialMcpSection));
         setCatalogInitial(customCatalogTemplate);
+        setModelValue("your-model");
       } else if (profile) {
         try {
           const loaded = await api.getProfile(profile.id);
@@ -200,6 +204,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           setAuthInitial(loaded.raw_auth ?? "");
           setBaseUrl(loaded.base_url ?? "");
           setApiKey(loaded.api_key ?? "");
+          setModelValue(readModelValue(loaded.raw_config ?? loaded.config_fragment) ?? "");
           setAdminUrl(loaded.admin_url ?? "");
           setSelectedIcon(loaded.icon);
           setBoundAccountId(loaded.account_id);
@@ -256,6 +261,22 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     });
   }, [apiKey, baseUrl]);
 
+  // 表单模型值 ↔ 编辑器顶层 model 行 双向同步（与地址/密钥同一模式）
+  useEffect(() => {
+    if (!initialized.current) return;
+    setConfigText((current) => {
+      const next = patchModelValue(current, modelValue);
+      return next === current ? current : next;
+    });
+  }, [modelValue]);
+
+  useEffect(() => {
+    if (!initialized.current) return;
+    const model = readModelValue(configText);
+    if (model !== null && model !== modelValue) setModelValue(model);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configText]);
+
   useEffect(() => {
     if (!initialized.current) return;
     const fields = readProviderFields(configText);
@@ -290,6 +311,8 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     setName(preset.name);
     setBaseUrl(preset.base_url);
     setApiKey("");
+    setModelValue(preset.model);
+    setFetchedModels([]);
     setAdminUrl(preset.admin_url ?? "");
     setSelectedIcon(preset.icon);
     const nextConfig = withMcpSection(patchProviderFields(preset.fragment, preset.base_url, ""), mcpSection);
@@ -359,6 +382,20 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
       else feedback.error(`连接失败：${result.error ?? "未知错误"}`);
     } catch (error) { feedback.error(`测试失败：${String(error)}`); }
     finally { setTesting(false); }
+  };
+
+  const fetchModelList = async () => {
+    if (fetchingModels) return;
+    if (!baseUrl.trim()) { feedback.warning("请填写调用地址"); return; }
+    if (!apiKey.trim()) { feedback.warning("请先填写 API 密钥"); return; }
+    setFetchingModels(true);
+    try {
+      const models = await api.fetchProviderModels(baseUrl.trim(), apiKey.trim());
+      setFetchedModels(models);
+      if (models.length === 0) feedback.info("接口未返回任何模型");
+      else feedback.success(`获取到 ${models.length} 个模型，可在右侧下拉选择`);
+    } catch (error) { feedback.error(`获取失败：${String(error)}`); }
+    finally { setFetchingModels(false); }
   };
 
   const saveIcon = async (icon: string | null) => {
@@ -432,7 +469,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           </div></div> : null}
           <div className="apple-panel-section">
             <div className="flex items-center gap-4"><button type="button" className="relative grid h-[61px] w-[61px] shrink-0 place-items-center rounded-[16px] transition-opacity hover:opacity-80" title="点击更换图标" aria-label="更换图标" onClick={() => setPickingIcon(true)}><ProfileIconTile name={detail?.name ?? name} icon={selectedIcon} size="fill" /><span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-white shadow" aria-hidden="true"><Pencil className="h-2.5 w-2.5" strokeWidth={2} /></span></button><div className="min-w-0 flex-1"><div className="field-label mb-1.5">名称</div><input className="app-input" maxLength={50} placeholder="供应商名称" value={name} onChange={(event) => setName(event.target.value)} /></div></div>
-            {showProviderFields ? <><label className="field-label mb-1.5 mt-4 block">请求地址</label><input className="app-input" placeholder="https://api.example.com/v1" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /><div className="mb-1.5 mt-4 flex items-center gap-2"><span className="field-label">API 密钥</span>{isOpenCode && create ? <button type="button" className="apple-inline-btn" onClick={() => void api.openUrl("https://opencode.ai/go?ref=APHY0DXATH").catch((error) => feedback.error(String(error)))}><ExternalLink className="h-3 w-3" strokeWidth={2} />获取 API 密钥</button> : null}<button type="button" className="apple-inline-btn" disabled={testing || !apiKey.trim() || !baseUrl.trim()} onClick={() => void testConnection()}>{testing ? <LoadingSpinner /> : <Wifi className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}测试连通</button></div><div className="app-input-action"><input className="app-input app-input--action" type={showApiKey ? "text" : "password"} placeholder="请输入 API 密钥" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /><button type="button" className="app-input-action__button" aria-label={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"} title={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"} aria-pressed={showApiKey} onClick={() => setShowApiKey((visible) => !visible)}>{showApiKey ? <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden="true" /> : <Eye className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}</button></div>{isOpenCode && create ? <p className="muted mt-2 flex items-start gap-1.5 text-xs"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} />使用此链接订阅 OpenCode Go，首月只需 $5，并可获得额外的 $5 额度！</p> : null}</> : null}
+            {showProviderFields ? <><label className="field-label mb-1.5 mt-4 block">接口协议</label><div className="flex min-h-9 min-w-0 items-center gap-2 rounded-xl px-3 shadow-[0_0_0_1px_var(--panel-ring)]"><Webhook className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" /><span className="shrink-0 text-xs font-medium text-(--text-secondary)">Responses（原生）</span></div><label className="field-label mb-1.5 mt-4 block">请求地址</label><input className="app-input" placeholder="https://api.example.com/v1" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /><div className="mb-1.5 mt-4 flex items-center gap-2"><span className="field-label">API 密钥</span>{isOpenCode && create ? <button type="button" className="apple-inline-btn" onClick={() => void api.openUrl("https://opencode.ai/go?ref=APHY0DXATH").catch((error) => feedback.error(String(error)))}><ExternalLink className="h-3 w-3" strokeWidth={2} />获取 API 密钥</button> : null}<button type="button" className="apple-inline-btn" disabled={testing || !apiKey.trim() || !baseUrl.trim()} onClick={() => void testConnection()}>{testing ? <LoadingSpinner /> : <Wifi className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}测试连通</button></div><div className="app-input-action"><input className="app-input app-input--action" type={showApiKey ? "text" : "password"} placeholder="请输入 API 密钥" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /><button type="button" className="app-input-action__button" aria-label={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"} title={showApiKey ? "隐藏 API 密钥" : "显示 API 密钥"} aria-pressed={showApiKey} onClick={() => setShowApiKey((visible) => !visible)}>{showApiKey ? <EyeOff className="h-4 w-4" strokeWidth={2} aria-hidden="true" /> : <Eye className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}</button></div><div className="mb-1.5 mt-4 flex items-center gap-2"><span className="field-label">模型</span><button type="button" className="apple-inline-btn" disabled={fetchingModels || !apiKey.trim() || !baseUrl.trim()} onClick={() => void fetchModelList()}>{fetchingModels ? <LoadingSpinner /> : <Download className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}获取模型列表</button>{fetchedModels.length > 0 ? <span className="muted text-xs">{fetchedModels.length} 个可用</span> : null}</div><div className="flex gap-1.5"><input className="app-input min-w-0 flex-1" placeholder="模型 ID，获取后可在右侧选择" value={modelValue} onChange={(event) => setModelValue(event.target.value)} />{fetchedModels.length > 0 ? <div className="w-1/3 shrink-0"><AppSelect value={fetchedModels.includes(modelValue) ? modelValue : null} options={fetchedModels.map((id) => ({ label: id, value: id }))} onChange={(value) => setModelValue(value)} placeholder="选择模型" /></div> : null}</div>{isOpenCode && create ? <p className="muted mt-2 flex items-start gap-1.5 text-xs"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} />使用此链接订阅 OpenCode Go，首月只需 $5，并可获得额外的 $5 额度！</p> : null}</> : null}
             {isOfficial ? <div className="mt-4"><div className="field-subtitle mb-1.5">登录方式</div>{create ? <AppSelect value={boundAccountId ?? ""} options={accountOptions} onChange={selectAccount} placeholder="Codex登录" renderLabel={renderAccountLabel} /> : authSource === "oauth" ? <AppSelect value={boundAccountId ?? ""} options={oauthAccountOptions} onChange={selectAccount} placeholder="选择 OAuth 登录账号" renderLabel={renderAccountLabel} /> : <div className="flex min-h-9 min-w-0 items-center gap-2 rounded-xl px-3 shadow-[0_0_0_1px_var(--panel-ring)]"><Monitor className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" /><span className="shrink-0 text-xs font-medium text-[var(--text-secondary)]">Codex登录</span>{detail?.desktop_login ? <><span className="muted" aria-hidden="true">·</span><span className="min-w-0 truncate text-xs font-medium text-[var(--text-secondary)]" title={detail.desktop_login}>{detail.desktop_login}</span></> : null}</div>}</div> : null}
             {(!create || selectedPreset?.base_url) ? <div className="mt-4"><div className="mb-1.5 flex items-center gap-1"><span className="field-label">官网地址</span><button type="button" className="grid h-4 w-4 place-items-center rounded-full text-accent transition-colors hover:bg-(--profile-chip-bg) disabled:opacity-40" disabled={!adminUrl.trim()} onClick={() => void api.openUrl(adminUrl.trim()).catch((error) => feedback.error(String(error)))}><ExternalLink className="h-3.5 w-3.5" strokeWidth={2} /></button></div><input className="app-input" placeholder="https://console.example.com（可选）" value={adminUrl} onChange={(event) => setAdminUrl(event.target.value)} /></div> : null}
             {!create && supportsBalance ? <div className="mt-4 flex items-center justify-between gap-3"><div><div className="text-sm font-semibold">{isOfficial ? "ChatGPT 额度显示" : isUsageProvider ? "用量查询" : "余额/用量查询"}</div><div className="muted mt-0.5 text-xs">窗口激活时自动刷新，点击数字手动刷新</div></div><AppSwitch checked={showBalance} onCheckedChange={(value) => void toggleBalance(value)} /></div> : null}

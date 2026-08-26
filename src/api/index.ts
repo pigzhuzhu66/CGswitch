@@ -35,6 +35,8 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
 export const api = {
   getState: () => call<AppState>("get_state"),
   getCodexStatus: () => call<CodexAppStatus>("get_codex_status"),
+  fetchProviderModels: (baseUrl: string, apiKey: string) =>
+    call<string[]>("fetch_provider_models", { baseUrl, apiKey }),
   captureProfile: (name: string) => call<ProfileSummary>("capture_profile", { name }),
   addBuiltinProfile: (
     kind: string,

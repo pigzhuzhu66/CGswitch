@@ -1,8 +1,7 @@
-model = "deepseek-v4-flash"
+model = "glm-5.2"
 model_provider = "opencode-go"
-preferred_auth_method = "apikey"
-forced_login_method = "api"
 model_reasoning_effort = "high"
+disable_response_storage = true
 model_catalog_json = "~/.codex/models.json"
 
 [model_providers.opencode-go]

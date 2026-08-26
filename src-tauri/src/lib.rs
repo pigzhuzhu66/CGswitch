@@ -46,6 +46,7 @@ pub fn run() {
             commands::get_builtin_catalog,
             commands::test_profile_connection,
             commands::test_provider_connection,
+            commands::fetch_provider_models,
             commands::get_profile_balance,
             commands::export_database,
             commands::export_database_to,

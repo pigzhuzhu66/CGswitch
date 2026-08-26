@@ -2,6 +2,9 @@ import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
+/** 菜单展示高度封顶（20rem），须与 style.css 里 .app-select-menu 的 max-height 保持一致。 */
+const MENU_MAX_HEIGHT = 320;
+
 interface SelectOption<T extends string | number = string> {
   label: string;
   value: T;
@@ -53,7 +56,10 @@ export function AppSelect<T extends string | number>({
       const menuHeight = menu.scrollHeight;
       const below = window.innerHeight - rect.bottom - gap;
       const above = rect.top - gap;
-      const nextPlacement = below < menuHeight && above > below ? "top" : "bottom";
+      // 翻转判定用实际会展示的高度（CSS max-height 封顶后的值），而不是内容
+      // 完整高度 scrollHeight：后者会高估需求，导致下方空间明明够却向上翻转
+      const effectiveHeight = Math.min(menuHeight, MENU_MAX_HEIGHT);
+      const nextPlacement = below < effectiveHeight && above > below ? "top" : "bottom";
       setPlacement(nextPlacement);
       setMenuStyle({
         left: `${rect.left}px`,
@@ -63,12 +69,38 @@ export function AppSelect<T extends string | number>({
     };
     updatePosition();
     window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
     return () => {
       window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
     };
   }, [open, options.length]);
+
+  // 展开期间的背景滚动控制：
+  // 1. 菜单外发生滚动（容器滚轮/拖动）→ 直接收起，避免 fixed 菜单跟随触发器跳跑
+  useEffect(() => {
+    if (!open) return;
+    const onBackgroundScroll = (event: Event) => {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    window.addEventListener("scroll", onBackgroundScroll, true);
+    return () => window.removeEventListener("scroll", onBackgroundScroll, true);
+  }, [open]);
+
+  // 2. 菜单自身的滚轮不穿透：内容不满或已滚到边界时拦下，背景纹丝不动
+  //   （React 的 onWheel 是 passive 的，preventDefault 必须用原生 non-passive 监听）
+  useEffect(() => {
+    if (!open) return;
+    const menu = menuRef.current;
+    if (!menu) return;
+    const onMenuWheel = (event: WheelEvent) => {
+      const { scrollTop, scrollHeight, clientHeight } = menu;
+      const canScroll = scrollHeight > clientHeight;
+      const atEdge = event.deltaY < 0 ? scrollTop <= 0 : scrollTop + clientHeight >= scrollHeight;
+      if (!canScroll || atEdge) event.preventDefault();
+    };
+    menu.addEventListener("wheel", onMenuWheel, { passive: false });
+    return () => menu.removeEventListener("wheel", onMenuWheel);
+  }, [open]);
 
   const selectOption = (option: SelectOption<T>) => {
     onChange(option.value);

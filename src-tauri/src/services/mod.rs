@@ -21,6 +21,7 @@ mod accounts;
 mod apply;
 mod connections;
 mod mcp;
+mod model_fetch;
 mod plugin_net;
 mod plugins;
 mod profile_config;
@@ -29,6 +30,7 @@ mod settings;
 mod storage;
 
 pub use connections::{test_provider_connection, ProfileBalance, ProfileConnectionResult};
+pub use model_fetch::fetch_models;
 pub use plugins::{
     MarketplacePlugin, PluginCandidate, PluginMarketplace, PluginPreview, PluginSkill,
     PluginSummary, PluginUpdate, SkillCandidate, SkillSummary,

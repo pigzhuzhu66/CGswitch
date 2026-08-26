@@ -31,19 +31,46 @@ export function balanceChipClass(
 
 export const customConfigTemplate = `model = "your-model"
 model_provider = "your-provider"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
+disable_response_storage = true
 model_catalog_json = "~/.codex/models.json"
 
 [model_providers.your-provider]
 name = "your-provider"
+base_url = "https://api.example.com/v1"
 wire_api = "responses"
-experimental_bearer_token = "<你的 API Key>"`;
+experimental_bearer_token = ""`;
 
+/** 模型目录按 Codex 官方目录的完整字段集（对照 assets/builtin/zhipu-models.json，
+ * 每条 21 个字段）：slug 是模型标识；base_instructions 与 supports_reasoning_summaries
+ * 为解析器必填字段，缺失会让 Codex 拒载整个目录文件。 */
 export const customCatalogTemplate = `{
   "models": [
     {
-      "id": "your-model",
-      "name": "Your Model"
+      "slug": "your-model",
+      "display_name": "Your Model",
+      "description": "Your Model",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        { "effort": "low", "description": "Light reasoning" },
+        { "effort": "high", "description": "Deep reasoning" }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 0,
+      "base_instructions": "",
+      "supports_reasoning_summaries": true,
+      "default_reasoning_summary": "none",
+      "support_verbosity": false,
+      "apply_patch_tool_type": "freeform",
+      "truncation_policy": { "mode": "bytes", "limit": 10000 },
+      "context_window": 128000,
+      "max_context_window": 128000,
+      "effective_context_window_percent": 95,
+      "supports_parallel_tool_calls": true,
+      "experimental_supported_tools": [],
+      "input_modalities": ["text"]
     }
   ]
 }`;
@@ -150,18 +177,17 @@ export const builtinPresets: BuiltinPreset[] = [
     icon: "opencode",
     base_url: "https://opencode.ai/zen/go/v1",
     admin_url: null,
-    model: "deepseek-v4-flash",
+    model: "glm-5.2",
     model_values: {
-      model: '"deepseek-v4-flash"',
+      model: '"glm-5.2"',
       model_reasoning_effort: '"high"',
       model_catalog_json: '"~/.codex/models.json"',
     },
     fragment: [
-      'model = "deepseek-v4-flash"',
+      'model = "glm-5.2"',
       'model_provider = "opencode-go"',
-      'preferred_auth_method = "apikey"',
-      'forced_login_method = "api"',
       'model_reasoning_effort = "high"',
+      "disable_response_storage = true",
       'model_catalog_json = "~/.codex/models.json"',
       "",
       "[model_providers.opencode-go]",

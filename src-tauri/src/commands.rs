@@ -299,6 +299,15 @@ pub async fn test_provider_connection(
     crate::services::test_provider_connection(&base_url, &api_key).await
 }
 
+// 获取供应商可用模型 ID 列表（OpenAI 兼容 GET /models）
+#[tauri::command]
+pub async fn fetch_provider_models(
+    base_url: String,
+    api_key: String,
+) -> Result<Vec<String>, String> {
+    crate::services::fetch_models(&base_url, &api_key).await
+}
+
 #[tauri::command]
 pub async fn get_profile_balance(
     id: String,

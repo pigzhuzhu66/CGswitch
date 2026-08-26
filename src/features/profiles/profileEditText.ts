@@ -141,3 +141,48 @@ export function patchProviderFields(text: string, baseUrl: string, apiKey: strin
 export function withMcpSection(base: string, mcpSection: string): string {
   return mcpSection ? `${base.trimEnd()}\n\n${mcpSection.trimEnd()}\n` : base;
 }
+
+/** 读取顶层 `model = "..."` 的值（剥引号）；无该行返回 null。
+ * `^model\s*=` 不匹配 model_provider / model_reasoning_effort 等前缀键。 */
+export function readModelValue(text: string): string | null {
+  for (const line of text.split("\n")) {
+    const match = /^model\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s#]+))/.exec(line.trim());
+    if (match) return match[1] ?? match[2] ?? match[3] ?? "";
+  }
+  return null;
+}
+
+/**
+ * 把表单的模型值写回顶层 `model = "..."` 行：
+ * - 有 model 行 → 替换第一处；后续重复的 model 行（历史缺陷产生的非法重复键）一并收敛
+ * - 没有任何 model 行时才插到 `model_provider` 行后（仍无则不动文本）
+ * 注意不能逐行边扫边插：智谱等配置 model_provider 排在 model 前，
+ * 先遇到 provider 就插入会造出重复的 model 键（TOML 非法）。
+ */
+export function patchModelValue(text: string, model: string): string {
+  const value = model.trim();
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let replaced = false;
+  for (const line of lines) {
+    if (/^model\s*=/.test(line.trim())) {
+      if (!replaced && value !== "") {
+        const indent = line.slice(0, line.length - line.trimStart().length);
+        out.push(`${indent}model = ${JSON.stringify(value)}`);
+      }
+      // 首个 model 行被替换（或 value 为空被删除）后，其余重复行一律丢弃
+      replaced = true;
+      continue;
+    }
+    out.push(line);
+  }
+  if (replaced) return out.join("\n");
+  if (value === "") return text;
+
+  const providerIndex = out.findIndex((line) => /^model_provider\s*=/.test(line.trim()));
+  if (providerIndex === -1) return text;
+  const provider = out[providerIndex];
+  const indent = provider.slice(0, provider.length - provider.trimStart().length);
+  out.splice(providerIndex + 1, 0, `${indent}model = ${JSON.stringify(value)}`);
+  return out.join("\n");
+}
