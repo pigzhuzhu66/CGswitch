@@ -1,5 +1,77 @@
 import { describe, expect, it } from "vitest";
-import { patchProviderFields, readProviderFields, resolveAuthSource, withMcpSection } from "./profileEditText";
+import { patchModelValue, patchProviderFields, readModelValue, readProviderFields, resolveAuthSource, withMcpSection } from "./profileEditText";
+
+describe("model value read/patch", () => {
+  const source = [
+    'model = "glm-5.2"',
+    'model_provider = "ZAI"',
+    'model_reasoning_effort = "high"',
+    "",
+    "[model_providers.ZAI]",
+    'name = "ZAI"',
+  ].join("\n");
+
+  it("reads the top-level model line without touching model_* keys", () => {
+    expect(readModelValue(source)).toBe("glm-5.2");
+    expect(readModelValue('model_reasoning_effort = "high"\n')).toBeNull();
+    expect(readModelValue("model_provider = \"x\"\n")).toBeNull();
+  });
+
+  it("patches the model line in place preserving indentation", () => {
+    const patched = patchModelValue(source, "glm-5.3");
+    expect(patched).toContain('model = "glm-5.3"');
+    expect(patched).toContain('model_provider = "ZAI"');
+    expect(patched).toContain('model_reasoning_effort = "high"');
+  });
+
+  it("inserts a model line after model_provider when missing", () => {
+    const noModel = 'model_provider = "ZAI"\nmodel_reasoning_effort = "high"\n';
+    const patched = patchModelValue(noModel, "glm-5.2");
+    expect(patched).toBe('model_provider = "ZAI"\nmodel = "glm-5.2"\nmodel_reasoning_effort = "high"\n');
+  });
+
+  it("round-trips through the editor unchanged when values agree", () => {
+    // 表单 → 编辑器 no-op：同值重写产出相同文本（防双向同步死循环）
+    expect(patchModelValue(source, "glm-5.2")).toBe(source);
+  });
+
+  it("removes the model line when the form value is empty", () => {
+    const patched = patchModelValue(source, "");
+    expect(patched).not.toContain("model =");
+    expect(patched).toContain('model_provider = "ZAI"');
+  });
+
+  it("replaces the existing model line when model_provider comes first", () => {
+    // 回归：智谱的配置 model_provider 在 model 之前，旧实现逐行扫描先命中
+    // provider 就插入新行，不去替换后面已有的 model 行 → 每次切换多出一行
+    // model（TOML 重复键非法）
+    const providerFirst = [
+      'model_provider = "ZAI"',
+      'model = "glm-5.3"',
+      'model_reasoning_effort = "max"',
+    ].join("\n");
+    const patched = patchModelValue(providerFirst, "glm-5");
+    expect(patched).toBe([
+      'model_provider = "ZAI"',
+      'model = "glm-5"',
+      'model_reasoning_effort = "max"',
+    ].join("\n"));
+  });
+
+  it("collapses duplicate model lines left by the old defect", () => {
+    const polluted = [
+      'model_provider = "ZAI"',
+      'model = "glm-5"',
+      'model = "glm-5-turbo"',
+      'model = "glm-5.3"',
+      'model_reasoning_effort = "high"',
+    ].join("\n");
+    const patched = patchModelValue(polluted, "glm-5.3");
+    expect(patched.match(/^model = /gm)?.length).toBe(1);
+    expect(patched).toContain('model = "glm-5.3"');
+    expect(patched).toContain('model_provider = "ZAI"');
+  });
+});
 
 describe("resolveAuthSource", () => {
   it("keeps the backend's explicit null for third-party profiles", () => {

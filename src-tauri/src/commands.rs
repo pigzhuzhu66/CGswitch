@@ -4,6 +4,7 @@ use crate::auth::codex_oauth::{
     parse_external_auth_json, AuthStatus, CodexOAuthError, CodexOAuthManager, CodexOAuthState,
     DeviceCodeResponse, ManagedAccount,
 };
+use crate::builtin;
 use crate::codex::config as codex_config;
 use crate::error::{app_err, AppResult};
 use crate::models::{
@@ -235,6 +236,13 @@ pub fn get_builtin_catalog(
     state.get_builtin_catalog(&kind)
 }
 
+// 内置供应商的 config.toml 模板原文：前端创建页预览的唯一来源（单源，避免与前端 fragment 双份维护）
+#[tauri::command]
+pub fn get_builtin_config(kind: String) -> AppResult<String> {
+    let template = builtin::template(&kind)?;
+    Ok(String::from_utf8_lossy(template.config).into_owned())
+}
+
 #[tauri::command]
 // 参数个数受前端 IPC 调用约束（一次性提交 config/catalog/auth 三件套），不宜拆结构体
 #[allow(clippy::too_many_arguments)]
@@ -297,6 +305,15 @@ pub async fn test_provider_connection(
     api_key: String,
 ) -> AppResult<ProfileConnectionResult> {
     crate::services::test_provider_connection(&base_url, &api_key).await
+}
+
+// 获取供应商可用模型 ID 列表（OpenAI 兼容 GET /models）
+#[tauri::command]
+pub async fn fetch_provider_models(
+    base_url: String,
+    api_key: String,
+) -> Result<Vec<String>, String> {
+    crate::services::fetch_models(&base_url, &api_key).await
 }
 
 #[tauri::command]

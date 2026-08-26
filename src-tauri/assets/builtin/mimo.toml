@@ -1,0 +1,14 @@
+model = "mimo-v2.5-pro"
+model_provider = "mimo"
+model_reasoning_effort = "high"
+model_supports_reasoning_summaries = true
+model_reasoning_summary = "none"
+model_context_window = 1048576
+web_search = "disabled"
+model_catalog_json = "~/.codex/models.json"
+
+[model_providers.mimo]
+name = "mimo"
+base_url = "https://api.xiaomimimo.com/v1"
+wire_api = "responses"
+experimental_bearer_token = "<你的 MiMo API Key>"

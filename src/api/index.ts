@@ -35,6 +35,8 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
 export const api = {
   getState: () => call<AppState>("get_state"),
   getCodexStatus: () => call<CodexAppStatus>("get_codex_status"),
+  fetchProviderModels: (baseUrl: string, apiKey: string) =>
+    call<string[]>("fetch_provider_models", { baseUrl, apiKey }),
   captureProfile: (name: string) => call<ProfileSummary>("capture_profile", { name }),
   addBuiltinProfile: (
     kind: string,
@@ -62,6 +64,7 @@ export const api = {
       authText,
     }),
   getBuiltinCatalog: (kind: string) => call<string | null>("get_builtin_catalog", { kind }),
+  getBuiltinConfig: (kind: string) => call<string>("get_builtin_config", { kind }),
   testProfileConnection: (id: string, baseUrl?: string, apiKey?: string) =>
     call<ProfileConnectionResult>("test_profile_connection", { id, baseUrl, apiKey }),
   // 创建态表单测试：供应商尚未保存，直接用表单里的地址/密钥

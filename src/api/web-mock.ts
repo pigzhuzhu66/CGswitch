@@ -1,4 +1,4 @@
-import { balanceQueryProviders, builtinPresetByKind } from "../presets";
+import { balanceQueryProviders, builtinHasCatalog, builtinPresetByKind, type BuiltinPreset } from "../presets";
 import type {
   AppState,
   DatabaseBackupInfo,
@@ -16,7 +16,6 @@ import type {
   ProfileSummary,
   Settings,
 } from "../types";
-import { stripTomlQuotes } from "../utils";
 
 const webProfiles: ProfileSummary[] = [
   {
@@ -538,6 +537,14 @@ function renderMcpFragmentWeb(spec: McpServerSpec): string {
   return lines.join("\n") + "\n";
 }
 
+// 浏览器调试模式不查后端命令，用预设的展示元数据合成最小 config 模板
+// （正式运行时由后端 builtin 模板给出完整原文）
+function mockBuiltinFragment(preset: BuiltinPreset, apiKey: string): string {
+  return preset.provider
+    ? `model = "${preset.model}"\nmodel_provider = "${preset.provider}"\nmodel_reasoning_effort = "high"\n\n[model_providers.${preset.provider}]\nname = "${preset.provider}"\nbase_url = "${preset.base_url}"\nwire_api = "responses"\nexperimental_bearer_token = "${apiKey || "<API Key>"}"`
+    : `model = "${preset.model}"\nmodel_reasoning_effort = "high"`;
+}
+
 export async function webInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   await new Promise((resolve) => setTimeout(resolve, 120));
   switch (command) {    case "get_state":
@@ -574,6 +581,8 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const baseUrl = preset.provider ? rawBaseUrl || preset.base_url : null;
       const rawAdminUrl = String(args?.adminUrl ?? "");
       const adminUrl = rawAdminUrl || preset.admin_url;
+      const syntheticFragment = mockBuiltinFragment(preset, rawKey);
+      const syntheticModelValues: Record<string, string> = { model: JSON.stringify(preset.model), model_reasoning_effort: '"high"' };
       const now = new Date().toISOString();
       const profile: ProfileSummary = {
         id: `profile-${Date.now()}`,
@@ -583,7 +592,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         auth_source: preset.provider ? null : (typeof args?.accountId === "string" && args.accountId ? "oauth" : "desktop"),
         model: preset.model,
         provider: preset.provider,
-        reasoning_effort: stripTomlQuotes(preset.model_values.model_reasoning_effort) || null,
+        reasoning_effort: "high",
         has_key: preset.provider ? Boolean(rawKey.trim()) : false,
         admin_url: adminUrl,
         show_balance: false,
@@ -595,8 +604,8 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       webDetails[profile.id] = {
         base_url: baseUrl,
         api_key: apiKey,
-        model_values: preset.model_values,
-        config_fragment: preset.fragment,
+        model_values: syntheticModelValues,
+        config_fragment: syntheticFragment,
       };
       return profile as T;
     }
@@ -634,9 +643,14 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       return profile as T;
     }
     case "get_builtin_catalog": {
-      const preset = builtinPresetByKind(String(args?.kind ?? ""));
-      if (!preset?.model_values.model_catalog_json) return null as T;
+      const kind = String(args?.kind ?? "");
+      if (!builtinHasCatalog(kind)) return null as T;
       return '{\n  "models": [\n    { "id": "preview", "name": "模型目录预览" }\n  ]\n}' as T;
+    }
+    case "get_builtin_config": {
+      const preset = builtinPresetByKind(String(args?.kind ?? ""));
+      if (!preset) throw new Error("未知的内置供应商类型");
+      return mockBuiltinFragment(preset, String(args?.apiKey ?? "")) as T;
     }
     case "test_provider_connection": {
       const apiKey = String(args?.apiKey ?? "");

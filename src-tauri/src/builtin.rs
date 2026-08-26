@@ -5,6 +5,8 @@ pub const KIND_MINIMAX: &str = "minimax";
 pub const KIND_ZHIPU: &str = "zhipu";
 pub const KIND_CHATGPT: &str = "chatgpt";
 pub const KIND_OPENCODE: &str = "opencode";
+pub const KIND_OPENROUTER: &str = "openrouter";
+pub const KIND_MIMO: &str = "mimo";
 
 pub const DEEPSEEK_CONFIG: &[u8] = include_bytes!("../assets/builtin/deepseek.toml");
 pub const DEEPSEEK_MODELS: &[u8] = include_bytes!("../assets/builtin/deepseek-models.json");
@@ -14,6 +16,10 @@ pub const ZHIPU_CONFIG: &[u8] = include_bytes!("../assets/builtin/zhipu.toml");
 pub const ZHIPU_MODELS: &[u8] = include_bytes!("../assets/builtin/zhipu-models.json");
 pub const CHATGPT_CONFIG: &[u8] = include_bytes!("../assets/builtin/chatgpt.toml");
 pub const OPENCODE_CONFIG: &[u8] = include_bytes!("../assets/builtin/opencode.toml");
+pub const OPENCODE_MODELS: &[u8] = include_bytes!("../assets/builtin/opencode-models.json");
+pub const OPENROUTER_CONFIG: &[u8] = include_bytes!("../assets/builtin/openrouter.toml");
+pub const MIMO_CONFIG: &[u8] = include_bytes!("../assets/builtin/mimo.toml");
+pub const MIMO_MODELS: &[u8] = include_bytes!("../assets/builtin/mimo-models.json");
 
 pub struct BuiltinTemplate {
     pub kind: &'static str,
@@ -29,7 +35,7 @@ pub struct BuiltinTemplate {
     pub insert_catalog_line: bool,
 }
 
-pub const BUILTINS: [BuiltinTemplate; 5] = [
+pub const BUILTINS: [BuiltinTemplate; 7] = [
     BuiltinTemplate {
         kind: KIND_DEEPSEEK,
         name: "DeepSeek",
@@ -66,14 +72,43 @@ pub const BUILTINS: [BuiltinTemplate; 5] = [
         catalog: None,
         insert_catalog_line: false,
     },
-    // OpenAI Code 没有官方 models.json 模板，但保留空文件入口供用户自行填写模型目录
+    // OpenCode Go（Zen 网关 Go 订阅）无官方 Codex 目录；模型元数据（上下文窗口、
+    // 逐模型推理档位）镜像 cc-switch 的 OpenCode Go 预设（其数据源为 models.dev），
+    // 按 Codex 目录格式（slug + 必填 base_instructions/supports_reasoning_summaries，
+    // 对照 zhipu-models.json）构造。
     BuiltinTemplate {
         kind: KIND_OPENCODE,
         name: "OpenCode",
         icon: "opencode",
         config: OPENCODE_CONFIG,
         placeholder: Some("<你的 OpenCode API Key>".as_bytes()),
-        catalog: Some(("models.json", b"")),
+        catalog: Some(("models.json", OPENCODE_MODELS)),
+        insert_catalog_line: false,
+    },
+    // OpenRouter 官方支持 OpenAI 兼容 Responses API（有官方 Codex CLI 接入教程）。
+    // 其 Responses 为纯无状态，store:true 会被 400 拒绝，因此必须
+    // disable_response_storage。模型 slug 需带厂商前缀；聚合站模型众多，
+    // 不带静态目录，由编辑页"获取模型列表"（/api/v1/models）拉取
+    BuiltinTemplate {
+        kind: KIND_OPENROUTER,
+        name: "OpenRouter",
+        icon: "openrouter",
+        config: OPENROUTER_CONFIG,
+        placeholder: Some("<你的 OpenRouter API Key>".as_bytes()),
+        catalog: None,
+        insert_catalog_line: false,
+    },
+    // 小米 MiMo：官方支持 Responses API 并提供 Codex 配置文档，config 与
+    // model-catalogs.json 均取自官方示例（web_search 按官方要求禁用；目录
+    // 不带 apply_patch_tool_type——该网关拒绝 freeform 自定义工具）。
+    // 默认走按量付费端点；Token Plan 用户需自行改 base_url（token-plan-cn.xiaomimimo.com/v1）
+    BuiltinTemplate {
+        kind: KIND_MIMO,
+        name: "小米 MiMo",
+        icon: "xiaomi-mimo",
+        config: MIMO_CONFIG,
+        placeholder: Some("<你的 MiMo API Key>".as_bytes()),
+        catalog: Some(("models.json", MIMO_MODELS)),
         insert_catalog_line: false,
     },
 ];
@@ -152,7 +187,15 @@ mod tests {
         );
         assert_eq!(
             OPENCODE_CONFIG,
-            b"model = \"deepseek-v4-flash\"\nmodel_provider = \"opencode-go\"\npreferred_auth_method = \"apikey\"\nforced_login_method = \"api\"\nmodel_reasoning_effort = \"high\"\nmodel_catalog_json = \"~/.codex/models.json\"\n\n[model_providers.opencode-go]\nname = \"OpenCode Go\"\nbase_url = \"https://opencode.ai/zen/go/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 OpenCode API Key>\""
+            b"model = \"glm-5.2\"\nmodel_provider = \"opencode-go\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\nmodel_catalog_json = \"~/.codex/models.json\"\n\n[model_providers.opencode-go]\nname = \"OpenCode Go\"\nbase_url = \"https://opencode.ai/zen/go/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 OpenCode API Key>\""
+        );
+        assert_eq!(
+            OPENROUTER_CONFIG,
+            b"model = \"openai/gpt-5.6-sol\"\nmodel_provider = \"openrouter\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.openrouter]\nname = \"OpenRouter\"\nbase_url = \"https://openrouter.ai/api/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 OpenRouter API Key>\""
+        );
+        assert_eq!(
+            MIMO_CONFIG,
+            b"model = \"mimo-v2.5-pro\"\nmodel_provider = \"mimo\"\nmodel_reasoning_effort = \"high\"\nmodel_supports_reasoning_summaries = true\nmodel_reasoning_summary = \"none\"\nmodel_context_window = 1048576\nweb_search = \"disabled\"\nmodel_catalog_json = \"~/.codex/models.json\"\n\n[model_providers.mimo]\nname = \"mimo\"\nbase_url = \"https://api.xiaomimimo.com/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"<\xE4\xBD\xA0\xE7\x9A\x84 MiMo API Key>\""
         );
     }
 
@@ -164,8 +207,144 @@ mod tests {
         assert_eq!(count(ZHIPU_MODELS, b"\r\n"), 72);
         assert_eq!(MINIMAX_CATALOG.len(), 953);
         assert_eq!(count(MINIMAX_CATALOG, b"\r\n"), 25);
-        // OpenAI Code 无官方模板：models.json 保留为空入口
-        assert_eq!(template(KIND_OPENCODE).unwrap().catalog.unwrap().1.len(), 0);
+        // OpenCode 目录为构造产物（无官方文件），不做字节级快照；
+        // 内容由下方 opencode_catalog 结构断言覆盖
+    }
+
+    #[test]
+    fn opencode_catalog_mirrors_ccswitch_model_metadata() {
+        let catalog: serde_json::Value = serde_json::from_slice(OPENCODE_MODELS).unwrap();
+        let models = catalog["models"].as_array().unwrap();
+        let slugs: Vec<&str> = models
+            .iter()
+            .map(|model| model["slug"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            slugs,
+            [
+                "glm-5.2",
+                "glm-5.1",
+                "kimi-k2.7-code",
+                "deepseek-v4-pro",
+                "deepseek-v4-flash",
+                "mimo-v2.5-pro"
+            ]
+        );
+
+        // 逐模型上下文窗口 + 推理档位（数据源：cc-switch 预设镜像的 models.dev）
+        let by_slug = |slug: &str| {
+            models
+                .iter()
+                .find(|model| model["slug"] == slug)
+                .unwrap()
+                .clone()
+        };
+        let glm = by_slug("glm-5.2");
+        assert_eq!(glm["context_window"], 204_800);
+        assert_eq!(glm["default_reasoning_level"], "high");
+        let efforts: Vec<&str> = glm["supported_reasoning_levels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|level| level["effort"].as_str().unwrap())
+            .collect();
+        assert_eq!(efforts, ["high", "max"]);
+
+        let flash = by_slug("deepseek-v4-flash");
+        assert_eq!(flash["context_window"], 1_048_576);
+        let efforts: Vec<&str> = flash["supported_reasoning_levels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|level| level["effort"].as_str().unwrap())
+            .collect();
+        assert_eq!(efforts, ["low", "high", "max"]);
+
+        // Codex 目录解析器必填字段（缺失会拒载整个文件）
+        for model in models {
+            assert!(model.get("base_instructions").is_some());
+            assert!(model.get("supports_reasoning_summaries").is_some());
+        }
+
+        // 官方目录（zhipu/minimax）的完整 21 字段集，缺字段会退化 Codex 的能力声明
+        for field in [
+            "slug",
+            "display_name",
+            "description",
+            "default_reasoning_level",
+            "supported_reasoning_levels",
+            "shell_type",
+            "visibility",
+            "supported_in_api",
+            "priority",
+            "base_instructions",
+            "supports_reasoning_summaries",
+            "default_reasoning_summary",
+            "support_verbosity",
+            "apply_patch_tool_type",
+            "truncation_policy",
+            "context_window",
+            "max_context_window",
+            "effective_context_window_percent",
+            "supports_parallel_tool_calls",
+            "experimental_supported_tools",
+            "input_modalities",
+        ] {
+            if field == "default_reasoning_level" || field == "supported_reasoning_levels" {
+                // 无 effort 档位的模型（glm-5.1 等）合法省略这两个可选字段
+                continue;
+            }
+            for model in models {
+                assert!(
+                    model.get(field).is_some(),
+                    "{} 缺少字段 {field}",
+                    model["slug"].as_str().unwrap_or("?")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn mimo_catalog_follows_official_shape() {
+        // 官方 model-catalogs.json 的关键形状：拒绝 freeform 自定义工具
+        // （无 apply_patch_tool_type）、联网搜索关闭、推理档位 none/high
+        let catalog: serde_json::Value = serde_json::from_slice(MIMO_MODELS).unwrap();
+        let models = catalog["models"].as_array().unwrap();
+        assert_eq!(models.len(), 2);
+        for model in models {
+            assert!(model.get("apply_patch_tool_type").is_none());
+            assert_eq!(model["supports_search_tool"], false);
+            assert_eq!(model["supports_reasoning_summaries"], true);
+            assert_eq!(model["context_window"], 1_048_576);
+            let efforts: Vec<&str> = model["supported_reasoning_levels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|level| level["effort"].as_str().unwrap())
+                .collect();
+            assert_eq!(efforts, ["none", "high"]);
+        }
+        // v2.5 支持图片输入且原图高清，pro 纯文本
+        let by_slug = |slug: &str| {
+            models
+                .iter()
+                .find(|model| model["slug"] == slug)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(
+            by_slug("mimo-v2.5")["input_modalities"].to_string(),
+            r#"["text","image"]"#
+        );
+        assert_eq!(by_slug("mimo-v2.5")["supports_image_detail_original"], true);
+        assert_eq!(
+            by_slug("mimo-v2.5-pro")["input_modalities"].to_string(),
+            r#"["text"]"#
+        );
+        assert_eq!(
+            by_slug("mimo-v2.5-pro")["supports_image_detail_original"],
+            false
+        );
     }
 
     #[test]
