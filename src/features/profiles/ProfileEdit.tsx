@@ -9,6 +9,7 @@ import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { ProfileIconTile } from "../../components/ProfileIconTile";
 import {
   balanceQueryProviders,
+  builtinHasCatalog,
   builtinPresets,
   customCatalogTemplate,
   customConfigTemplate,
@@ -83,6 +84,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const [mcpSection, setMcpSection] = useState("");
   const initialized = useRef(false);
   const authPreviewRequest = useRef(0);
+  const presetTemplateRequest = useRef(0);
   const editorRef = useRef<ConfigTextEditorHandle>(null);
 
   const selectedPreset = useMemo(() => builtinPresets.find((preset) => preset.kind === presetKind) ?? null, [presetKind]);
@@ -93,6 +95,10 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const showLongContextOverride = isOfficial;
   const supportsBalance = isOfficial || balanceQueryProviders.has(detail?.provider ?? "");
   const isUsageProvider = usageQueryProviders.has(detail?.provider ?? "");
+  // 创建态下预设的 config 原文统一从后端取（单源真相），避免与 Rust 模板双份维护。
+  // 与 configText 同源同时设置（selectPreset 内 await 后一起 set），防止异步晚到
+  // 触发 configText !== liveConfigFragment 的误判
+  const [presetFragment, setPresetFragment] = useState("");
   const authSource = create
     ? boundAccountId ? "oauth" : "desktop"
     : resolveAuthSource(detail);
@@ -120,7 +126,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     if (showAuthTab) list.push({ id: "auth", label: "auth.json" });
     return list;
   }, [catalogFileName, liveCatalogPath, showAuthTab]);
-  const baseFragment = create ? selectedPreset?.fragment ?? "" : detail?.config_fragment ?? "";
+  const baseFragment = create ? presetFragment : detail?.config_fragment ?? "";
   const liveConfigFragment = useMemo(() => {
     if (!baseFragment) return "";
     return withMcpSection(patchProviderFields(baseFragment, baseUrl, apiKey), mcpSection);
@@ -186,6 +192,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
         setName("自定义供应商");
         setSelectedIcon("custom");
         setConfigText(withMcpSection(customConfigTemplate, initialMcpSection));
+        setPresetFragment(customConfigTemplate);
         setCatalogText(customCatalogTemplate);
         setConfigInitial(withMcpSection(customConfigTemplate, initialMcpSection));
         setCatalogInitial(customCatalogTemplate);
@@ -242,8 +249,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
       if (create && !isCustom) setCatalogText("");
       return;
     }
-    const preset = selectedPreset;
-    if (!preset?.model_values.model_catalog_json) {
+    if (!builtinHasCatalog(presetKind)) {
       setCatalogText("");
       return;
     }
@@ -299,9 +305,20 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     if (!patchingSystemProxy) setSystemProxyEnabled(hasSystemProxyOverride(configText));
   }, [configText, patchingSystemProxy]);
 
-  const selectPreset = (kind: string) => {
+  const selectPreset = async (kind: string) => {
     const preset = builtinPresets.find((item) => item.kind === kind);
     if (!preset) return;
+    // 模板取回后才一次性更新全部状态：避免"表单已切、configText 未切"的中间渲染
+    // 触发 configText !== liveConfigFragment 的 configTouched 误判
+    const requestId = ++presetTemplateRequest.current;
+    let template: string;
+    try {
+      template = kind === "custom" ? customConfigTemplate : await api.getBuiltinConfig(kind);
+    } catch (error) {
+      if (requestId === presetTemplateRequest.current) feedback.error(`读取内置模板失败：${String(error)}`);
+      return;
+    }
+    if (requestId !== presetTemplateRequest.current) return;
     setPresetKind(kind);
     if (kind !== "chatgpt") setBoundAccountId(null);
     setConfigTouched(false);
@@ -315,7 +332,8 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     setFetchedModels([]);
     setAdminUrl(preset.admin_url ?? "");
     setSelectedIcon(preset.icon);
-    const nextConfig = withMcpSection(patchProviderFields(preset.fragment, preset.base_url, ""), mcpSection);
+    setPresetFragment(template);
+    const nextConfig = withMcpSection(patchProviderFields(template, preset.base_url, ""), mcpSection);
     setConfigText(nextConfig);
     setConfigInitial(nextConfig);
     setLongContextEnabled(kind === "chatgpt" && hasLongContextOverride(nextConfig));
@@ -465,7 +483,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
         {loadError ? <p className="muted mt-4 text-sm">{loadError}</p> : null}
         <div className="apple-group p-0">
           {create ? <div className="apple-panel-section"><div className="field-subtitle">选择供应商</div><div className="mt-3 grid gap-2 sm:grid-cols-3 md:grid-cols-6">
-            {builtinPresets.map((preset) => <button key={preset.kind} type="button" className={`flex items-center gap-2.5 rounded-xl p-2.5 text-left transition-colors ${presetKind === preset.kind ? "shadow-[0_0_0_1px_var(--accent)] bg-(--selection-bg)" : "shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4"}`} aria-pressed={presetKind === preset.kind} onClick={() => selectPreset(preset.kind)}><ProfileIconTile name={preset.name} icon={preset.icon} size="xs" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold tracking-tight">{preset.name}</span><span className="muted meta-xs block truncate">{preset.model}{preset.base_url ? "" : preset.kind === "chatgpt" ? " · 认证登录" : " · 无需密钥"}</span></span></button>)}
+            {builtinPresets.map((preset) => <button key={preset.kind} type="button" className={`flex items-center gap-2.5 rounded-xl p-2.5 text-left transition-colors ${presetKind === preset.kind ? "shadow-[0_0_0_1px_var(--accent)] bg-(--selection-bg)" : "shadow-[0_0_0_1px_var(--panel-ring)] hover:bg-black/3 dark:hover:bg-white/4"}`} aria-pressed={presetKind === preset.kind} onClick={() => void selectPreset(preset.kind)}><ProfileIconTile name={preset.name} icon={preset.icon} size="xs" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold tracking-tight">{preset.name}</span></span></button>)}
           </div></div> : null}
           <div className="apple-panel-section">
             <div className="flex items-center gap-4"><button type="button" className="relative grid h-[61px] w-[61px] shrink-0 place-items-center rounded-[16px] transition-opacity hover:opacity-80" title="点击更换图标" aria-label="更换图标" onClick={() => setPickingIcon(true)}><ProfileIconTile name={detail?.name ?? name} icon={selectedIcon} size="fill" /><span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-white shadow" aria-hidden="true"><Pencil className="h-2.5 w-2.5" strokeWidth={2} /></span></button><div className="min-w-0 flex-1"><div className="field-label mb-1.5">名称</div><input className="app-input" maxLength={50} placeholder="供应商名称" value={name} onChange={(event) => setName(event.target.value)} /></div></div>

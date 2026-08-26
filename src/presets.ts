@@ -1,3 +1,5 @@
+// 展示元数据：网格选择时的展示 / provider id 推断 / "测试连通" 按钮可用性判定。
+// config.toml 原文由后端 builtin 模板单一来源，模型目录同。
 export interface BuiltinPreset {
   kind: string;
   name: string;
@@ -6,8 +8,6 @@ export interface BuiltinPreset {
   base_url: string;
   admin_url: string | null;
   model: string;
-  model_values: Record<string, string>;
-  fragment: string;
 }
 
 /** 支持余额/用量查询的供应商（以 provider_id 键控）；加供应商时在这里加一行即可 */
@@ -16,7 +16,7 @@ export const balanceQueryProviders = new Set(["deepseek", "minimax", "ZAI"]);
 /** 文案使用“用量”的供应商；DeepSeek 保持“余额”，ChatGPT 额度单独处理。 */
 export const usageQueryProviders = new Set(["minimax", "ZAI"]);
 
-/** 余额/用量胶囊变色（已用 <70% 绿 / 70-89% 橙 / ≥90% 红；负余额红色） */
+/** 余额/用量胶囊变色（已用 <70% 绿 / 70-89 9、橙 / ≥90% 红；负余额红色） */
 export function balanceChipClass(
   usagePercent: number | null,
   failed: boolean,
@@ -76,199 +76,25 @@ export const customCatalogTemplate = `{
 }`;
 
 export const builtinPresets: BuiltinPreset[] = [
-  {
-    kind: "deepseek",
-    name: "DeepSeek",
-    provider: "deepseek",
-    icon: "deepseek",
-    base_url: "https://api.deepseek.com/",
-    admin_url: "https://platform.deepseek.com",
-    model: "deepseek-v4-flash",
-    model_values: {
-      model: '"deepseek-v4-flash"',
-      model_reasoning_effort: '"high"',
-      model_catalog_json: '"~/.codex/models.json"',
-    },
-    fragment: [
-      'model = "deepseek-v4-flash"',
-      'model_provider = "deepseek"',
-      'preferred_auth_method = "apikey"',
-      'forced_login_method = "api"',
-      'model_reasoning_effort = "high"',
-      'model_catalog_json = "~/.codex/models.json"',
-      "",
-      "[model_providers.deepseek]",
-      'name = "deepseek"',
-      'base_url = "https://api.deepseek.com/"',
-      'wire_api = "responses"',
-      'experimental_bearer_token = "<你的 DeepSeek API Key>"',
-    ].join("\n"),
-  },
-  {
-    kind: "minimax",
-    name: "MiniMax",
-    provider: "minimax",
-    icon: "minimax",
-    base_url: "https://api.minimaxi.com/v1",
-    admin_url: "https://platform.minimaxi.com",
-    model: "MiniMax-M3",
-    model_values: {
-      model: '"MiniMax-M3"',
-      model_reasoning_effort: '"high"',
-      model_catalog_json: '"~/.codex/model-catalogs/custom-catalog.json"',
-    },
-    fragment: [
-      'model = "MiniMax-M3"',
-      'model_provider = "minimax"',
-      "model_context_window = 1000000",
-      'model_catalog_json = "~/.codex/model-catalogs/custom-catalog.json"',
-      "",
-      "[model_providers.minimax]",
-      'name = "MiniMax"',
-      'base_url = "https://api.minimaxi.com/v1"',
-      'experimental_bearer_token = "<MINIMAX_API_KEY>"',
-      'wire_api = "responses"',
-    ].join("\n"),
-  },
-  {
-    kind: "zhipu",
-    name: "智谱",
-    provider: "ZAI",
-    icon: "zhipu",
-    base_url: "https://open.bigmodel.cn/api/v1",
-    admin_url: "https://open.bigmodel.cn",
-    model: "glm-5.3",
-    model_values: {
-      model: '"glm-5.3"',
-      model_reasoning_effort: '"max"',
-      model_catalog_json: '"~/.codex/models.json"',
-    },
-    fragment: [
-      'model_provider = "ZAI"',
-      'model = "glm-5.3"',
-      'model_reasoning_effort = "max"',
-      'model_catalog_json = "~/.codex/models.json"',
-      "",
-      "[model_providers.ZAI]",
-      'name = "ZAI"',
-      'base_url = "https://open.bigmodel.cn/api/v1"',
-      'experimental_bearer_token = "<Your API Key>"',
-      'wire_api = "responses"',
-    ].join("\n"),
-  },
-  {
-    kind: "chatgpt",
-    name: "ChatGPT",
-    provider: null,
-    icon: "openai-chatgpt",
-    base_url: "",
-    admin_url: "https://openai.com/chatgpt/pricing",
-    model: "gpt-5.6",
-    model_values: {
-      model: '"gpt-5.6"',
-      model_reasoning_effort: '"medium"',
-    },
-    fragment: 'model = "gpt-5.6"\nmodel_reasoning_effort = "medium"',
-  },
-  {
-    kind: "opencode",
-    name: "OpenCode",
-    provider: "opencode-go",
-    icon: "opencode",
-    base_url: "https://opencode.ai/zen/go/v1",
-    admin_url: null,
-    model: "glm-5.2",
-    model_values: {
-      model: '"glm-5.2"',
-      model_reasoning_effort: '"high"',
-      model_catalog_json: '"~/.codex/models.json"',
-    },
-    fragment: [
-      'model = "glm-5.2"',
-      'model_provider = "opencode-go"',
-      'model_reasoning_effort = "high"',
-      "disable_response_storage = true",
-      'model_catalog_json = "~/.codex/models.json"',
-      "",
-      "[model_providers.opencode-go]",
-      'name = "OpenCode Go"',
-      'base_url = "https://opencode.ai/zen/go/v1"',
-      'wire_api = "responses"',
-      'experimental_bearer_token = "<你的 OpenCode API Key>"',
-    ].join("\n"),
-  },
-  {
-    kind: "openrouter",
-    name: "OpenRouter",
-    provider: "openrouter",
-    icon: "openrouter",
-    base_url: "https://openrouter.ai/api/v1",
-    admin_url: "https://openrouter.ai/settings/keys",
-    model: "openai/gpt-5.6-sol",
-    // 聚合站模型众多，无静态目录；模型由编辑页"获取模型列表"拉取（slug 需带厂商前缀）
-    model_values: {
-      model: '"openai/gpt-5.6-sol"',
-      model_reasoning_effort: '"high"',
-    },
-    fragment: [
-      'model = "openai/gpt-5.6-sol"',
-      'model_provider = "openrouter"',
-      'model_reasoning_effort = "high"',
-      "disable_response_storage = true",
-      "",
-      "[model_providers.openrouter]",
-      'name = "OpenRouter"',
-      'base_url = "https://openrouter.ai/api/v1"',
-      'wire_api = "responses"',
-      'experimental_bearer_token = "<你的 OpenRouter API Key>"',
-    ].join("\n"),
-  },
-  {
-    kind: "mimo",
-    name: "小米 MiMo",
-    provider: "mimo",
-    icon: "xiaomi-mimo",
-    base_url: "https://api.xiaomimimo.com/v1",
-    admin_url: "https://platform.xiaomimimo.com/#/console/api-keys",
-    model: "mimo-v2.5-pro",
-    model_values: {
-      model: '"mimo-v2.5-pro"',
-      model_reasoning_effort: '"high"',
-      model_supports_reasoning_summaries: "true",
-      model_reasoning_summary: '"none"',
-      model_context_window: "1048576",
-      model_catalog_json: '"~/.codex/models.json"',
-    },
-    fragment: [
-      'model = "mimo-v2.5-pro"',
-      'model_provider = "mimo"',
-      'model_reasoning_effort = "high"',
-      "model_supports_reasoning_summaries = true",
-      'model_reasoning_summary = "none"',
-      "model_context_window = 1048576",
-      'web_search = "disabled"',
-      'model_catalog_json = "~/.codex/models.json"',
-      "",
-      "[model_providers.mimo]",
-      'name = "mimo"',
-      'base_url = "https://api.xiaomimimo.com/v1"',
-      'wire_api = "responses"',
-      'experimental_bearer_token = "<你的 MiMo API Key>"',
-    ].join("\n"),
-  },
-  {
-    kind: "custom",
-    name: "自定义",
-    provider: null,
-    icon: "custom",
-    base_url: "",
-    admin_url: null,
-    model: "自定义",
-    model_values: { model_catalog_json: '"~/.codex/models.json"' },
-    fragment: customConfigTemplate,
-  },
+  { kind: "deepseek", name: "DeepSeek", provider: "deepseek", icon: "deepseek", base_url: "https://api.deepseek.com/", admin_url: "https://platform.deepseek.com", model: "deepseek-v4-flash" },
+  { kind: "minimax", name: "MiniMax", provider: "minimax", icon: "minimax", base_url: "https://api.minimaxi.com/v1", admin_url: "https://platform.minimaxi.com", model: "MiniMax-M3" },
+  { kind: "zhipu", name: "智谱", provider: "ZAI", icon: "zhipu", base_url: "https://open.bigmodel.cn/api/v1", admin_url: "https://open.bigmodel.cn", model: "glm-5.3" },
+  { kind: "chatgpt", name: "ChatGPT", provider: null, icon: "openai-chatgpt", base_url: "", admin_url: "https://openai.com/chatgpt/pricing", model: "gpt-5.6" },
+  { kind: "opencode", name: "OpenCode", provider: "opencode-go", icon: "opencode", base_url: "https://opencode.ai/zen/go/v1", admin_url: null, model: "glm-5.2" },
+  { kind: "openrouter", name: "OpenRouter", provider: "openrouter", icon: "openrouter", base_url: "https://openrouter.ai/api/v1", admin_url: "https://openrouter.ai/settings/keys", model: "openai/gpt-5.6-sol" },
+  { kind: "mimo", name: "小米 MiMo", provider: "mimo", icon: "xiaomi-mimo", base_url: "https://api.xiaomimimo.com/v1", admin_url: "https://platform.xiaomimimo.com/#/console/api-keys", model: "mimo-v2.5-pro" },
+  { kind: "custom", name: "自定义", provider: null, icon: "custom", base_url: "", admin_url: null, model: "自定义" },
 ];
 
 export function builtinPresetByKind(kind: string): BuiltinPreset | undefined {
   return builtinPresets.find((preset) => preset.kind === kind);
+}
+
+/** 哪些内置供应商自带静态模型目录档。models.json 槽位的存在判定统一走这里。 */
+export const BUILTINS_WITH_CATALOG: ReadonlySet<string> = new Set([
+  "deepseek", "minimax", "zhipu", "opencode", "mimo",
+]);
+
+export function builtinHasCatalog(kind: string | null | undefined): boolean {
+  return kind != null && BUILTINS_WITH_CATALOG.has(kind);
 }

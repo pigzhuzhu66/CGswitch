@@ -64,6 +64,7 @@ export const api = {
       authText,
     }),
   getBuiltinCatalog: (kind: string) => call<string | null>("get_builtin_catalog", { kind }),
+  getBuiltinConfig: (kind: string) => call<string>("get_builtin_config", { kind }),
   testProfileConnection: (id: string, baseUrl?: string, apiKey?: string) =>
     call<ProfileConnectionResult>("test_profile_connection", { id, baseUrl, apiKey }),
   // 创建态表单测试：供应商尚未保存，直接用表单里的地址/密钥

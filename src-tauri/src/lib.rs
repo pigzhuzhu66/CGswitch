@@ -44,6 +44,7 @@ pub fn run() {
             commands::add_builtin_profile,
             commands::add_custom_profile,
             commands::get_builtin_catalog,
+            commands::get_builtin_config,
             commands::test_profile_connection,
             commands::test_provider_connection,
             commands::fetch_provider_models,

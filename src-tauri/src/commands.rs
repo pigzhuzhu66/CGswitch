@@ -4,6 +4,7 @@ use crate::auth::codex_oauth::{
     parse_external_auth_json, AuthStatus, CodexOAuthError, CodexOAuthManager, CodexOAuthState,
     DeviceCodeResponse, ManagedAccount,
 };
+use crate::builtin;
 use crate::codex::config as codex_config;
 use crate::error::{app_err, AppResult};
 use crate::models::{
@@ -233,6 +234,13 @@ pub fn get_builtin_catalog(
     state: State<'_, AppContext>,
 ) -> AppResult<Option<String>> {
     state.get_builtin_catalog(&kind)
+}
+
+// 内置供应商的 config.toml 模板原文：前端创建页预览的唯一来源（单源，避免与前端 fragment 双份维护）
+#[tauri::command]
+pub fn get_builtin_config(kind: String) -> AppResult<String> {
+    let template = builtin::template(&kind)?;
+    Ok(String::from_utf8_lossy(template.config).into_owned())
 }
 
 #[tauri::command]
