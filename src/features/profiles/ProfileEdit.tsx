@@ -118,7 +118,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const FormatIcon = formatTarget.icon;
   // auth.json 仅官方档有认证语义；第三方档只有携带历史 raw_auth 快照时才显示（防御旧数据）。
   const showAuthTab = create
-    ? isOfficial && authSource === "desktop"
+    ? isCustom || (isOfficial && authSource === "desktop")
     : isOfficial || Boolean(detail?.raw_auth);
   const tabs = useMemo(() => {
     const list: { id: EditTab; label: string; title?: string }[] = [{ id: "config", label: "config.toml" }];
@@ -196,7 +196,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
         setCatalogText(customCatalogTemplate);
         setConfigInitial(withMcpSection(customConfigTemplate, initialMcpSection));
         setCatalogInitial(customCatalogTemplate);
-        setModelValue("your-model");
+        setModelValue("");
       } else if (profile) {
         try {
           const loaded = await api.getProfile(profile.id);
