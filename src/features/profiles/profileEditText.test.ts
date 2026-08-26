@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { patchProviderFields, readProviderFields, withMcpSection } from "./profileEditText";
+import { patchProviderFields, readProviderFields, resolveAuthSource, withMcpSection } from "./profileEditText";
+
+describe("resolveAuthSource", () => {
+  it("keeps the backend's explicit null for third-party profiles", () => {
+    // 回归：`??` 会把 null 吞成 "desktop"，导致第三方档被当成带认证处理
+    expect(resolveAuthSource({ auth_source: null, provider: "deepseek" })).toBeNull();
+  });
+
+  it("returns desktop and oauth unchanged when present", () => {
+    expect(resolveAuthSource({ auth_source: "desktop", provider: null })).toBe("desktop");
+    expect(resolveAuthSource({ auth_source: "oauth", provider: null, account_id: "a1" })).toBe("oauth");
+  });
+
+  it("infers only when the field is missing (legacy data)", () => {
+    expect(resolveAuthSource({ provider: null })).toBe("desktop");
+    expect(resolveAuthSource({ account_id: "a1", provider: null })).toBe("oauth");
+    expect(resolveAuthSource({ provider: "deepseek" })).toBeNull();
+    expect(resolveAuthSource(null)).toBeNull();
+  });
+});
 
 describe("profileEditText", () => {
   it("reads the provider selected by model_provider", () => {

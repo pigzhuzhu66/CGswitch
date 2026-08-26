@@ -48,11 +48,6 @@ export const customCatalogTemplate = `{
   ]
 }`;
 
-export const customAuthTemplate = `{
-  "auth_mode": "api_key",
-  "OPENAI_API_KEY": "your-api-key"
-}`;
-
 export const builtinPresets: BuiltinPreset[] = [
   {
     kind: "deepseek",

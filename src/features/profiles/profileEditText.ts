@@ -5,6 +5,25 @@ export interface ProviderFields {
   tokenMasked: boolean;
 }
 
+export type AuthSourceValue = "desktop" | "oauth" | null;
+
+/**
+ * auth_source 三态解析：后端对第三方档明确返回 null（无认证语义）。
+ * 只允许在字段缺失（undefined，旧数据）时推断；`??` 会把 null 一并吞成
+ * "desktop"，导致第三方档被当成带认证处理。
+ */
+export function resolveAuthSource(
+  detail: {
+    auth_source?: AuthSourceValue;
+    account_id?: string | null;
+    provider?: string | null;
+  } | null,
+): AuthSourceValue {
+  if (detail?.auth_source !== undefined) return detail.auth_source;
+  if (detail?.account_id) return "oauth";
+  return detail != null && detail.provider === null ? "desktop" : null;
+}
+
 // 读取 [model_providers.*] 段里的 base_url / 密钥，供编辑器回填表单。
 export function readProviderFields(text: string): ProviderFields {
   const values: ProviderFields = {

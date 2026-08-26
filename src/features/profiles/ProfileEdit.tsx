@@ -10,12 +10,11 @@ import { ProfileIconTile } from "../../components/ProfileIconTile";
 import {
   balanceQueryProviders,
   builtinPresets,
-  customAuthTemplate,
   customCatalogTemplate,
   customConfigTemplate,
   usageQueryProviders,
 } from "../../presets";
-import { patchProviderFields, readProviderFields, withMcpSection } from "./profileEditText";
+import { patchProviderFields, readProviderFields, resolveAuthSource, withMcpSection } from "./profileEditText";
 import type { EditorDiagnosticSummary, ManagedAccount, ProfileDetail, ProfileSummary } from "../../types";
 import ProfileIconEdit from "./ProfileIconEdit";
 
@@ -93,7 +92,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const isUsageProvider = usageQueryProviders.has(detail?.provider ?? "");
   const authSource = create
     ? boundAccountId ? "oauth" : "desktop"
-    : detail?.auth_source ?? (detail?.account_id ? "oauth" : "desktop");
+    : resolveAuthSource(detail);
   const configDirty = normalizeNewlines(configText) !== normalizeNewlines(configInitial);
   const catalogDirty = normalizeNewlines(catalogText) !== normalizeNewlines(catalogInitial);
   const authDirty = normalizeNewlines(authText) !== normalizeNewlines(authInitial);
@@ -108,14 +107,16 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
       ? { icon: FileBraces, label: "auth.json", title: "格式化 auth.json（JSON）" }
       : { icon: FileBraces, label: catalogFileName, title: `格式化 ${catalogFileName}（JSON）` };
   const FormatIcon = formatTarget.icon;
+  // auth.json 仅官方档有认证语义；第三方档只有携带历史 raw_auth 快照时才显示（防御旧数据）。
+  const showAuthTab = create
+    ? isOfficial && authSource === "desktop"
+    : isOfficial || Boolean(detail?.raw_auth);
   const tabs = useMemo(() => {
     const list: { id: EditTab; label: string; title?: string }[] = [{ id: "config", label: "config.toml" }];
     if (liveCatalogPath) list.push({ id: "models", label: catalogFileName, title: liveCatalogPath });
-    if (!create || isCustom || (isOfficial && authSource === "desktop")) {
-      list.push({ id: "auth", label: "auth.json" });
-    }
+    if (showAuthTab) list.push({ id: "auth", label: "auth.json" });
     return list;
-  }, [authSource, catalogFileName, create, isCustom, isOfficial, liveCatalogPath]);
+  }, [catalogFileName, liveCatalogPath, showAuthTab]);
   const baseFragment = create ? selectedPreset?.fragment ?? "" : detail?.config_fragment ?? "";
   const liveConfigFragment = useMemo(() => {
     if (!baseFragment) return "";
@@ -183,10 +184,8 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
         setSelectedIcon("custom");
         setConfigText(withMcpSection(customConfigTemplate, initialMcpSection));
         setCatalogText(customCatalogTemplate);
-        setAuthText(customAuthTemplate);
         setConfigInitial(withMcpSection(customConfigTemplate, initialMcpSection));
         setCatalogInitial(customCatalogTemplate);
-        setAuthInitial(customAuthTemplate);
       } else if (profile) {
         try {
           const loaded = await api.getProfile(profile.id);
@@ -208,7 +207,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           setLongContextEnabled(loaded.provider === null && hasLongContextOverride(loaded.raw_config ?? loaded.config_fragment));
           setSystemProxyEnabled(hasSystemProxyOverride(loaded.raw_config ?? loaded.config_fragment));
           if (loaded.provider === null) {
-            const source = loaded.auth_source ?? (loaded.account_id ? "oauth" : "desktop");
+            const source = resolveAuthSource(loaded);
             if (source === "oauth") {
               setAuthPreviewOnly(true);
               if (loaded.account_id) {
