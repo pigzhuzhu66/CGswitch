@@ -29,15 +29,16 @@ export function balanceChipClass(
   return "chip-success";
 }
 
-export const customConfigTemplate = `model = "your-model"
-model_provider = "your-provider"
+// 地址/密钥留空由表单写入；顶层不带 model 行，模型输入框留空，
+// 用户输入或「获取模型列表」选择后经 patchModelValue 插入
+export const customConfigTemplate = `model_provider = "custom"
 model_reasoning_effort = "high"
 disable_response_storage = true
 model_catalog_json = "~/.codex/models.json"
 
-[model_providers.your-provider]
-name = "your-provider"
-base_url = "https://api.example.com/v1"
+[model_providers.custom]
+name = "custom"
+base_url = ""
 wire_api = "responses"
 experimental_bearer_token = ""`;
 
@@ -47,9 +48,9 @@ experimental_bearer_token = ""`;
 export const customCatalogTemplate = `{
   "models": [
     {
-      "slug": "your-model",
-      "display_name": "Your Model",
-      "description": "Your Model",
+      "slug": "gpt-5.6-sol",
+      "display_name": "GPT 5.6 Sol",
+      "description": "GPT 5.6 Sol",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         { "effort": "low", "description": "Light reasoning" },
