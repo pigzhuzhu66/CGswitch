@@ -50,6 +50,8 @@ impl AppContext {
 
     /// 把数据库镜像的 MCP 段写进 live config.toml。
     /// live 解析失败（损坏/被重置）时从镜像重建整个文件；写前照常自动备份原文件。
+    /// 建模字段与 live 一致的服务器保留 live 原文：注释/未建模键跟随 live，
+    /// 恢复动作只覆盖真有差异的条目，不做整段格式回滚。
     pub(super) fn write_mcp_section_to_live(
         &self,
         fragments: &[(String, String)],
@@ -59,7 +61,30 @@ impl AppContext {
             Ok(document) => document,
             Err(_) => toml_edit::DocumentMut::new(),
         };
-        codex_config::replace_mcp_section_from_fragments(&mut document, fragments);
+        let live_fragments = codex_config::mcp_server_fragments_from_document(&document);
+        let live_specs: BTreeMap<String, McpServerSpec> =
+            codex_config::mcp_servers_from_document(&document)
+                .into_iter()
+                .map(|spec| (spec.name.clone(), spec))
+                .collect();
+        let merged = fragments
+            .iter()
+            .map(|(name, toml)| {
+                let semantically_equal = live_specs.get(name).is_some_and(|live| {
+                    codex_config::spec_from_fragment(name, toml).is_some_and(|db| *live == db)
+                });
+                if semantically_equal {
+                    live_fragments
+                        .iter()
+                        .find(|(live_name, _)| live_name == name)
+                        .cloned()
+                        .unwrap_or_else(|| (name.clone(), toml.clone()))
+                } else {
+                    (name.clone(), toml.clone())
+                }
+            })
+            .collect::<Vec<_>>();
+        codex_config::replace_mcp_section_from_fragments(&mut document, &merged);
         let config_path = self.paths.codex_config();
         backup_file(&config_path, &self.paths.config_backup, "config")?;
         atomic_write(
@@ -145,7 +170,6 @@ impl AppContext {
                 entries.push(McpSyncDiffEntry {
                     name: name.clone(),
                     kind: McpSyncEntryKind::LiveOnly,
-                    unmodeled_only: false,
                     live_spec,
                     db_spec: None,
                     live_toml: Some(live_toml.clone()),
@@ -172,12 +196,14 @@ impl AppContext {
                     }
                 }
             }
-            let unmodeled_only =
-                changed_fields.is_empty() && live_spec.is_some() && db_spec.is_some();
+            // 建模字段全部相等 = 语义等价（差异只在注释/格式/未建模键），不构成差异：
+            // 展示会诱导无意义的“同步”，写回反而会回滚 live 侧的注释与未建模键。
+            if changed_fields.is_empty() && live_spec.is_some() && db_spec.is_some() {
+                continue;
+            }
             entries.push(McpSyncDiffEntry {
                 name: name.clone(),
                 kind: McpSyncEntryKind::Changed,
-                unmodeled_only,
                 live_spec,
                 db_spec,
                 live_toml: Some(live_toml.clone()),
@@ -196,7 +222,6 @@ impl AppContext {
             entries.push(McpSyncDiffEntry {
                 name: name.clone(),
                 kind: McpSyncEntryKind::DbOnly,
-                unmodeled_only: false,
                 live_spec: None,
                 db_spec: codex_config::spec_from_fragment(name, db_toml),
                 live_toml: None,

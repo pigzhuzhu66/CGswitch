@@ -1099,7 +1099,6 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
         ? {
             name: first.name,
             kind: "changed" as const,
-            unmodeled_only: false,
             live_spec: first,
             db_spec: { ...first, url: first.url ? first.url + "-old" : first.url },
             live_toml: null,
@@ -1112,7 +1111,6 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       const liveOnly = {
         name: "web-demo-live-only",
         kind: "live_only" as const,
-        unmodeled_only: false,
         live_spec: {
           name: "web-demo-live-only",
           enabled: null,

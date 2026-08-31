@@ -1938,7 +1938,6 @@ fn mcp_preview_flags_live_only_db_only_and_changed() {
         .find(|entry| entry.name == "a")
         .unwrap();
     assert_eq!(changed.kind, McpSyncEntryKind::Changed);
-    assert!(!changed.unmodeled_only);
     assert_eq!(changed.changed_fields.len(), 1);
     assert_eq!(changed.changed_fields[0].field, "url");
     assert_eq!(
@@ -1973,22 +1972,46 @@ fn mcp_preview_flags_live_only_db_only_and_changed() {
 }
 
 #[test]
-fn mcp_preview_marks_comment_only_difference_unmodeled() {
+fn mcp_preview_ignores_comment_only_difference() {
     let (context, _home) = mcp_test_context("[mcp_servers.a]\nurl = \"https://a/mcp\"\n");
     context.import_mcp_from_live().unwrap();
 
-    // 只在条目内加一行注释：建模字段全等，差异标记为“仅格式差异”
+    // 只在条目内加一行注释：建模字段全等 = 语义等价，不算差异
     std::fs::write(
         context.paths.codex_config(),
         "[mcp_servers.a]\n# 手动维护\nurl = \"https://a/mcp\"\n",
     )
     .unwrap();
     let preview = context.mcp_sync_preview().unwrap();
-    assert_eq!(preview.entries.len(), 1, "{:?}", preview.entries);
-    let entry = &preview.entries[0];
-    assert_eq!(entry.kind, McpSyncEntryKind::Changed);
-    assert!(entry.unmodeled_only);
-    assert!(entry.changed_fields.is_empty());
+    assert!(preview.entries.is_empty(), "{:?}", preview.entries);
+}
+
+#[test]
+fn mcp_restore_keeps_live_text_for_semantically_equal_servers() {
+    let (context, _home) = mcp_test_context("[mcp_servers.a]\nurl = \"https://a/mcp\"\n");
+    context.import_mcp_from_live().unwrap();
+
+    // live 侧只多了注释（建模字段一致）：恢复时保留 live 原文，不回滚注释
+    std::fs::write(
+        context.paths.codex_config(),
+        "[mcp_servers.a]\n# 手动维护\nurl = \"https://a/mcp\"\n",
+    )
+    .unwrap();
+    context.restore_mcp_from_database().unwrap();
+    let live = std::fs::read_to_string(context.paths.codex_config()).unwrap();
+    assert!(live.contains("# 手动维护"), "{live}");
+    assert!(live.contains("https://a/mcp"), "{live}");
+
+    // live 侧 url 真的不同：恢复才覆盖
+    std::fs::write(
+        context.paths.codex_config(),
+        "[mcp_servers.a]\nurl = \"https://a/rolled-back\"\n",
+    )
+    .unwrap();
+    context.restore_mcp_from_database().unwrap();
+    let live = std::fs::read_to_string(context.paths.codex_config()).unwrap();
+    assert!(live.contains("https://a/mcp"), "{live}");
+    assert!(!live.contains("rolled-back"), "{live}");
 }
 
 #[test]

@@ -82,8 +82,6 @@ export interface McpSyncFieldDiff {
 export interface McpSyncDiffEntry {
   name: string;
   kind: McpSyncEntryKind;
-  /** true = 建模字段全等，差异只在注释/格式/未建模键。 */
-  unmodeled_only: boolean;
   live_spec: McpServerSpec | null;
   db_spec: McpServerSpec | null;
   live_toml: string | null;

@@ -15,7 +15,7 @@ interface McpSyncDialogProps {
 
 const fieldLabels: Record<string, string> = { enabled: "启用状态", startup_timeout_sec: "启动超时秒", tool_timeout_sec: "工具超时秒", command: "启动命令", args: "启动参数", env: "环境变量", url: "服务地址", bearer_token_env_var: "令牌环境变量", http_headers: "HTTP 头", env_http_headers: "环境变量 HTTP 头" };
 const valueText = (value: unknown) => value === null ? "未设置" : typeof value === "string" ? value : JSON.stringify(value);
-const kindText = (entry: McpSyncDiffEntry) => entry.kind === "live_only" ? "外部新增" : entry.kind === "db_only" ? "配置文件缺失" : entry.unmodeled_only ? "仅格式差异" : "内容被修改";
+const kindText = (entry: McpSyncDiffEntry) => entry.kind === "live_only" ? "外部新增" : entry.kind === "db_only" ? "配置文件缺失" : "内容被修改";
 const detailFallback = (entry: McpSyncDiffEntry) => entry.kind === "live_only" ? "该配置仅存在于 config.toml，数据库中没有对应记录。" : entry.kind === "db_only" ? "该配置仅存在于数据库，config.toml 中没有对应记录。" : "存在未建模差异，当前没有可显示的字段明细。";
 
 export default function McpSyncDialog({ open, preview, previewError, busy, onClose, onApply }: McpSyncDialogProps) {
@@ -122,7 +122,7 @@ export default function McpSyncDialog({ open, preview, previewError, busy, onClo
                     })}
                     summary={(
                       <>
-                        <span className={`apple-chip ${entry.kind === "live_only" || entry.unmodeled_only ? "chip-warn" : "chip-danger"}`}>{kindText(entry)}</span>
+                        <span className={`apple-chip ${entry.kind === "live_only" ? "chip-warn" : "chip-danger"}`}>{kindText(entry)}</span>
                         <span className="min-w-0 flex-1 truncate font-semibold">{entry.name}</span>
                       </>
                     )}
@@ -140,8 +140,6 @@ export default function McpSyncDialog({ open, preview, previewError, busy, onClo
                             </div>
                           ))}
                         </div>
-                      ) : entry.unmodeled_only ? (
-                        <p className="muted m-0 text-sm">建模字段全部相同，差异只在注释、格式或未建模键。</p>
                       ) : entry.live_toml?.trim() || entry.db_toml?.trim() ? (
                         <pre className="mono muted m-0 whitespace-pre-wrap break-all meta-xs">{entry.live_toml ?? entry.db_toml}</pre>
                       ) : (

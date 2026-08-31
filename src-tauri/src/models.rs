@@ -144,8 +144,6 @@ pub struct McpSyncFieldDiff {
 pub struct McpSyncDiffEntry {
     pub name: String,
     pub kind: McpSyncEntryKind,
-    /// true = 建模字段全部相等，差异只在注释/格式/未建模键（同步按该侧整段替换文本）。
-    pub unmodeled_only: bool,
     pub live_spec: Option<McpServerSpec>,
     pub db_spec: Option<McpServerSpec>,
     /// 两侧的原始 TOML 片段（单侧独有时另一侧为 None），展开明细时展示。
