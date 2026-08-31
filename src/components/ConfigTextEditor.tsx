@@ -1,6 +1,6 @@
 import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from "@codemirror/autocomplete";
 import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
-import { bracketMatching, defaultHighlightStyle, foldGutter, foldKeymap, indentOnInput, StreamLanguage, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+import { bracketMatching, defaultHighlightStyle, ensureSyntaxTree, foldGutter, foldKeymap, indentOnInput, StreamLanguage, syntaxHighlighting, syntaxTree } from "@codemirror/language";
 import { json } from "@codemirror/lang-json";
 import { forEachDiagnostic, lintGutter, lintKeymap, linter, type Diagnostic } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
@@ -45,6 +45,37 @@ const basicSetup = [
 
 export interface ConfigTextEditorHandle {
   focusFirstDiagnostic: () => void;
+}
+
+/**
+ * JSON.parse 是唯一裁决：解析通过绝不报错（部分语法树/错误恢复会对合法大文档误报）；
+ * 确认损坏后才用 ensureSyntaxTree 取完整语法树定位。
+ */
+export function collectJsonDiagnostics(state: EditorState): Diagnostic[] {
+  const text = state.doc.toString();
+  if (!text.trim()) return [];
+  try {
+    JSON.parse(text);
+    return [];
+  } catch {
+    // 已确认损坏，继续用语法树定位
+  }
+  const diagnostics: Diagnostic[] = [];
+  // 1 秒预算内强制解析完整棵树；超时则退回当前可用的树（文档已确认损坏，只影响定位精度）
+  const tree = ensureSyntaxTree(state, state.doc.length, 1000) ?? syntaxTree(state);
+  tree.iterate({
+    enter(node) {
+      if (!node.type.isError) return;
+      diagnostics.push({
+        from: node.from,
+        to: Math.min(state.doc.length, Math.max(node.to, node.from + 1)),
+        severity: "error",
+        source: "JSON",
+        message: "JSON 语法错误，请检查此处的逗号、括号或值",
+      });
+    },
+  });
+  return diagnostics;
 }
 
 interface ConfigTextEditorProps {
@@ -115,23 +146,7 @@ const ConfigTextEditor = forwardRef<ConfigTextEditorHandle, ConfigTextEditorProp
       onDiagnosticsRef.current({ count, firstLine });
     };
 
-    const jsonDiagnostics = linter((view) => {
-      if (!view.state.doc.toString().trim()) return [];
-      const diagnostics: Diagnostic[] = [];
-      syntaxTree(view.state).iterate({
-        enter(node) {
-          if (!node.type.isError) return;
-          diagnostics.push({
-            from: node.from,
-            to: Math.min(view.state.doc.length, Math.max(node.to, node.from + 1)),
-            severity: "error",
-            source: "JSON",
-            message: "JSON 语法错误，请检查此处的逗号、括号或值",
-          });
-        },
-      });
-      return diagnostics;
-    });
+    const jsonDiagnostics = linter((view) => collectJsonDiagnostics(view.state));
     const tomlDiagnostics = linter(async (view) => {
       const diagnostics = await validateToml(view.state.doc.toString());
       return diagnostics.map(({ from, to, message }) => ({
