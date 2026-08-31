@@ -107,7 +107,7 @@ export default function McpSyncDialog({ open, preview, previewError, busy, onClo
           </div>
           <div className="space-y-2">
             <div className="field-subtitle">差异详情</div>
-            <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+            <div className="-m-1 max-h-[50vh] space-y-2 overflow-y-auto p-1">
               {entries.map((entry) => {
                 const isExpanded = expanded.has(entry.name);
                 return (
