@@ -1,0 +1,184 @@
+---
+name: release
+description: CGswitch 发版流水线（**默认仅本地 commit 为止**）：AI 读 CHANGELOG 历史与 git 三态（最新 tag / HEAD VERSION / working tree VERSION），**单次展示** bump 级别建议（用户确认）→ AI 跑 `node scripts/bump-version.mjs <level>`（**禁止手写**）→ **展示** CHANGELOG 草稿（用户确认）→ 写入 CHANGELOG + 本地 commit。**Step 3 写入本地 commit 即终止**；AI 不主动询问、不主动执行任何 push / 触发 Release 工作流 / 盯构建 / 发布动作，这些扩展步骤必须由用户用明确指令单独启动。当用户说"发版"、"发行"、"release"、"发个新版本"、"发布新版本"时使用。
+---
+
+# CGswitch 发版
+
+分工：本 skill 做需要判断的部分——bump 级别建议、CHANGELOG 草稿（撰写须由 Agent 完成并经用户确认）、本地 commit、跑 bump-version 命令；`.github/workflows/release.yml` 做确定性的部分——校验、三平台构建、创建 tag 与草稿发行页、上传资产。草稿不会通知关注者；执行发布那一刻 GitHub 才给关注者发通知邮件。
+
+工作流由手动触发（推荐，`workflow_dispatch`）或 tag 推送触发；手动触发时工作流用 `GITHUB_TOKEN` 创建 tag 和草稿，不会递归触发自身。
+
+## 默认流程边界
+
+**Step 0–3 是默认范围**：建议 bump 级别（用户确认） + 跑 bump 命令 + 起草 CHANGELOG 草稿（用户确认） + 写入本地 commit。**Step 3 写入本地 commit 即终止。**
+
+Step 4–6（push / `gh workflow run` / 盯构建 / 发布）属于扩展流程，**必须用户明确启动**才执行，常见触发词如"继续"、"push"、"推上去"、"触发构建"、"发布"、"发版（确认发布）"。**用户不说就停手**——AI 在 Step 3 之后只汇报 commit 结果，**不主动询问也不主动执行**任何扩展动作。
+
+**角色分工硬约束**：
+
+- **AI**：给 bump 级别建议；用户确认后跑 `node scripts/bump-version.mjs <level>`；起草 CHANGELOG 草稿；写入；commit。**不**直接编辑 `VERSION` / `package.json` / `src-tauri/Cargo.toml` / `src-tauri/tauri.conf.json`。
+- **用户**：确认 bump 级别（可改 AI 建议）；确认 CHANGELOG 文案（可改）。
+- **递增必须跑脚本命令，禁手写**：`bump-version.mjs` 内已串联 `sync-version.mjs` 同步全部元数据文件，手写会漏。
+- **版本号基线以 git 三态为准**：最新 tag + HEAD VERSION（`git show HEAD:VERSION`）+ working tree VERSION（读 `VERSION`），取三者中**最大值**作为 bump 基线——用户在测试场景可能预先 bump，working tree 会领先 index / HEAD。
+
+本 skill 不限定分支：在任何分支触发都只执行本地流程（bump + CHANGELOG + commit）。分支切换、push、工作流触发、盯构建、发布由用户自行决定，AI 不主动执行也不主动询问。
+
+## Instructions
+
+### Step 0: 展示 bump 级别建议（**等用户确认**，不修改任何文件）
+
+1. 取最新 tag：`git tag -l 'v*' | sort -V | tail -1`
+2. **git 三态确认基线**（取 max）：
+   - HEAD VERSION：`git show HEAD:VERSION`
+   - working tree VERSION：读 `VERSION`
+   - 最新 tag 解析出的版本号
+   - 三者取 max 作为 Step 1 bump 命令的输入基线
+3. 拉自上一 tag 起的 commit 列表：`git log <上一tag>..HEAD --oneline --no-merges`（首个版本用全部历史）。
+4. 拉 `CHANGELOG.md` 最近 5–8 段已发布段落作为"项目自有的 minor / patch / major 量级参照"。
+5. AI 综合判断后展示：
+
+   ┌──────────────────────────────────────────────────────────────┐
+   │ 当前状态（git 三态）：                                       │
+   │   最新 tag：v0.7.1                                           │
+   │   HEAD VERSION：0.7.2                                        │
+   │   working tree VERSION：0.7.3（领先 HEAD 是测试残留）        │
+   │   bump 基线（取 max）：0.7.3                                 │
+   │   自上一 tag 的 commit 数：N                                 │
+   │                                                              │
+   │ 建议 bump 级别：patch / minor / major                        │
+   │ 依据：参照 v0.6.0（...）+ 当前 commit 列表的关键特征         │
+   └──────────────────────────────────────────────────────────────┘
+
+6. 等用户明确"OK / 确认 / 就这样"或修改建议级别后才能进入 Step 1。
+7. **硬约束**：本步骤**禁止**修改任何文件、**禁止**跑 `bump-version.mjs`。
+
+### Step 1: 跑 bump-version 命令（**用户确认级别后 AI 执行**）
+
+**递增必须用脚本命令，禁止 AI 直接编辑版本号文件**——`bump-version.mjs` 内已串联 `sync-version.mjs` 同步全部元数据，手写会漏。
+
+1. AI 按 Step 0 用户确认的级别跑：
+
+   ```bash
+   node scripts/bump-version.mjs patch   # 或 minor / major
+   ```
+
+2. 检查脚本输出"版本号已从 X.Y.Z 更新为 A.B.C"，记下 A.B.C 作为本版本号（用 git 三态确认输入基线 = max，避免 working tree 残留干扰）。
+3. 锁文件未跟上的话 AI 跑：`cargo update -p cgswitch --manifest-path src-tauri/Cargo.toml`（lockfile 已对齐可跳过）。
+4. 把跑出来的版本号 A.B.C 带入 Step 2 起草 CHANGELOG。
+
+### Step 2: 展示 CHANGELOG 草稿（**等用户确认**，不修改任何文件）
+
+1. 用 Step 1 跑出来的 A.B.C 替换草稿里的 `<新版本>` 占位符。
+2. AI 展示：
+
+   ┌──────────────────────────────────────────────────────────────┐
+   │ CHANGELOG 草稿（用户视角描述，即将写入 CHANGELOG.md 顶部）：│
+   │ ```markdown                                                  │
+   │ ## [A.B.C] - <YYYY-MM-DD>                                    │
+   │ ...                                                          │
+   │ ```                                                          │
+   │                                                              │
+   │ 进 / 不进（无用户可见影响的提交不进）：                       │
+   │ - <commit hash> <标题> — 进 / 不进（理由）                   │
+   └──────────────────────────────────────────────────────────────┘
+
+3. 等用户明确"OK / 确认 / 就这样"或修改文案后才能进入 Step 3。
+4. **硬约束**：本步骤**禁止**编辑 `CHANGELOG.md` 或任何文件。
+
+CHANGELOG 写作规则：
+
+- 用用户视角描述变更（"新增 xxx 功能"），不要照抄 commit 标题。
+- 标题与"如何选择安装包"之外的空分区整节省略；可用分区：新增 / 修复 / 界面与样式 / 性能优化 / 重构 / 移除 / 安全。
+- **不进入 CHANGELOG 的提交**（无用户可见影响）：
+  - 纯版本号 bump（`chore(release): vX.Y.Z`）
+  - 纯 CI / 工作流变更
+  - 纯文档类提交
+  - 纯文案 / 按钮 / 标签 / 提示语等措辞小改（不影响功能）
+  - 纯图标 / 品牌资源更新（不影响功能）
+- 已有段落风格时（查看 `CHANGELOG.md` 旧版本段落），沿用旧格式。
+
+CHANGELOG 段落模板（含强制固定的"如何选择安装包"，每次必填，不允许省略）：
+
+```markdown
+## [<版本>] - <YYYY-MM-DD>
+
+### 新增
+- …
+
+### 修复
+- …
+
+### 界面与样式
+- …
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v<版本>-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v<版本>-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v<版本>-macOS-x64.dmg`
+```
+
+> ⚠️ `### 如何选择安装包` 是**强制固定模板**，每次发版必填，**不允许省略**，用户已确认这是下载指引必须保留。
+
+### Step 3: 写入 CHANGELOG 与本地 commit
+
+1. 在 `CHANGELOG.md` 顶部（文件头部介绍之后）插入 Step 2 已确认的版本段落（已替换占位符），标题格式 `## [<版本>] - <当天日期 YYYY-MM-DD>`，含强制固定的"如何选择安装包"模板。
+2. 提交所有发版文件：`git add VERSION package.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json CHANGELOG.md`
+   提交信息：`chore(release): v<版本>`
+3. **到此停下**：汇报版本号、commit hash、CHANGELOG 段落摘要，**会话停在此处**。**不询问用户是否继续**（避免被读成对扩展动作的暗示），**不主动执行**任何 push / 触发工作流 / 发布操作。Step 4–6 需用户用明确指令单独启动。
+
+### Step 4: 推送日志并触发工作流（不手动打 tag）— 需用户明确启动才执行
+
+> 默认流程到 Step 3 为止。本节起必须用户明确指示（如"继续"、"push"、"推上去"、"触发构建"）才执行，不要自行越界。
+
+1. 推送日志提交：`git push origin main`（工作流从仓库读取 VERSION 与发行日志）。
+2. 触发 Release 工作流（手动触发，不 push tag——tag 由工作流用 GITHUB_TOKEN 自动创建，避免递归触发）：
+   `gh workflow run release.yml --ref main`
+3. 等 10 秒后取 run：`gh run list --workflow=Release --limit 1 --json databaseId,status,headSha`
+4. 推送前可选本地预检 `pnpm check`（与工作流 verify job 同一条链），失败就地修复并补充提交；⚠️ 项目 node_modules 是 Windows 平台构建的，必须在 **Windows 侧**执行（WSL 里跑会触发 corepack 重建依赖、破坏 Windows 开发环境）；跳过也可，工作流 verify 会兜底。
+
+### Step 5: 盯 Release 工作流 — 需用户明确启动才执行
+
+1. `gh run watch <run-id> --exit-status --interval 30` 放后台执行（约 30-40 分钟），完成时会收到通知。
+2. 构建失败：`gh run view <run-id> --log-failed` 提取报错摘要，报告用户并停止（草稿若已创建则留在草稿态，不影响关注者）。
+3. 构建成功后工作流已自动完成：创建 tag、创建草稿发行页、上传三平台资产、附上发行日志。
+
+### Step 6: 确认与发布 — 需用户明确启动才执行
+
+1. 展示给用户（这一步必须等用户明确确认，不得自动发布）：
+   - `gh release view v<版本> --json name,isDraft,assets` 的资产清单（文件名 + 大小）
+   - 发行日志全文预览
+2. 用户确认后执行：`gh release edit v<版本> --draft=false --latest`
+3. 变体处理：
+   - 用户说"预发布"：加 `--prerelease`，去掉 `--latest`
+   - 用户要改日志：改 `CHANGELOG.md` 对应版本段落，提交推送后重新触发工作流（`gh workflow run release.yml --ref main`），工作流会用新段落更新既有草稿后再发布
+4. 发布后告知用户：关注者通知已发出，附 release 页面链接 `https://github.com/zeno528/CGswitch/releases/tag/v<版本>`
+
+## 示例
+
+**场景 A（默认流程）**：用户说"发版"
+
+1. **Step 0**：AI 看 git 三态（最新 tag `v0.7.1` / HEAD VERSION `0.7.2` / working tree VERSION `0.7.3`，取 max = `0.7.3`） + `git log v0.7.1..HEAD` + `CHANGELOG.md` 最近段落 → 单次展示"建议 patch（依据：参照 v0.7.1 类似量级，单 `fix:` commit）" → 用户回复"OK"
+2. **Step 1**：AI 跑 `node scripts/bump-version.mjs patch` → 输出"版本号已从 0.7.3 更新为 0.7.4" → AI 记下 `0.7.4` 带入 Step 2
+3. **Step 2**：AI 展示替换占位符后的 CHANGELOG 草稿 `## [0.7.4] - <日期>` + 进/不进 → 用户回复"OK"
+4. **Step 3**：AI 写入 `CHANGELOG.md` + `git commit -m "chore(release): v0.7.4"`
+5. **到此停下**：汇报版本号、commit hash、CHANGELOG 段落摘要，**会话终止**。不询问、不执行 push / 触发工作流 / 发布；这些动作必须等用户在下一轮显式启动（例如"推上去"、"继续"）。
+
+**场景 B（扩展流程，需用户明确指示）**：用户在场景 A 之后说"推上去，发布"
+
+1. **Step 4**：`git push origin main` + `gh workflow run release.yml --ref main`
+2. **Step 5**：后台 `gh run watch` 盯 Release 工作流至全绿（工作流自动建 tag、草稿并上传 4 个资产）
+3. **Step 6**：展示 4 个资产（Windows setup/msi、macOS x64/arm64 dmg）+ 日志全文，等确认 → 用户回复"发布" → `gh release edit v0.7.4 --draft=false --latest`，报告链接
+
+## Troubleshooting
+
+**工作流未触发**：确认 `gh workflow run release.yml --ref main` 已执行、`.github/workflows/release.yml` 已合入 main；`gh run list --workflow=Release` 查看队列。
+
+**verify 第 0 步失败（VERSION 为空 / 缺 CHANGELOG 段落）**：说明版本号或日志没提交。补上 `CHANGELOG.md` 中的 `## [<版本>] - <日期>` 段落（或修正 VERSION），提交推送后重新触发。
+
+**草稿已存在（重跑场景）**：工作流会检测到草稿并更新（`gh release edit`），不会重复建。
+
+**发行已公开后工作流又跑**：工作流会拒绝修改已发布内容（"发行 vX 已经公开，拒绝修改已发布内容"），属正常保护，不是 bug；需要发新版本时递增 VERSION 重来。
