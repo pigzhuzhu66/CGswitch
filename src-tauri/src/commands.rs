@@ -403,6 +403,15 @@ pub fn set_profile_show_balance(
 }
 
 #[tauri::command]
+pub fn set_profile_fetched_models(
+    id: String,
+    models: Vec<String>,
+    state: State<'_, AppContext>,
+) -> AppResult<()> {
+    state.set_profile_fetched_models(&id, models)
+}
+
+#[tauri::command]
 pub fn set_profile_balance(
     id: String,
     info: ProfileBalanceInfo,

@@ -42,6 +42,8 @@ export interface ProfileDetail {
   raw_auth: string | null;
   admin_url: string | null;
   show_balance: boolean;
+  /** 最近一次成功获取的供应商模型列表。 */
+  fetched_models: string[];
   updated_at: string;
 }
 

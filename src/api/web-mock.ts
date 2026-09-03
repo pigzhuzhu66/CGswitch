@@ -375,6 +375,7 @@ interface WebDetail {
   raw_catalog?: string | null;
   raw_auth?: string | null;
   desktop_login?: string | null;
+  fetched_models?: string[];
 }
 
 const webDetails: Record<string, WebDetail> = {
@@ -388,6 +389,7 @@ const webDetails: Record<string, WebDetail> = {
     },
     config_fragment:
       'model = "glm-5.3"\nmodel_reasoning_effort = "high"\nmodel_catalog_json = "zai.json"\n\n[model_providers.ZAI]\nname = "ZAI"\nbase_url = "https://open.bigmodel.cn/api/v1"\nwire_api = "responses"\nexperimental_bearer_token = "••••••••"',
+    fetched_models: ["glm-5.3", "glm-5.2", "glm-4.7"],
   },
   "profile-zai-glm-fast": {
     base_url: "https://open.bigmodel.cn/api/v1",
@@ -435,6 +437,7 @@ function webProfileDetail(id: string): ProfileDetail {
     raw_auth: detail?.raw_auth ?? null,
     admin_url: profile.admin_url,
     show_balance: profile.show_balance,
+    fetched_models: detail?.fetched_models ?? [],
     updated_at: profile.updated_at,
   };
 }
@@ -824,6 +827,11 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
     case "set_profile_show_balance": {
       const profile = webProfiles.find((item) => item.id === args?.id);
       if (profile) profile.show_balance = Boolean(args?.enabled);
+      return undefined as T;
+    }
+    case "set_profile_fetched_models": {
+      const detail = webDetails[String(args?.id)];
+      if (detail) detail.fetched_models = Array.isArray(args?.models) ? args.models.filter((model): model is string => typeof model === "string") : [];
       return undefined as T;
     }
     case "set_profile_balance": {

@@ -89,6 +89,23 @@ fn connection_error_body_detects_provider_level_failures() {
 }
 
 #[test]
+fn fetched_models_survive_profile_reload() {
+    let (_home, context) = chatgpt_test_context();
+    let profile = context.capture_profile("模型缓存").unwrap();
+
+    context
+        .set_profile_fetched_models(&profile.id, vec!["gpt-5.6".into(), "gpt-5.6-mini".into()])
+        .unwrap();
+    context.apply_profile(&profile.id).unwrap();
+    context.get_state().unwrap();
+
+    assert_eq!(
+        context.get_profile(&profile.id).unwrap().fetched_models,
+        vec!["gpt-5.6", "gpt-5.6-mini"]
+    );
+}
+
+#[test]
 fn capture_and_apply_profile_round_trip() {
     let home = tempfile::tempdir().unwrap();
     let paths = crate::paths::from_home(home.path()).unwrap();

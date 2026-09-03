@@ -84,6 +84,8 @@ export const api = {
   setProfileIcon: (id: string, icon: string | null) => call<void>("set_profile_icon", { id, icon }),
   setProfileShowBalance: (id: string, enabled: boolean) =>
     call<void>("set_profile_show_balance", { id, enabled }),
+  setProfileFetchedModels: (id: string, models: string[]) =>
+    call<void>("set_profile_fetched_models", { id, models }),
   setProfileBalance: (id: string, info: ProfileBalanceInfo) =>
     call<void>("set_profile_balance", { id, info }),
   setProfileAccount: (id: string, accountId: string | null) =>

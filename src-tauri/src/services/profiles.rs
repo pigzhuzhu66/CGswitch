@@ -67,9 +67,10 @@ impl AppContext {
                     if Some(&stored.id) == active_profile_id.as_ref() {
                         if let Some(live) = &live_payload {
                             let mut live = live.clone();
-                            // 供应商元数据（管理后台网址/余额开关）不在 live 配置里，覆盖时保留
+                            // 供应商元数据不在 live 配置里，覆盖时保留。
                             live.admin_url = stored.payload.admin_url.clone();
                             live.show_balance = stored.payload.show_balance;
+                            live.fetched_models = stored.payload.fetched_models.clone();
                             stored.payload = live;
                         }
                     }
@@ -298,6 +299,16 @@ impl AppContext {
             .map(|_| ())
     }
 
+    /// 保存最近一次成功获取的模型列表，避免编辑页每次打开都重复请求供应商接口。
+    pub fn set_profile_fetched_models(&self, id: &str, models: Vec<String>) -> AppResult<()> {
+        let stored = self.database.profile(id)?;
+        let mut payload = stored.payload;
+        payload.fetched_models = models;
+        self.database
+            .update_profile(id, &stored.name, &payload, &now_ms().to_string())
+            .map(|_| ())
+    }
+
     /// 完整复制供应商（配置、关联文件、图标、账号绑定），新供应商名加“副本”后缀，同名时追加序号。
     pub fn duplicate_profile(&self, id: &str) -> AppResult<ProfileSummary> {
         // 使用中的供应商：先把 live 的 config/models.json 改动同步回快照，副本取到最新状态
@@ -457,6 +468,7 @@ impl AppContext {
             },
             admin_url: payload.admin_url.clone(),
             show_balance: payload.show_balance,
+            fetched_models: payload.fetched_models.clone(),
             updated_at: stored.updated_at.clone(),
         })
     }

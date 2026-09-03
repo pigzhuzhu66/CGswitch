@@ -312,9 +312,10 @@ impl AppContext {
             .effective_auth_source(profile.kind, profile.account_id.as_deref());
         live.builtin = profile.payload.builtin.clone();
         live.auth_source = auth_source;
-        // 供应商元数据（管理后台网址/余额开关）不属于 live 文档，同步时保留
+        // 供应商元数据不属于 live 文档，同步时保留。
         live.admin_url = profile.payload.admin_url.clone();
         live.show_balance = profile.payload.show_balance;
+        live.fetched_models = profile.payload.fetched_models.clone();
         // 使用中模型目录按 live 文件回写。
         live.raw_catalog = profile
             .payload

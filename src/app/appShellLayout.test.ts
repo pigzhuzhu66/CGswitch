@@ -20,4 +20,8 @@ describe("AppShell 布局", () => {
   it("将通知条与页面顶部操作按钮对齐", () => {
     expect(styles).toContain(".app-toast-viewport {\n  position: fixed;\n  top: 2.5rem;");
   });
+
+  it("拖拽时不改变供应商标题颜色", () => {
+    expect(styles).not.toContain(".profile-drag-preview.is-drag-hover h3");
+  });
 });

@@ -68,6 +68,9 @@ pub struct ProfilePayload {
     /// 供应商级开关：是否在卡片显示并自动刷新余额/用量（默认关，用户自行开启）。
     #[serde(default = "default_false")]
     pub show_balance: bool,
+    /// 最近一次从供应商接口获取的模型 ID，供编辑页离线复用。
+    #[serde(default)]
+    pub fetched_models: Vec<String>,
 }
 
 impl ProfilePayload {
@@ -232,6 +235,7 @@ pub struct ProfileDetail {
     pub raw_auth: Option<String>,
     pub admin_url: Option<String>,
     pub show_balance: bool,
+    pub fetched_models: Vec<String>,
     pub updated_at: String,
 }
 
