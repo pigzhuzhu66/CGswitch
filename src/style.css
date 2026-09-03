@@ -65,7 +65,7 @@
   /* 页面顶部栏与底部操作栏统一高度 */
   --toolbar-height: 3.625rem;
   /* 窗口标题栏高度：品牌区与窗口控制按钮共用同一垂直中心 */
-  --window-chrome-height: 2.125rem;
+  --window-chrome-height: 1.875rem;
   /* 卡片、高亮分区和配置编辑器容器统一圆角 */
   --radius-card: 1rem;
   /* 右侧滚动条占位宽度，启动时由 JS 实测写入，保证左右视觉间距完全一致 */
@@ -454,7 +454,7 @@ main:has(.apple-edit-page) {
 }
 
 .apple-main-card {
-  margin: 0.5rem 0.3125rem 0.3125rem 0.375rem;
+  margin: 0.125rem 0.3125rem 0.3125rem 0.375rem;
   border: 1px solid rgb(0 0 0 / 0.07);
   border-radius: 0.75rem;
   background: var(--app-bg);
