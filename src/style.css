@@ -1345,7 +1345,7 @@ button:focus-visible {
 
 .app-toast-viewport {
   position: fixed;
-  top: 2.75rem;
+  top: 2.5rem;
   left: 0;
   right: 0;
   z-index: 6000;
