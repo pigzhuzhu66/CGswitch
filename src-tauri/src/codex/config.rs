@@ -265,11 +265,10 @@ fn set_table_value(document: &mut DocumentMut, key: &str, value: &str) {
 // live config.toml 是 MCP 的唯一事实源：读取只取建模字段子集，
 // 写入就地编辑，未建模键（tools.*、cwd、注释等）原样保留。
 
-/// Codex 官方应用自动管理的 MCP 条目（桌面版内置 Computer-Use/Browser 运行时）：
-/// Codex 自行写入 config.toml、删除后自动重建（openai/codex#28556），且每次
-/// 应用更新都会改写其中的版本哈希路径（openai/codex#26011）。这类条目不属于
-/// 用户配置——列表/差异对比/数据库镜像全部跳过，重建 MCP 段时原样保留。
-pub const MANAGED_MCP_SERVERS: &[&str] = &["node_repl"];
+/// Codex/ChatGPT 桌面应用自动管理的 MCP 条目（内置 Computer-Use 与 REPL 运行时）：
+/// 应用自行写入 config.toml、删除后自动重建，且应用更新会改写其中的路径。这类
+/// 条目不属于用户配置——列表/差异对比/数据库镜像全部跳过，重建 MCP 段时原样保留。
+pub const MANAGED_MCP_SERVERS: &[&str] = &["node_repl", "computer-use", "cua_repl"];
 
 /// 名称是否为 Codex 官方应用托管的 MCP 条目。
 pub fn is_managed_mcp_name(name: &str) -> bool {
@@ -1379,8 +1378,8 @@ url = "https://mcp.tavily.com/mcp"
 
     #[test]
     fn managed_mcp_entries_are_skipped_but_preserved() {
-        // node_repl 由 Codex 桌面版自动写入（openai/codex#28556）：提取时跳过，重建段时保留
-        let source = "[mcp_servers.node_repl]\ncommand = \"node_repl.exe\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n";
+        // 这些条目由 Codex/ChatGPT 桌面版自动写入：提取时跳过，重建段时保留。
+        let source = "[mcp_servers.node_repl]\ncommand = \"node_repl.exe\"\n\n[mcp_servers.computer-use]\ncommand = \"SkyComputerUseClient\"\n\n[mcp_servers.cua_repl]\ncommand = \"ChatGPT\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n";
         let document = parse_document(source).unwrap();
 
         assert_eq!(
@@ -1399,6 +1398,8 @@ url = "https://mcp.tavily.com/mcp"
         replace_mcp_section_from_fragments(&mut target, &[]);
         let text = target.to_string();
         assert!(text.contains("[mcp_servers.node_repl]"), "{text}");
+        assert!(text.contains("[mcp_servers.computer-use]"), "{text}");
+        assert!(text.contains("[mcp_servers.cua_repl]"), "{text}");
         assert!(!text.contains("mcp_servers.github"), "{text}");
     }
 

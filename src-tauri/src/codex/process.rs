@@ -1,7 +1,4 @@
-use std::path::PathBuf;
-
-#[cfg(windows)]
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -87,6 +84,37 @@ pub fn wait_for_exit(ids: &[u32], timeout_ms: u64, interval_ms: u64) -> bool {
     )
 }
 
+pub fn wait_for_running_with<F, S>(
+    timeout_ms: u64,
+    interval_ms: u64,
+    mut running: F,
+    mut sleep: S,
+) -> bool
+where
+    F: FnMut() -> bool,
+    S: FnMut(Duration),
+{
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    loop {
+        if running() {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        sleep(Duration::from_millis(interval_ms));
+    }
+}
+
+pub fn wait_for_running(timeout_ms: u64, interval_ms: u64) -> bool {
+    wait_for_running_with(
+        timeout_ms,
+        interval_ms,
+        || !find_process_ids(None).is_empty(),
+        std::thread::sleep,
+    )
+}
+
 pub fn launch_codex(manual_path: Option<&str>) -> AppResult<()> {
     #[cfg(windows)]
     {
@@ -121,16 +149,49 @@ pub fn launch_codex(manual_path: Option<&str>) -> AppResult<()> {
             .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("app"))
             .or_else(macos_app_candidate)
             .ok_or_else(|| app_err!("未找到可启动的 Codex/ChatGPT 桌面应用"))?;
-        Command::new("open")
-            .arg("-a")
-            .arg(&app)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|error| app_err!("无法启动 Codex: {error}"))?;
-        Ok(())
+        // 先走常规 open -a；SIGKILL 结束主进程后 LaunchServices 的“运行中”状态
+        // 存在短暂窗口未同步，open -a 会向已死实例转发激活事件而失败
+        // （_LSOpenURLsWithCompletionHandler error -600 procNotFound），导致
+        // “重启后拉不起来”。此时改用 open -n 强制启动新实例绕开陈旧状态；
+        // 若真有实例存活的竞态，应用自身的单实例机制会让新进程转发事件后
+        // 退出并激活旧实例，同样无害。
+        if macos_open_app(&app, false).is_ok() {
+            return Ok(());
+        }
+        macos_open_app(&app, true)
     }
+}
+
+/// 用 LaunchServices 打开 macOS 应用，返回 `open` 的真实执行结果（旧实现
+/// 只 spawn 不查退出码，-600 等失败会被静默吞掉，只能靠上层轮询超时暴露）。
+#[cfg(not(windows))]
+fn macos_open_app(app: &Path, force_new_instance: bool) -> AppResult<()> {
+    let output = Command::new("open")
+        .args(macos_open_args(app, force_new_instance))
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| app_err!("无法启动 Codex: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let detail = if detail.is_empty() {
+        format!("exit {}", output.status)
+    } else {
+        detail
+    };
+    Err(app_err!("无法启动 Codex: {detail}"))
+}
+
+#[cfg(not(windows))]
+fn macos_open_args(app: &Path, force_new_instance: bool) -> Vec<String> {
+    let mut args = Vec::new();
+    if force_new_instance {
+        args.push("-n".into());
+    }
+    args.push("-a".into());
+    args.push(app.display().to_string());
+    args
 }
 
 #[cfg(windows)]
@@ -255,12 +316,7 @@ fn is_codex_desktop_process(process: &sysinfo::Process, manual_path: Option<&str
     #[cfg(not(windows))]
     {
         let _ = manual_path;
-        let command = process
-            .cmd()
-            .iter()
-            .map(|value| value.to_string_lossy())
-            .collect::<String>();
-        is_macos_codex_command(&command)
+        process.exe().is_some_and(is_macos_codex_executable)
     }
 }
 
@@ -305,10 +361,15 @@ pub fn is_windows_codex_process(exe: &Path, manual_path: Option<&str>) -> bool {
 }
 
 #[cfg(not(windows))]
-pub fn is_macos_codex_command(command: &str) -> bool {
-    let is_main = command.contains(".app/Contents/MacOS/ChatGPT")
-        || command.contains(".app/Contents/MacOS/Codex");
-    is_main && !command.contains("/Contents/MacOS/Helpers/") && !command.contains("/Helpers/")
+pub fn is_macos_codex_executable(executable: &Path) -> bool {
+    let is_main_executable = matches!(
+        executable.file_name().and_then(|name| name.to_str()),
+        Some("ChatGPT" | "Codex")
+    );
+    is_main_executable
+        && executable
+            .to_string_lossy()
+            .contains(".app/Contents/MacOS/")
 }
 
 #[cfg(test)]
@@ -332,14 +393,32 @@ mod tests {
 
     #[cfg(not(windows))]
     #[test]
-    fn macos_process_filter_excludes_helpers_and_cli() {
-        assert!(is_macos_codex_command(
-            "/Applications/Codex.app/Contents/MacOS/Codex --type=renderer"
-        ));
-        assert!(!is_macos_codex_command(
-            "/Applications/Codex.app/Contents/MacOS/Helpers/Renderer.app/Contents/MacOS/Renderer"
-        ));
-        assert!(!is_macos_codex_command("/usr/local/bin/codex"));
+    fn macos_process_filter_recognizes_main_app_executables_only() {
+        assert!(is_macos_codex_executable(std::path::Path::new(
+            "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+        )));
+        assert!(is_macos_codex_executable(std::path::Path::new(
+            "/Applications/Codex.app/Contents/MacOS/Codex"
+        )));
+        assert!(!is_macos_codex_executable(std::path::Path::new(
+            "/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/1/Helpers/Codex (Service).app/Contents/MacOS/Codex (Service)"
+        )));
+        assert!(!is_macos_codex_executable(std::path::Path::new(
+            "/usr/local/bin/codex"
+        )));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn macos_open_args_order_matches_open_cli() {
+        assert_eq!(
+            macos_open_args(Path::new("/Applications/ChatGPT.app"), false),
+            ["-a", "/Applications/ChatGPT.app"]
+        );
+        assert_eq!(
+            macos_open_args(Path::new("/Applications/ChatGPT.app"), true),
+            ["-n", "-a", "/Applications/ChatGPT.app"]
+        );
     }
 
     #[test]
@@ -358,5 +437,24 @@ mod tests {
             |ids: &[u32]| ids.to_vec(),
             |_| {}
         ));
+    }
+
+    #[test]
+    fn wait_for_running_succeeds_after_launch() {
+        let mut checks = 0;
+        assert!(wait_for_running_with(
+            1_000,
+            0,
+            || {
+                checks += 1;
+                checks >= 2
+            },
+            |_| {},
+        ));
+    }
+
+    #[test]
+    fn wait_for_running_times_out_when_launch_does_not_create_a_process() {
+        assert!(!wait_for_running_with(0, 0, || false, |_| {}));
     }
 }
