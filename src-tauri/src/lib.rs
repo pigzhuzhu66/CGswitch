@@ -60,6 +60,7 @@ pub fn run() {
             commands::reorder_profiles,
             commands::set_profile_icon,
             commands::set_profile_show_balance,
+            commands::set_profile_fetched_models,
             commands::set_profile_balance,
             commands::set_profile_account,
             commands::duplicate_profile,

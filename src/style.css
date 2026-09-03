@@ -564,12 +564,6 @@ main:has(.apple-edit-page) {
   font-weight: 600;
 }
 
-.profile-list > .apple-group.is-drag-hover h3,
-.profile-drag-preview.is-drag-hover h3 {
-  color: var(--accent);
-  transition: none;
-}
-
 .profile-list > .apple-group.is-drag-hover .profile-card-actions {
   opacity: 1;
   pointer-events: auto;
