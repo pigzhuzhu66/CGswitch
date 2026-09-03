@@ -849,7 +849,8 @@ impl AppContext {
                     .get_valid_token_for_account(account_id)
                     .await
                     .map_err(|error| app_err!("{error}"))?;
-                (token, Some(account_id.to_string()))
+                // chatgpt-account-id 头必须是 workspace ID，本地行 id 不能出站
+                (token, Some(oauth.workspace_of(account_id).await))
             }
         };
         query_chatgpt_quota(&access_token, account_id.as_deref()).await
@@ -881,7 +882,8 @@ impl AppContext {
                             .get_valid_token_for_account(account_id)
                             .await
                             .map_err(|error| app_err!("{error}"))?;
-                        (token, Some(account_id.to_string()))
+                        // chatgpt-account-id 头必须是 workspace ID，本地行 id 不能出站
+                        (token, Some(oauth.workspace_of(account_id).await))
                     }
                     None => return Err(app_err!("官方配置缺少登录方式")),
                 };

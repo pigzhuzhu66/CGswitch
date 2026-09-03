@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
-use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Row};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Row, Transaction};
 use rusqlite_migration::{Migrations, M};
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +68,58 @@ fn migrations() -> Migrations<'static> {
                updated_at TEXT NOT NULL
              )",
         ),
+        // ChatGPT 多账号共存：身份三分（本地主键 / workspace / 用户 sub）。
+        // 存量行 id 本就是唯一 workspace，保留原 id 只回填两列，避免重建表把 profiles.account_id 外键置空。
+        M::up_with_hook(
+            "ALTER TABLE accounts ADD COLUMN chatgpt_account_id TEXT;
+             ALTER TABLE accounts ADD COLUMN user_identity TEXT",
+            |tx| {
+                backfill_account_identity(tx)?;
+                Ok(())
+            },
+        ),
+        // 同一 workspace 同一用户唯一：并发登录完成时由索引兜底，后到者转更新
+        M::up(
+            "CREATE UNIQUE INDEX accounts_ws_user_uq
+             ON accounts(chatgpt_account_id, user_identity)
+             WHERE user_identity IS NOT NULL",
+        ),
     ])
+}
+
+/// 回填账号身份两列：workspace 取存量行 id，用户 sub 从持久化的 id_token 现场重算。
+/// 迁移 hook 与旧 schema 备份恢复共用。
+pub(super) fn backfill_account_identity(tx: &Transaction) -> rusqlite::Result<()> {
+    tx.execute(
+        "UPDATE accounts SET chatgpt_account_id = id WHERE chatgpt_account_id IS NULL",
+        [],
+    )?;
+    let mut statement = tx.prepare(
+        "SELECT id, id_token FROM accounts
+         WHERE user_identity IS NULL AND id_token IS NOT NULL",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let updates: Vec<(String, Option<String>)> = rows
+        .map(|row| {
+            let (id, id_token) = row?;
+            Ok((
+                id,
+                crate::auth::codex_oauth::extract_user_identity(&id_token),
+            ))
+        })
+        .collect::<rusqlite::Result<_>>()?;
+    drop(statement);
+    for (id, identity) in updates {
+        if let Some(identity) = identity {
+            tx.execute(
+                "UPDATE accounts SET user_identity = ?2 WHERE id = ?1",
+                params![id, identity],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -264,7 +315,8 @@ impl Database {
         let connection = self.lock()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, email, id_token, refresh_token, auth_json, authenticated_at
+                "SELECT id, email, id_token, refresh_token, auth_json, authenticated_at,
+                        chatgpt_account_id, user_identity
                  FROM accounts ORDER BY authenticated_at DESC, id ASC",
             )
             .map_err(|error| app_err!("无法读取订阅账号: {error}"))?;
@@ -283,14 +335,17 @@ impl Database {
         let connection = self.lock()?;
         connection
             .execute(
-                "INSERT INTO accounts(id, email, id_token, refresh_token, auth_json, authenticated_at)
-                 VALUES(?1, ?2, ?3, ?4, ?5, ?6)
+                "INSERT INTO accounts(id, email, id_token, refresh_token, auth_json, authenticated_at,
+                                      chatgpt_account_id, user_identity)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                  ON CONFLICT(id) DO UPDATE SET
                    email=excluded.email,
                    id_token=excluded.id_token,
                    refresh_token=excluded.refresh_token,
                    auth_json=excluded.auth_json,
-                   authenticated_at=excluded.authenticated_at",
+                   authenticated_at=excluded.authenticated_at,
+                   chatgpt_account_id=excluded.chatgpt_account_id,
+                   user_identity=excluded.user_identity",
                 params![
                     account.id,
                     account.email,
@@ -298,10 +353,42 @@ impl Database {
                     account.refresh_token,
                     account.auth_json,
                     account.authenticated_at,
+                    account.chatgpt_account_id,
+                    account.user_identity,
                 ],
             )
             .map_err(|error| app_err!("无法保存订阅账号: {error}"))?;
         Ok(())
+    }
+
+    /// 仅当账号不存在时插入；命中唯一索引 accounts_ws_user_uq 返回 Ok(false)。
+    /// 并发登录完成时以索引为兜底，调用方据 false 重查并转为更新已有行。
+    pub fn insert_account_if_absent(&self, account: &StoredAccount) -> AppResult<bool> {
+        let connection = self.lock()?;
+        connection
+            .execute(
+                "INSERT INTO accounts(id, email, id_token, refresh_token, auth_json, authenticated_at,
+                                      chatgpt_account_id, user_identity)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    account.id,
+                    account.email,
+                    account.id_token,
+                    account.refresh_token,
+                    account.auth_json,
+                    account.authenticated_at,
+                    account.chatgpt_account_id,
+                    account.user_identity,
+                ],
+            )
+            .map(|changed| changed == 1)
+            .or_else(|error| {
+                if error.sqlite_error_code() == Some(rusqlite::ErrorCode::ConstraintViolation) {
+                    Ok(false)
+                } else {
+                    Err(app_err!("无法保存订阅账号: {error}"))
+                }
+            })
     }
 
     pub fn delete_account(&self, id: &str) -> AppResult<()> {
@@ -472,14 +559,38 @@ impl Database {
             .and_then(|_| transaction.execute("DELETE FROM mcp_servers", []))
             .map_err(|error| app_err!("恢复前清理数据失败: {error}"))?;
 
-        copy_table(
-            &source,
-            &transaction,
-            "accounts",
-            "SELECT id, email, id_token, refresh_token, auth_json, authenticated_at FROM accounts",
-            "INSERT INTO accounts(id, email, id_token, refresh_token, auth_json, authenticated_at)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
-        )?;
+        // 旧 schema 备份没有身份两列：按旧列复制后回填；新备份带列复制
+        let source_has_identity_columns: i64 = source
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('accounts')
+                 WHERE name = 'chatgpt_account_id'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| app_err!("备份文件不是有效的 CGswitch 数据库: {error}"))?;
+        if source_has_identity_columns > 0 {
+            copy_table(
+                &source,
+                &transaction,
+                "accounts",
+                "SELECT id, email, id_token, refresh_token, auth_json, authenticated_at,
+                        chatgpt_account_id, user_identity FROM accounts",
+                "INSERT INTO accounts(id, email, id_token, refresh_token, auth_json, authenticated_at,
+                                      chatgpt_account_id, user_identity)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )?;
+        } else {
+            copy_table(
+                &source,
+                &transaction,
+                "accounts",
+                "SELECT id, email, id_token, refresh_token, auth_json, authenticated_at FROM accounts",
+                "INSERT INTO accounts(id, email, id_token, refresh_token, auth_json, authenticated_at)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+            )?;
+            backfill_account_identity(&transaction)
+                .map_err(|error| app_err!("回填账号身份失败: {error}"))?;
+        }
         copy_table(
             &source,
             &transaction,
@@ -588,6 +699,11 @@ pub struct StoredAccount {
     pub refresh_token: String,
     pub auth_json: Option<String>,
     pub authenticated_at: i64,
+    /// ChatGPT workspace ID：出站语义（auth.json tokens.account_id、chatgpt-account-id 头）。
+    /// 存量行回填为行 id，新行由登录流程写入。
+    pub chatgpt_account_id: Option<String>,
+    /// id_token 的 sub：跨刷新稳定的用户身份，判重与 live auth.json 所有权校验用。
+    pub user_identity: Option<String>,
 }
 
 fn profile_from_row(row: &Row<'_>) -> rusqlite::Result<StoredProfile> {
@@ -617,6 +733,8 @@ fn account_from_row(row: &Row<'_>) -> rusqlite::Result<StoredAccount> {
         refresh_token: row.get(3)?,
         auth_json: row.get(4)?,
         authenticated_at: row.get(5)?,
+        chatgpt_account_id: row.get(6)?,
+        user_identity: row.get(7)?,
     })
 }
 
@@ -811,9 +929,15 @@ mod tests {
             refresh_token: "rt-1".into(),
             auth_json: None,
             authenticated_at: 100,
+            chatgpt_account_id: Some("acc-1".into()),
+            user_identity: None,
         };
         db.upsert_account(&account).unwrap();
         assert_eq!(db.accounts().unwrap()[0].refresh_token, "rt-1");
+        assert_eq!(
+            db.accounts().unwrap()[0].chatgpt_account_id,
+            Some("acc-1".into())
+        );
         db.delete_account("acc-1").unwrap();
         assert!(db.accounts().unwrap().is_empty());
 
@@ -826,5 +950,126 @@ mod tests {
         db.set_active_profile(None).unwrap();
         db.set_default_account(None).unwrap();
         assert_eq!(db.app_state().unwrap(), (None, None));
+    }
+
+    /// 构造带 sub 的 id_token（迁移回填的数据源）
+    fn legacy_id_token(sub: &str) -> String {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::json!({ "sub": sub }).to_string());
+        format!("{header}.{payload}.")
+    }
+
+    /// 手工搭建 v5 旧库（无身份两列），打开后应自动回填
+    #[test]
+    fn migration_backfills_account_identity_columns() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = crate::paths::from_home(dir.path()).unwrap();
+        paths.ensure().unwrap();
+        {
+            let connection = Connection::open(&paths.database).unwrap();
+            // 旧版应用迁移列表共 4 条（SCHEMA/sort_order/auth_json/mcp_servers），真实存量 user_version = 4
+            connection.pragma_update(None, "user_version", 4).unwrap();
+            connection
+                .execute_batch(
+                    r#"CREATE TABLE accounts (
+                         id TEXT PRIMARY KEY,
+                         email TEXT,
+                         id_token TEXT,
+                         refresh_token TEXT NOT NULL,
+                         authenticated_at INTEGER NOT NULL,
+                         auth_json TEXT
+                       );
+                       INSERT INTO accounts VALUES
+                         ('ws-1', 'a@example.com', NULL, 'rt-1', 1, NULL),
+                         ('ws-2', 'b@example.com', NULL, 'rt-2', 2, NULL);
+                       UPDATE accounts SET id_token = NULL WHERE id = 'ws-2';"#,
+                )
+                .unwrap();
+        }
+        let id_token = legacy_id_token("user-a");
+        {
+            let connection = Connection::open(&paths.database).unwrap();
+            connection
+                .execute(
+                    "UPDATE accounts SET id_token = ?1 WHERE id = 'ws-1'",
+                    params![id_token],
+                )
+                .unwrap();
+        }
+
+        let db = Database::open(&paths).unwrap();
+        let accounts = db.accounts().unwrap();
+        let row_a = accounts.iter().find(|a| a.id == "ws-1").unwrap();
+        let row_b = accounts.iter().find(|a| a.id == "ws-2").unwrap();
+        assert_eq!(row_a.chatgpt_account_id.as_deref(), Some("ws-1"));
+        assert_eq!(row_a.user_identity.as_deref(), Some("user-a"));
+        // 无 id_token 的行回填 workspace、身份留空（后续登录按 email 认领）
+        assert_eq!(row_b.chatgpt_account_id.as_deref(), Some("ws-2"));
+        assert_eq!(row_b.user_identity, None);
+    }
+
+    /// 旧版本导出的备份（accounts 无身份两列）恢复后应回填并保留引用
+    #[test]
+    fn restore_from_legacy_backup_backfills_identity_columns() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("legacy-backup.db");
+        {
+            let connection = Connection::open(&source_path).unwrap();
+            connection
+                .execute_batch(&format!(
+                    r#"CREATE TABLE app_state (
+                         singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                         active_profile_id TEXT,
+                         default_account_id TEXT
+                       );
+                       CREATE TABLE switch_events (
+                         id INTEGER PRIMARY KEY AUTOINCREMENT,
+                         profile_id TEXT,
+                         action TEXT NOT NULL,
+                         status TEXT NOT NULL,
+                         message TEXT,
+                         created_at TEXT NOT NULL
+                       );
+                       CREATE TABLE profiles (
+                         id TEXT PRIMARY KEY,
+                         name TEXT NOT NULL,
+                         payload_json TEXT NOT NULL,
+                         icon TEXT,
+                         kind TEXT NOT NULL,
+                         account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+                         created_at TEXT NOT NULL,
+                         updated_at TEXT NOT NULL
+                       );
+                       CREATE TABLE accounts (
+                         id TEXT PRIMARY KEY,
+                         email TEXT,
+                         id_token TEXT,
+                         refresh_token TEXT NOT NULL,
+                         authenticated_at INTEGER NOT NULL,
+                         auth_json TEXT
+                       );
+                       INSERT INTO accounts VALUES
+                         ('ws-1', 'a@example.com', '{id_token}', 'rt-1', 1, NULL);
+                       INSERT INTO profiles VALUES
+                         ('p1', '官方', '{{}}', NULL, 'official', 'ws-1', '1', '1');"#,
+                    id_token = legacy_id_token("user-a")
+                ))
+                .unwrap();
+        }
+
+        let paths = crate::paths::from_home(&dir.path().join("home")).unwrap();
+        let db = Database::open(&paths).unwrap();
+        db.restore_from_backup(&source_path).unwrap();
+
+        let accounts = db.accounts().unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].chatgpt_account_id.as_deref(), Some("ws-1"));
+        assert_eq!(accounts[0].user_identity.as_deref(), Some("user-a"));
+        // 恢复未重映射 id：供应商绑定原样有效
+        assert_eq!(
+            db.profiles().unwrap()[0].account_id.as_deref(),
+            Some("ws-1")
+        );
     }
 }

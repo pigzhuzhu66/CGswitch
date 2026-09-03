@@ -30,13 +30,15 @@ async fn test_account_connection(
     manager: &CodexOAuthManager,
     account_id: &str,
 ) -> AppResult<ProfileConnectionResult> {
+    // live auth.json / 缓存快照里的 account_id 是 workspace ID，行 id 与之解耦后需先换算
+    let workspace = manager.workspace_of(account_id).await;
     let mut tokens = Vec::with_capacity(2);
-    if let Some(token) = state.external_codex_access_token_for_account(account_id)? {
+    if let Some(token) = state.external_codex_access_token_for_account(&workspace)? {
         tokens.push(token);
     }
     if let Some(cached) = manager.cached_auth_json(account_id).await {
         if let Some(auth) =
-            parse_external_auth_json(&cached).filter(|auth| auth.account_id == account_id)
+            parse_external_auth_json(&cached).filter(|auth| auth.account_id == workspace)
         {
             if !tokens.iter().any(|token| token == &auth.access_token) {
                 tokens.push(auth.access_token);
@@ -55,7 +57,7 @@ async fn test_account_connection(
         .await
         .map_err(|error| app_err!("{error}"))?;
     let auth = parse_external_auth_json(&auth_json)
-        .filter(|auth| auth.account_id == account_id)
+        .filter(|auth| auth.account_id == workspace)
         .ok_or_else(|| app_err!("刷新后账号标识不匹配"))?;
     state.test_subscription_connection(&auth.access_token).await
 }

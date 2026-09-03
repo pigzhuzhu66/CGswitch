@@ -208,6 +208,7 @@ impl AppContext {
     }
 
     /// 应用第三方档案时，同一 ChatGPT 账号的 live 认证优先于旧快照，避免覆盖外部刷新令牌。
+    /// "同一账号"按 (workspace, 用户 sub) 双重判定：同 workspace 多账号时不能只比 workspace。
     pub(super) fn restore_profile_auth(&self, payload: &ProfilePayload) -> AppResult<()> {
         let Some(snapshot) = normalize_auth_override(payload.raw_auth.as_deref()) else {
             return Ok(());
@@ -218,7 +219,12 @@ impl AppContext {
                     && read_optional_text(&self.paths.codex_home.join("auth.json"))
                         .as_deref()
                         .and_then(parse_external_auth_json)
-                        .is_some_and(|live_auth| live_auth.account_id == snapshot_auth.account_id);
+                        .is_some_and(|live_auth| {
+                            live_auth.account_id == snapshot_auth.account_id
+                                && (live_auth.user_identity.is_none()
+                                    || snapshot_auth.user_identity.is_none()
+                                    || live_auth.user_identity == snapshot_auth.user_identity)
+                        });
                 if same_live_account {
                     return Ok(());
                 }
