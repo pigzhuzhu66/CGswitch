@@ -89,6 +89,21 @@ CGswitch 是一个面向 Codex / ChatGPT 桌面应用的配置管理工具。
 - 支持查看、重命名、恢复和删除数据库备份
 - 数据库、配置文件和关联的 Codex 文件分别保存备份
 
+## macOS 安装说明
+
+首次打开如果提示「"CGswitch" 已损坏，无法打开」，这是 macOS 对未签名应用的安全提示，不是软件损坏。按下面步骤操作一次即可：
+
+1. 打开下载的 DMG，把 **CGswitch** 拖入「应用程序」文件夹
+2. 打开「终端」（Terminal），执行：
+
+   ```bash
+   xattr -cr /Applications/CGswitch.app
+   ```
+
+3. 双击打开，之后正常使用，不会再出现任何提示
+
+按芯片选择安装包：Apple Silicon（M1/M2/M3/M4）下载 `macOS-arm64.dmg`，Intel 芯片下载 `macOS-x64.dmg`。
+
 ## 安全与数据位置
 
 CGSwitch 的档案、设置、账号信息和本地备份都保存在用户目录，不写入项目仓库：
@@ -160,7 +175,7 @@ pnpm build:debug
 pnpm tauri build
 ```
 
-发布产物位于 `src-tauri/target/release/bundle/`，包括 Windows NSIS / MSI 和 macOS DMG。当前安装包未签名，macOS 首次打开时可能需要在系统设置中手动允许。
+发布产物位于 `src-tauri/target/release/bundle/`，包括 Windows NSIS / MSI 和 macOS DMG。当前安装包未签名，macOS 用户首次打开需执行一次 `xattr` 命令，见上方 [macOS 安装说明](#macos-安装说明重要)。
 
 ## 技术栈
 
