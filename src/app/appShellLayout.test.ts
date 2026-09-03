@@ -16,4 +16,8 @@ describe("AppShell 布局", () => {
     expect(styles).toContain("--window-chrome-height: 1.875rem;");
     expect(styles).toContain("margin: 0.125rem 0.3125rem 0.3125rem 0.375rem;");
   });
+
+  it("将通知条与页面顶部操作按钮对齐", () => {
+    expect(styles).toContain(".app-toast-viewport {\n  position: fixed;\n  top: 2.5rem;");
+  });
 });
