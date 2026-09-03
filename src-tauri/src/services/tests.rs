@@ -304,6 +304,8 @@ fn apply_bound_oauth_profile_leaves_auth_for_oauth_writer() {
             id_token: None,
             refresh_token: "refresh-token".into(),
             auth_json: None,
+            chatgpt_account_id: Some("oauth-account".into()),
+            user_identity: None,
             authenticated_at: 1,
         })
         .unwrap();
@@ -344,12 +346,14 @@ fn auth_source_is_fixed_and_oauth_accounts_can_switch() {
         context
             .database
             .upsert_account(&crate::database::StoredAccount {
-                id: id.into(),
+                id: id.to_string(),
                 email: None,
                 id_token: None,
                 refresh_token: format!("refresh-{id}"),
                 auth_json: None,
                 authenticated_at: 1,
+                chatgpt_account_id: Some(id.to_string()),
+                user_identity: None,
             })
             .unwrap();
     }
@@ -449,6 +453,8 @@ async fn oauth_activation_and_account_switch_write_only_the_bound_account_snapsh
             id_token: Some("id-token".into()),
             refresh_token: "refresh-token".into(),
             auth_json: Some(initial_oauth_auth.clone()),
+            chatgpt_account_id: Some("oauth-account".into()),
+            user_identity: None,
             authenticated_at: 1,
         })
         .unwrap();
@@ -460,6 +466,8 @@ async fn oauth_activation_and_account_switch_write_only_the_bound_account_snapsh
             id_token: Some("second-id-token".into()),
             refresh_token: "second-refresh-token".into(),
             auth_json: Some(initial_second_oauth_auth.clone()),
+            chatgpt_account_id: Some("oauth-second".into()),
+            user_identity: None,
             authenticated_at: 2,
         })
         .unwrap();
@@ -548,6 +556,8 @@ fn focus_refresh_keeps_oauth_auth_out_of_profile_snapshot() {
             id_token: Some("id-token".into()),
             refresh_token: "refresh-token".into(),
             auth_json: None,
+            chatgpt_account_id: Some("account-1".into()),
+            user_identity: None,
             authenticated_at: 0,
         })
         .unwrap();
@@ -2756,6 +2766,8 @@ base_url = "https://api.example"
             id_token: None,
             refresh_token: "rt".into(),
             auth_json: None,
+            chatgpt_account_id: Some("acc-1".into()),
+            user_identity: None,
             authenticated_at: 1,
         })
         .unwrap();
