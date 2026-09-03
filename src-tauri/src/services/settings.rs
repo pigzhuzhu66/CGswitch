@@ -83,7 +83,14 @@ impl AppContext {
             }
         }
 
-        let result = codex_process::launch_codex(None);
+        let result = (|| {
+            codex_process::launch_codex(None)?;
+            if codex_process::wait_for_running(10_000, 100) {
+                Ok(())
+            } else {
+                Err(app_err!("Codex 启动超时，请检查应用是否可以正常打开"))
+            }
+        })();
         let status = if result.is_ok() { "success" } else { "failed" };
         let message = result.as_ref().err().map(|error| error.0.clone());
         self.database.record_event(
