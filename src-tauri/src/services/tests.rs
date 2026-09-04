@@ -2503,6 +2503,30 @@ experimental_bearer_token = "new-key"
 }
 
 #[test]
+fn updating_active_profile_config_preserves_computer_use_server() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = crate::paths::from_home(home.path()).unwrap();
+    paths.ensure().unwrap();
+    std::fs::create_dir_all(&paths.codex_home).unwrap();
+    std::fs::write(
+        paths.codex_config(),
+        "model = \"glm-5.3\"\n\n[mcp_servers.computer-use]\ncommand = \"SkyComputerUseClient\"\nenabled = true\n",
+    )
+    .unwrap();
+    let context = AppContext::new(paths).unwrap();
+    let profile = context.capture_profile("GLM").unwrap();
+    context.apply_profile(&profile.id).unwrap();
+
+    context
+        .update_profile_config(&profile.id, "model = \"glm-5.5\"\n", None, None)
+        .unwrap();
+
+    let live = std::fs::read_to_string(context.paths.codex_config()).unwrap();
+    assert!(live.contains("[mcp_servers.computer-use]"), "{live}");
+    assert!(live.contains("enabled = true"), "{live}");
+}
+
+#[test]
 fn update_profile_config_follows_edited_provider_and_detaches_builtin() {
     let home = tempfile::tempdir().unwrap();
     let paths = crate::paths::from_home(home.path()).unwrap();

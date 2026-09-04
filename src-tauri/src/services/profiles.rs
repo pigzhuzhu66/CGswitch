@@ -549,11 +549,12 @@ impl AppContext {
         // 使用中：编辑内容立即写进当前 Codex 文件（是否生效由 Codex 重启决定）
         if self.is_active_profile(id)? {
             let config_path = self.paths.codex_config();
+            let updated = self
+                .live_document()
+                .map(|live| codex_config::merge_mcp_section(config_text, &live))
+                .unwrap_or_else(|| codex_config::normalize_global_section_order(config_text));
             backup_file(&config_path, &self.paths.config_backup, "config")?;
-            atomic_write(
-                &config_path,
-                codex_config::normalize_global_section_order(config_text).as_bytes(),
-            )?;
+            atomic_write(&config_path, updated.as_bytes())?;
             if catalog_text.is_some() {
                 self.write_raw_catalog(&payload)?;
             }
