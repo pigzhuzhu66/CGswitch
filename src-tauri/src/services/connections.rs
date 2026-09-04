@@ -29,6 +29,55 @@ struct DeepSeekBalanceResponse {
     balance_infos: Vec<ProfileBalanceInfo>,
 }
 
+fn preferred_deepseek_balance(mut balances: Vec<ProfileBalanceInfo>) -> Option<ProfileBalanceInfo> {
+    if let Some(index) = balances.iter().position(|balance| balance.currency == "CNY") {
+        balances.swap(0, index);
+    }
+    balances.into_iter().next()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::preferred_deepseek_balance;
+    use crate::models::ProfileBalanceInfo;
+
+    #[test]
+    fn prefers_cny_when_deepseek_returns_multiple_currencies() {
+        let balances = vec![
+            ProfileBalanceInfo {
+                currency: "USD".into(),
+                total_balance: "0.00".into(),
+                granted_balance: "0.00".into(),
+                topped_up_balance: "0.00".into(),
+                usage_percent: None,
+                usage_reset: None,
+                usage_reset_at: None,
+                usage_label: None,
+                weekly_usage_percent: None,
+                weekly_reset: None,
+                weekly_reset_at: None,
+                weekly_label: None,
+            },
+            ProfileBalanceInfo {
+                currency: "CNY".into(),
+                total_balance: "8.85".into(),
+                granted_balance: "0.00".into(),
+                topped_up_balance: "8.85".into(),
+                usage_percent: None,
+                usage_reset: None,
+                usage_reset_at: None,
+                usage_label: None,
+                weekly_usage_percent: None,
+                weekly_reset: None,
+                weekly_reset_at: None,
+                weekly_label: None,
+            },
+        ];
+
+        assert_eq!(preferred_deepseek_balance(balances).unwrap().currency, "CNY");
+    }
+}
+
 /// MiniMax Coding Plan 用量接口响应（国内版：api.minimaxi.com/v1/api/openplatform/coding_plan/remains）
 #[derive(Debug, serde::Deserialize)]
 struct MiniMaxRemainsResponse {
@@ -283,7 +332,9 @@ async fn query_deepseek_balance(
                 .map_err(|error| app_err!("余额接口响应解析失败: {error}"))?;
             Ok(ProfileBalance {
                 is_available: parsed.is_available,
-                balance_infos: parsed.balance_infos,
+                balance_infos: preferred_deepseek_balance(parsed.balance_infos)
+                    .into_iter()
+                    .collect(),
                 latency_ms,
             })
         },

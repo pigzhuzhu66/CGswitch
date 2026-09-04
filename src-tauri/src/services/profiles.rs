@@ -112,7 +112,9 @@ impl AppContext {
         // 保存完整配置原文，编辑页按完整文件展示/编辑
         payload.raw_config = std::fs::read_to_string(self.paths.codex_config())
             .ok()
-            .map(|text| text.trim_end().to_string());
+            .map(|text| text.trim_end().to_string())
+            .map(|text| codex_config::without_managed_mcp_servers(&text))
+            .transpose()?;
         let timestamp = now_ms().to_string();
         let summary = self.database.insert_profile(&name, &payload, &timestamp)?;
         // 捕获只保存快照；保留当前激活供应商，并把它在 live 中的累计改动同步回快照。
@@ -148,10 +150,9 @@ impl AppContext {
             codex_config::capture_from_document(&codex_config::parse_document(text)?)?;
         payload.builtin = Some(template.kind.to_string());
         // 快照优先并入数据库 MCP 镜像；首次使用时镜像为空才回退 live。
-        payload.raw_config = Some(codex_config::merge_mcp_section(
-            text,
-            &self.mcp_document_for_new_profile()?,
-        ));
+        payload.raw_config = Some(codex_config::without_managed_mcp_servers(
+            &codex_config::merge_mcp_section(text, &self.mcp_document_for_new_profile()?),
+        )?);
         if let Some(admin_url) = admin_url.map(str::trim).filter(|value| !value.is_empty()) {
             payload.admin_url = Some(admin_url.to_string());
         }
@@ -223,10 +224,12 @@ impl AppContext {
                 Some(codex_config::update_provider_body(body, base_url, api_key)?);
         }
         // 快照优先并入数据库 MCP 镜像；首次使用时镜像为空才回退 live。
-        payload.raw_config = Some(codex_config::merge_mcp_section(
-            config_text.trim_end(),
-            &self.mcp_document_for_new_profile()?,
-        ));
+        payload.raw_config = Some(codex_config::without_managed_mcp_servers(
+            &codex_config::merge_mcp_section(
+                config_text.trim_end(),
+                &self.mcp_document_for_new_profile()?,
+            ),
+        )?);
         if let Some(text) = catalog_text {
             let text = text.trim();
             if !text.is_empty() {
@@ -524,7 +527,7 @@ impl AppContext {
         payload.provider_id = parsed.provider_id;
         payload.model_values = parsed.model_values;
         payload.provider_body = parsed.provider_body;
-        payload.raw_config = Some(config_text.to_string());
+        payload.raw_config = Some(codex_config::without_managed_mcp_servers(config_text)?);
         if catalog_text.is_some() {
             payload.raw_catalog = catalog_text.map(str::to_string);
         }

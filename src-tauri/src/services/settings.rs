@@ -65,6 +65,7 @@ impl AppContext {
             .operation
             .lock()
             .map_err(|_| app_err!("操作锁已损坏"))?;
+        self.sync_active_profile_from_live_locked()?;
         let process_ids = codex_process::find_process_ids(None);
         if !process_ids.is_empty() {
             codex_process::terminate_process_ids(&process_ids);
@@ -82,7 +83,6 @@ impl AppContext {
                 return Err(app_err!("{message}"));
             }
         }
-
         let result = (|| {
             codex_process::launch_codex(None)?;
             if codex_process::wait_for_running(10_000, 100) {
