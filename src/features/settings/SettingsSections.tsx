@@ -175,6 +175,7 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
       setCheckingUpdate(false);
     }
   };
+  useEffect(() => { void checkUpdate(); }, []);
   const installUpdate = async () => {
     if (!update || updating) return;
     setUpdating(true);

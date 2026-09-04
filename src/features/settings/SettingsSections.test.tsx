@@ -1,7 +1,12 @@
+// @ts-expect-error 测试运行于 Node，但应用的浏览器 tsconfig 不加载 Node 类型。
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FeedbackProvider } from "../../app/Feedback";
 import { SettingsAbout, backupTitle, formatSize, formatTimestamp } from "./SettingsSections";
+
+const appShellSource = readFileSync(new URL("../../app/AppShell.tsx", import.meta.url), "utf8");
+const settingsSectionsSource = readFileSync(new URL("./SettingsSections.tsx", import.meta.url), "utf8");
 
 describe("SettingsSections", () => {
   it("formats backup titles", () => {
@@ -25,5 +30,10 @@ describe("SettingsSections", () => {
     );
     expect(html).toContain("检查更新");
     expect(html).not.toContain("检查 GitHub 正式发布版本");
+  });
+
+  it("只在进入关于页面时检查应用更新", () => {
+    expect(appShellSource).not.toContain("AppUpdateBootstrap");
+    expect(settingsSectionsSource).toContain("useEffect(() => { void checkUpdate(); }, []);");
   });
 });
