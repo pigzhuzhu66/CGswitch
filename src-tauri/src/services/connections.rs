@@ -30,7 +30,10 @@ struct DeepSeekBalanceResponse {
 }
 
 fn preferred_deepseek_balance(mut balances: Vec<ProfileBalanceInfo>) -> Option<ProfileBalanceInfo> {
-    if let Some(index) = balances.iter().position(|balance| balance.currency == "CNY") {
+    if let Some(index) = balances
+        .iter()
+        .position(|balance| balance.currency == "CNY")
+    {
         balances.swap(0, index);
     }
     balances.into_iter().next()
@@ -74,7 +77,10 @@ mod tests {
             },
         ];
 
-        assert_eq!(preferred_deepseek_balance(balances).unwrap().currency, "CNY");
+        assert_eq!(
+            preferred_deepseek_balance(balances).unwrap().currency,
+            "CNY"
+        );
     }
 }
 
