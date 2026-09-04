@@ -31,4 +31,8 @@ describe("AppShell 布局", () => {
     expect(profileEditSource).toContain('className="apple-group p-0"');
     expect(styles).not.toContain(".apple-edit-card-frame");
   });
+
+  it("将内容区滚动条槽从右侧内边距中扣除", () => {
+    expect(styles).toContain("padding-right: calc(var(--gap-main) - 8px);");
+  });
 });
