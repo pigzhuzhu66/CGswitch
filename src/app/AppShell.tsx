@@ -11,7 +11,6 @@ import McpView from "../features/mcp/McpView";
 import PluginsView from "../features/plugins/PluginsView";
 import SkillsView from "../features/skills/SkillsView";
 import SettingsView from "../features/settings/SettingsView";
-import { AppUpdateBootstrap } from "../features/updates/AppUpdateBootstrap";
 import type { SkillSummary } from "../types";
 
 const appWindow = isTauri ? getCurrentWindow() : null;
@@ -134,7 +133,6 @@ export default function AppShell() {
 
   return (
     <FeedbackProvider>
-      <AppUpdateBootstrap />
       <div className={`flex h-full min-h-0 flex-col ${isMacWindow ? "is-mac" : ""}`}>
         <div className="apple-window-chrome">
           {isMacWindow ? <div className="apple-chrome-inset" data-tauri-drag-region aria-hidden="true" /> : null}
