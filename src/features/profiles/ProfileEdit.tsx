@@ -516,7 +516,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
                   </div>
                 ) : null}
               </div>
-              <div className="mt-4 flex flex-col pr-1">{activeTab === "config" ? <ConfigTextEditor ref={editorRef} value={configText} language="toml" placeholder={create ? "选择供应商后显示配置预览" : "编辑 config.toml 内容，保存后仅写入该供应商；应用时才生效。"} onChange={(value) => setConfigText(value)} onDiagnostics={setEditorDiagnostics} /> : activeTab === "auth" ? <ConfigTextEditor ref={editorRef} value={authText} language="json" readOnly={authPreviewOnly} placeholder="认证文件（~/.codex/auth.json）。" onChange={setAuthText} onDiagnostics={setEditorDiagnostics} /> : <ConfigTextEditor ref={editorRef} value={catalogText} language="json" placeholder="模型目录文件不存在或无法读取。" onChange={setCatalogText} onDiagnostics={setEditorDiagnostics} />}</div>
+              <div className="mt-4 flex flex-col">{activeTab === "config" ? <ConfigTextEditor ref={editorRef} value={configText} language="toml" placeholder={create ? "选择供应商后显示配置预览" : "编辑 config.toml 内容，保存后仅写入该供应商；应用时才生效。"} onChange={(value) => setConfigText(value)} onDiagnostics={setEditorDiagnostics} /> : activeTab === "auth" ? <ConfigTextEditor ref={editorRef} value={authText} language="json" readOnly={authPreviewOnly} placeholder="认证文件（~/.codex/auth.json）。" onChange={setAuthText} onDiagnostics={setEditorDiagnostics} /> : <ConfigTextEditor ref={editorRef} value={catalogText} language="json" placeholder="模型目录文件不存在或无法读取。" onChange={setCatalogText} onDiagnostics={setEditorDiagnostics} />}</div>
             </div>
         </div>
       </div>

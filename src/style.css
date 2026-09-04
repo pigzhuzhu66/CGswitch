@@ -810,7 +810,7 @@ body.drag-active * {
   overflow-x: hidden;
   overflow-y: auto;
   padding-left: var(--gap-main);
-  padding-right: calc(var(--gap-main) - var(--scrollbar-size));
+  padding-right: calc(var(--gap-main) - 8px);
   padding-bottom: 1rem;
   padding-top: var(--gap-page);
   position: relative;
