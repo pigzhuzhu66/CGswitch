@@ -69,14 +69,22 @@ jobs:
             upload-paths: |
               src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
               src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe.zip
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe.zip.sig
           - name: macos-arm64
             os: macos-latest
             rust-target: aarch64-apple-darwin
-            upload-paths: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            upload-paths: |
+              src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+              src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
+              src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
           - name: macos-x64
             os: macos-latest
             rust-target: x86_64-apple-darwin
-            upload-paths: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+            upload-paths: |
+              src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+              src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app.tar.gz
+              src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
     steps:
       - uses: actions/checkout@v7
       - run: corepack enable
@@ -94,6 +102,9 @@ jobs:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri build --target ${{ matrix.rust-target }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.name }}
@@ -145,10 +156,31 @@ jobs:
       - name: 整理发行资产名称
         run: |
           mkdir -p release-assets
-          cp artifacts/bundle-windows-x64/nsis/*.exe "release-assets/CGswitch-v$VERSION-Windows-setup.exe"
-          cp artifacts/bundle-windows-x64/msi/*.msi "release-assets/CGswitch-v$VERSION-Windows.msi"
-          cp artifacts/bundle-macos-x64/*.dmg "release-assets/CGswitch-v$VERSION-macOS-x64.dmg"
-          cp artifacts/bundle-macos-arm64/*.dmg "release-assets/CGswitch-v$VERSION-macOS-arm64.dmg"
+          copy_asset() { cp "$(find "$1" -type f -name "$2" -print -quit)" "$3"; }
+          copy_asset artifacts/bundle-windows-x64 '*.exe' "release-assets/CGswitch-v$VERSION-Windows-setup.exe"
+          copy_asset artifacts/bundle-windows-x64 '*.msi' "release-assets/CGswitch-v$VERSION-Windows.msi"
+          copy_asset artifacts/bundle-windows-x64 '*.exe.zip' "release-assets/CGswitch-v$VERSION-Windows-setup.exe.zip"
+          copy_asset artifacts/bundle-windows-x64 '*.exe.zip.sig' "release-assets/CGswitch-v$VERSION-Windows-setup.exe.zip.sig"
+          copy_asset artifacts/bundle-macos-x64 '*.dmg' "release-assets/CGswitch-v$VERSION-macOS-x64.dmg"
+          copy_asset artifacts/bundle-macos-x64 '*.app.tar.gz' "release-assets/CGswitch-v$VERSION-macOS-x64.app.tar.gz"
+          copy_asset artifacts/bundle-macos-x64 '*.app.tar.gz.sig' "release-assets/CGswitch-v$VERSION-macOS-x64.app.tar.gz.sig"
+          copy_asset artifacts/bundle-macos-arm64 '*.dmg' "release-assets/CGswitch-v$VERSION-macOS-arm64.dmg"
+          copy_asset artifacts/bundle-macos-arm64 '*.app.tar.gz' "release-assets/CGswitch-v$VERSION-macOS-arm64.app.tar.gz"
+          copy_asset artifacts/bundle-macos-arm64 '*.app.tar.gz.sig' "release-assets/CGswitch-v$VERSION-macOS-arm64.app.tar.gz.sig"
+          node - "$VERSION" "$GITHUB_REPOSITORY" <<'NODE'
+          const fs = require("fs");
+          const [version, repository] = process.argv.slice(2);
+          const asset = (name) => `https://github.com/${repository}/releases/download/v${version}/${name}`;
+          const signature = (name) => fs.readFileSync(`release-assets/${name}`, "utf8").trim();
+          fs.writeFileSync("release-assets/latest.json", `${JSON.stringify({
+            version,
+            platforms: {
+              "darwin-x86_64": { url: asset(`CGswitch-v${version}-macOS-x64.app.tar.gz`), signature: signature(`CGswitch-v${version}-macOS-x64.app.tar.gz.sig`) },
+              "darwin-aarch64": { url: asset(`CGswitch-v${version}-macOS-arm64.app.tar.gz`), signature: signature(`CGswitch-v${version}-macOS-arm64.app.tar.gz.sig`) },
+              "windows-x86_64": { url: asset(`CGswitch-v${version}-Windows-setup.exe.zip`), signature: signature(`CGswitch-v${version}-Windows-setup.exe.zip.sig`) }
+            }
+          }, null, 2)}\n`);
+          NODE
           find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
         shell: bash
         env:
