@@ -35,4 +35,12 @@ describe("AppShell 布局", () => {
   it("将内容区滚动条槽从右侧内边距中扣除", () => {
     expect(styles).toContain("padding-right: calc(var(--gap-main) - 8px);");
   });
+
+  it("让编辑页的表单大卡片与主视图使用相同圆角", () => {
+    expect(styles).toContain(".apple-edit-content > .apple-group {\n  margin-top: 0;\n  border-radius: var(--radius-control);");
+  });
+
+  it("将 Skill 更新徽标锚定在导入按钮左上角", () => {
+    expect(styles).toContain(".skill-update-badge {\n  position: absolute;\n  left: -0.45rem;\n  top: -0.45rem;");
+  });
 });

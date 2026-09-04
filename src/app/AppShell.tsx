@@ -217,8 +217,8 @@ export default function AppShell() {
                 <McpView key={mcpReset} />
               ) : view === "plugins" ? (
                 <PluginsView state={state} />
-              ) : view === "skills" ? (
-                <SkillsView cachedSkills={skillCache} onSkillsChange={setSkillCache} />
+            ) : view === "skills" ? (
+              <SkillsView cachedSkills={skillCache} onSkillsChange={setSkillCache} activationEpoch={activationEpoch} />
               ) : (
                 <SettingsView state={state} onPreviewTheme={previewTheme} onRefresh={refresh} onSaved={updateSettings} onHome={goProfiles} initialSection={settingsInitialSection} />
               )}
