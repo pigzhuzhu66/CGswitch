@@ -978,8 +978,9 @@ body.drag-active * {
   );
 }
 
-.profile-list > .apple-group {
-  border-radius: var(--radius-control);
+.profile-list > .apple-group,
+.profile-drag-preview {
+  border-radius: 0.875rem;
 }
 
 .profile-list > .apple-group.is-active {
