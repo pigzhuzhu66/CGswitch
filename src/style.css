@@ -1820,7 +1820,7 @@ textarea.app-input::-webkit-scrollbar { width: 0; height: 0; display: none; }
   line-height: 1.6;
 }
 
-.cm-editor .cm-scroller { overflow: auto; }
+.cm-editor .cm-scroller { overflow-x: auto; overflow-y: hidden; }
 /* 行号列宽随位数自适应（min-width 保住 24px 紧凑观感）；固定宽度会让三位以上行号
    被 .cm-gutter 的 overflow: hidden 裁掉末位 */
 .cm-gutters .cm-lineNumbers { width: auto; min-width: 1.5rem; flex: 0 0 auto; }
