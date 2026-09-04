@@ -145,17 +145,17 @@ export function useSidebarIndicator(view: AppView) {
     () => localStorage.getItem("cgswitch.sidebar-collapsed") !== "0",
   );
   const [sidebarFlyoutArmed, setSidebarFlyoutArmed] = useState(true);
-  const [indicator, setIndicator] = useState({ top: 8, left: 0, instant: false });
+  const [indicator, setIndicator] = useState({ top: 8, left: 0, instant: false, visible: view !== "settings" });
   const profileNavRef = useRef<HTMLButtonElement>(null);
   const mcpNavRef = useRef<HTMLButtonElement>(null);
   const pluginsNavRef = useRef<HTMLButtonElement>(null);
   const skillsNavRef = useRef<HTMLButtonElement>(null);
-  const settingsNavRef = useRef<HTMLButtonElement>(null);
   const sidebarNavRef = useRef<HTMLElement>(null);
   const previousViewRef = useRef<AppView>(view);
 
   const updateIndicator = useCallback(() => {
-    const target = view === "profiles" ? profileNavRef.current : view === "mcp" ? mcpNavRef.current : view === "plugins" ? pluginsNavRef.current : view === "skills" ? skillsNavRef.current : settingsNavRef.current;
+    if (view === "settings") return;
+    const target = view === "profiles" ? profileNavRef.current : view === "mcp" ? mcpNavRef.current : view === "plugins" ? pluginsNavRef.current : skillsNavRef.current;
     const nav = sidebarNavRef.current;
     if (!target || !nav) return;
     setIndicator((current) => ({
@@ -166,21 +166,27 @@ export function useSidebarIndicator(view: AppView) {
   }, [view]);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(updateIndicator);
     const previousView = previousViewRef.current;
     previousViewRef.current = view;
-    if (previousView === view) return () => cancelAnimationFrame(frame);
+    if (view === "settings") {
+      setIndicator((current) => ({ ...current, instant: true, visible: false }));
+      return;
+    }
 
-    setIndicator((current) => ({
-      ...current,
-      instant: view === "settings" || previousView === "settings",
-    }));
-    const reset = requestAnimationFrame(() => {
-      setIndicator((current) => ({ ...current, instant: false }));
+    const instant = previousView === "settings";
+    if (instant) setIndicator((current) => ({ ...current, instant: true }));
+    let reset: number | undefined;
+    const frame = requestAnimationFrame(() => {
+      updateIndicator();
+      if (!instant) return;
+      setIndicator((current) => ({ ...current, visible: true }));
+      reset = requestAnimationFrame(() => {
+        setIndicator((current) => ({ ...current, instant: false }));
+      });
     });
     return () => {
       cancelAnimationFrame(frame);
-      cancelAnimationFrame(reset);
+      if (reset !== undefined) cancelAnimationFrame(reset);
     };
   }, [updateIndicator, sidebarCollapsed, view]);
 
@@ -204,7 +210,6 @@ export function useSidebarIndicator(view: AppView) {
     mcpNavRef,
     pluginsNavRef,
     skillsNavRef,
-    settingsNavRef,
     sidebarNavRef,
   };
 }

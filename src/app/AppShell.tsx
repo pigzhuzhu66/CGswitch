@@ -169,7 +169,7 @@ export default function AppShell() {
               ) : null}
             </div>
             <nav ref={sidebar.sidebarNavRef} className="relative mx-1.5 mt-3 space-y-1">
-              <span className={`apple-sidebar-indicator ${sidebar.indicator.instant ? "apple-sidebar-indicator--instant" : ""}`} style={{ top: `${sidebar.indicator.top}px`, left: `${sidebar.indicator.left}px` }} aria-hidden="true" />
+              {sidebar.indicator.visible ? <span className={`apple-sidebar-indicator ${sidebar.indicator.instant ? "apple-sidebar-indicator--instant" : ""}`} style={{ top: `${sidebar.indicator.top}px`, left: `${sidebar.indicator.left}px` }} aria-hidden="true" /> : null}
               <button ref={sidebar.profileNavRef} type="button" className={navClass(view === "profiles")} aria-label="供应商配置" onClick={goProfiles} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
                 <Layers2 strokeWidth={2} aria-hidden="true" />
                 <span className="apple-sidebar-label" aria-hidden={sidebar.sidebarCollapsed}>供应商配置</span>
@@ -192,7 +192,7 @@ export default function AppShell() {
               </button>
             </nav>
             <div className="absolute inset-x-1.5 bottom-4">
-              <button ref={sidebar.settingsNavRef} type="button" className={navClass(view === "settings")} aria-label="设置" onClick={() => goSettings()} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
+              <button type="button" className={navClass(view === "settings")} aria-label="设置" onClick={() => goSettings()} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
                 <SettingsIcon strokeWidth={2} aria-hidden="true" />
                 <span className="apple-sidebar-label" aria-hidden={sidebar.sidebarCollapsed}>设置</span>
                 {sidebar.sidebarCollapsed && sidebar.sidebarFlyoutArmed ? <span className="apple-sidebar-flyout" aria-hidden="true">设置</span> : null}

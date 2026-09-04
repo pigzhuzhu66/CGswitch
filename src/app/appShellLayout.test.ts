@@ -47,4 +47,8 @@ describe("AppShell 布局", () => {
   it("让配置编辑器仅保留横向滚动", () => {
     expect(styles).toContain(".cm-editor .cm-scroller { overflow-x: auto; overflow-y: hidden; }");
   });
+
+  it("让供应商卡片使用略圆的圆角", () => {
+    expect(styles).toContain(".profile-list > .apple-group,\n.profile-drag-preview {\n  border-radius: 0.875rem;");
+  });
 });
