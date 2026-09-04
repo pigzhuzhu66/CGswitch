@@ -201,26 +201,28 @@ export default function AppShell() {
           </aside>
 
           <main className="apple-main-card min-w-0 flex-1 overflow-y-auto overflow-x-hidden pt-4">
-            {!state ? (
-              <div className="startup-skeleton" aria-busy="true">
-                <div className="startup-skeleton__title" />
-                <div className="startup-skeleton__subtitle" />
-                <div className="startup-skeleton__panel" />
-                <div className="startup-skeleton__heading" />
-                <div className="startup-skeleton__list" />
-                {loadError ? <p className="muted mt-4 text-sm">{loadError}</p> : null}
-              </div>
-            ) : view === "profiles" ? (
-              <ProfilesView key={profilesReset} state={state} activationEpoch={activationEpoch} onRefresh={refresh} onManageChatgptAccounts={() => goSettings("account")} />
-            ) : view === "mcp" ? (
-              <McpView key={mcpReset} />
-            ) : view === "plugins" ? (
-              <PluginsView state={state} />
-            ) : view === "skills" ? (
-              <SkillsView cachedSkills={skillCache} onSkillsChange={setSkillCache} />
-            ) : (
-              <SettingsView state={state} onPreviewTheme={previewTheme} onRefresh={refresh} onSaved={updateSettings} onHome={goProfiles} initialSection={settingsInitialSection} />
-            )}
+            <div key={state ? view : "loading"} className="apple-page-enter">
+              {!state ? (
+                <div className="startup-skeleton" aria-busy="true">
+                  <div className="startup-skeleton__title" />
+                  <div className="startup-skeleton__subtitle" />
+                  <div className="startup-skeleton__panel" />
+                  <div className="startup-skeleton__heading" />
+                  <div className="startup-skeleton__list" />
+                  {loadError ? <p className="muted mt-4 text-sm">{loadError}</p> : null}
+                </div>
+              ) : view === "profiles" ? (
+                <ProfilesView key={profilesReset} state={state} activationEpoch={activationEpoch} onRefresh={refresh} onManageChatgptAccounts={() => goSettings("account")} />
+              ) : view === "mcp" ? (
+                <McpView key={mcpReset} />
+              ) : view === "plugins" ? (
+                <PluginsView state={state} />
+              ) : view === "skills" ? (
+                <SkillsView cachedSkills={skillCache} onSkillsChange={setSkillCache} />
+              ) : (
+                <SettingsView state={state} onPreviewTheme={previewTheme} onRefresh={refresh} onSaved={updateSettings} onHome={goProfiles} initialSection={settingsInitialSection} />
+              )}
+            </div>
           </main>
         </div>
       </div>
