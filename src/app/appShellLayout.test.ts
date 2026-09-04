@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("./AppShell.tsx", import.meta.url), "utf8");
+const profileEditSource = readFileSync(new URL("../features/profiles/ProfileEdit.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../style.css", import.meta.url), "utf8");
 
 describe("AppShell 布局", () => {
@@ -23,5 +24,11 @@ describe("AppShell 布局", () => {
 
   it("拖拽时不改变供应商标题颜色", () => {
     expect(styles).not.toContain(".profile-drag-preview.is-drag-hover h3");
+  });
+
+  it("编辑页滚动条收在主卡片边界内", () => {
+    expect(profileEditSource).toContain('className="apple-edit-content"');
+    expect(profileEditSource).toContain('className="apple-group p-0"');
+    expect(styles).not.toContain(".apple-edit-card-frame");
   });
 });
