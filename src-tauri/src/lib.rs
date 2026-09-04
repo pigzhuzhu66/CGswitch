@@ -18,6 +18,11 @@ use tauri_plugin_window_state::{Builder as WindowStateBuilder, StateFlags};
 
 use crate::services::AppContext;
 
+#[cfg(target_os = "macos")]
+fn should_restore_main_window_on_reopen(has_visible_windows: bool) -> bool {
+    !has_visible_windows
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let paths = paths::app_paths().expect("无法定位用户数据目录");
@@ -198,14 +203,42 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running CGswitch");
+        .build(tauri::generate_context!())
+        .expect("error while building CGswitch")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            {
+                if let tauri::RunEvent::Reopen {
+                    has_visible_windows,
+                    ..
+                } = event
+                {
+                    if should_restore_main_window_on_reopen(has_visible_windows) {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                }
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::error::AppResult;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_reopen_restores_only_when_no_window_is_visible() {
+        assert!(should_restore_main_window_on_reopen(false));
+        assert!(!should_restore_main_window_on_reopen(true));
+    }
 
     #[test]
     fn service_context_initializes_empty_database() -> AppResult<()> {
