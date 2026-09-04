@@ -43,4 +43,8 @@ describe("AppShell 布局", () => {
   it("将 Skill 更新徽标锚定在导入按钮左上角", () => {
     expect(styles).toContain(".skill-update-badge {\n  position: absolute;\n  left: -0.45rem;\n  top: -0.45rem;");
   });
+
+  it("让配置编辑器仅保留横向滚动", () => {
+    expect(styles).toContain(".cm-editor .cm-scroller { overflow-x: auto; overflow-y: hidden; }");
+  });
 });
