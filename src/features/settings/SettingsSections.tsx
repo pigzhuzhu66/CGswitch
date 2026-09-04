@@ -9,6 +9,8 @@ import { GithubMark } from "../../components/GithubMark";
 import { AppSelect } from "../../components/AppSelect";
 import { AppSwitch } from "../../components/AppSwitch";
 import { TrashIcon } from "../../components/TrashIcon";
+import { updateFailureMessage } from "../updates/updateText";
+import { checkForAppUpdate, type AppUpdate } from "../updates/appUpdate";
 import type { DatabaseBackupInfo, PathInfo, Settings } from "../../types";
 import version from "../../../VERSION?raw";
 
@@ -156,7 +158,30 @@ interface SettingsAboutProps { paths: PathInfo[]; onOpenPath: (item: PathInfo) =
 
 export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutProps) {
   const feedback = useFeedback();
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [update, setUpdate] = useState<AppUpdate | null>(null);
   const openRepository = () => void api.openUrl("https://github.com/zeno528/CGSwitch").catch((error) => feedback.error(String(error)));
+  const checkUpdate = async () => {
+    if (checkingUpdate) return;
+    setCheckingUpdate(true);
+    try {
+      const next = await checkForAppUpdate();
+      setUpdate(next);
+      if (!next) feedback.success("已是最新版本");
+    } catch (error) {
+      feedback.error(updateFailureMessage(error));
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+  const installUpdate = async () => {
+    if (!update || updating) return;
+    setUpdating(true);
+    feedback.info("正在下载并安装更新");
+    try { await update.install(); } catch (error) { feedback.error(updateFailureMessage(error)); }
+    finally { setUpdating(false); }
+  };
 
   return (
     <div className="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
@@ -177,7 +202,16 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
           </span>
           <ExternalLink className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" strokeWidth={2} aria-hidden="true" />
         </button>
+        <button type="button" className="apple-list-row min-w-0 flex-1 basis-48 cursor-pointer text-left transition-colors hover:bg-(--profile-chip-bg)" disabled={checkingUpdate} onClick={() => void checkUpdate()}>
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
+              {checkingUpdate ? <LoaderCircle className="h-[18px] w-[18px] animate-spin" strokeWidth={2} /> : <Download className="h-[18px] w-[18px]" strokeWidth={2} />}
+            </span>
+            <span className="setting-title">检查更新</span>
+          </span>
+        </button>
       </div>
+      {update ? <div className="mt-3 flex items-center justify-between rounded-[var(--radius-control-sm)] border border-[var(--panel-ring)] px-3 py-2.5"><div className="text-sm font-medium">发现新版本 v{update.version}</div><button type="button" className="apple-action-button app-button--primary" disabled={updating} onClick={() => void installUpdate()}>{updating ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={2} /> : null}升级</button></div> : null}
       <hr className="my-4 border-0 border-t border-[var(--panel-divider)]" />
       <h2 className="setting-title">数据与路径</h2>
       <p className="setting-description mt-1.5">常用数据位置，点击文件夹图标即可打开。</p>
