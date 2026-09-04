@@ -827,6 +827,7 @@ body.drag-active * {
 
 .apple-edit-content > .apple-group {
   margin-top: 0;
+  border-radius: var(--radius-control);
 }
 
 /* 结构性防呆：首卡片间距只来自上方 padding-top（--gap-page），任何首子元素
@@ -977,6 +978,10 @@ body.drag-active * {
   );
 }
 
+.profile-list > .apple-group {
+  border-radius: var(--radius-control);
+}
+
 .profile-list > .apple-group.is-active {
   box-shadow: none;
   outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
@@ -1022,6 +1027,23 @@ body.drag-active * {
 
 .apple-action-button:hover {
   background: var(--profile-chip-bg);
+}
+
+.skill-update-badge {
+  position: absolute;
+  left: -0.45rem;
+  top: -0.45rem;
+  display: grid;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  place-items: center;
+  border: 2px solid var(--panel-bg);
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .apple-action-button--quaternary {
@@ -1155,7 +1177,7 @@ body.drag-active * {
 
 .apple-editor-shell {
   overflow: hidden;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-control-sm);
   background: rgb(0 0 0 / 0.04);
   box-shadow: 0 0 0 1px var(--panel-ring);
 }

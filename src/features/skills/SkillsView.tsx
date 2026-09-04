@@ -1,5 +1,5 @@
 import { ArrowLeft, PackagePlus, PackageSearch, Puzzle, Trash2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { loadSkills, setSkillsCache } from "../../app/managementDataCache";
@@ -11,7 +11,11 @@ import type { SkillCandidate, SkillSummary } from "../../types";
 let savedScrollTop = 0;
 const MarkdownPreview = lazy(() => import("react-markdown"));
 
-export default function SkillsView({ cachedSkills, onSkillsChange }: { cachedSkills: SkillSummary[] | null; onSkillsChange: (skills: SkillSummary[] | null) => void }) {
+export function availableSkillCount(candidates: SkillCandidate[]) {
+  return candidates.length;
+}
+
+export default function SkillsView({ cachedSkills, onSkillsChange, activationEpoch }: { cachedSkills: SkillSummary[] | null; onSkillsChange: (skills: SkillSummary[] | null) => void; activationEpoch: number }) {
   const feedback = useFeedback();
   const [skills, setSkills] = useState<SkillSummary[]>(cachedSkills ?? []);
   const [loaded, setLoaded] = useState(cachedSkills !== null);
@@ -22,6 +26,8 @@ export default function SkillsView({ cachedSkills, onSkillsChange }: { cachedSki
   const [previewName, setPreviewName] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [availableCount, setAvailableCount] = useState(0);
+  const updateScanInFlight = useRef(false);
 
   const refresh = async (force = false) => {
     try { const next = await loadSkills(force); onSkillsChange(next); setSkills(next); setLoadError(""); }
@@ -65,13 +71,21 @@ export default function SkillsView({ cachedSkills, onSkillsChange }: { cachedSki
     try { setPreviewContent(await api.getSkillContent(name)); }
     catch (error) { setPreviewContent(String(error)); }
   };
+  const scanForUpdates = async () => {
+    if (updateScanInFlight.current) return;
+    updateScanInFlight.current = true;
+    try { setAvailableCount(availableSkillCount(await api.scanUnmanagedSkills())); }
+    catch { /* 后台扫描失败保留上次结果，导入按钮仍可手动触发完整扫描。 */ }
+    finally { updateScanInFlight.current = false; }
+  };
 
   useEffect(() => { if (cachedSkills) { setSkills(cachedSkills); setLoaded(true); return; } void refresh(); }, []);
+  useEffect(() => { void scanForUpdates(); }, [activationEpoch]);
   useEffect(() => { const main = document.querySelector("main"); if (!main) return; main.scrollTop = savedScrollTop; return () => { savedScrollTop = main.scrollTop; }; }, []);
 
   if (importing) return <ImportPage candidates={candidates} selectedPaths={selectedPaths} busy={busy} onBack={() => setImporting(false)} onToggle={toggle} onToggleAll={toggleAll} onConfirm={() => void confirmImport()} />;
   const enabledCount = skills.filter((skill) => skill.enabled).length;
-  return <><section className="apple-scroll-page mx-auto w-full max-w-none"><header className="apple-page-bar justify-between gap-4"><div className="flex min-w-0 items-center gap-2.5"><span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-accent"><Puzzle className="h-[18px] w-[18px]" strokeWidth={2} /></span><div className="flex items-center gap-2"><div className="apple-title">Skill</div>{loaded ? <><span className="apple-chip">{skills.length}</span><span className="apple-chip">已启用 {enabledCount}</span></> : <LoadingSpinner />}</div></div><button type="button" className="apple-action-button app-button--primary" onClick={() => void openImport()}><PackagePlus className="h-4 w-4" />导入 Skill</button></header><div className="apple-edit-content">{loadError ? <p className="muted mt-4 text-sm">{loadError}</p> : null}{!skills.length ? <EmptyStateCard loading={!loaded} icon={<Puzzle className="h-5 w-5" strokeWidth={1.8} />}><p className="muted">还没有导入 Skill。</p><button type="button" className="apple-inline-btn" onClick={() => void openImport()}>从本机导入</button></EmptyStateCard> : null}{skills.length ? <div className="space-y-2">{skills.map((skill) => <SkillRow key={skill.name} skill={skill} busy={busy !== null} onRun={run} onPreview={openPreview} />)}</div> : null}</div></section><AppDialog open={previewName !== null} onOpenChange={(open) => { if (!open) setPreviewName(null); }} title={previewName ?? "Skill"} footer={<button type="button" className="apple-action-button app-button--primary" onClick={() => setPreviewName(null)}>完成</button>}><Suspense fallback={<div className="muted py-8 text-center">正在加载预览…</div>}><div className="skill-markdown-preview max-h-[60vh] overflow-auto">{previewContent ? <MarkdownPreview>{previewContent}</MarkdownPreview> : <div className="muted py-8 text-center">加载中…</div>}</div></Suspense></AppDialog></>;
+  return <><section className="apple-scroll-page mx-auto w-full max-w-none"><header className="apple-page-bar justify-between gap-4"><div className="flex min-w-0 items-center gap-2.5"><span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-accent"><Puzzle className="h-[18px] w-[18px]" strokeWidth={2} /></span><div className="flex items-center gap-2"><div className="apple-title">Skill</div>{loaded ? <><span className="apple-chip">{skills.length}</span><span className="apple-chip">已启用 {enabledCount}</span></> : <LoadingSpinner />}</div></div><button type="button" className="apple-action-button app-button--primary relative" aria-label={availableCount ? `导入 Skill（有 ${availableCount} 个可导入或更新的 Skill）` : "导入 Skill"} title={availableCount ? `检测到 ${availableCount} 个可导入或更新的 Skill` : undefined} onClick={() => void openImport()}><PackagePlus className="h-4 w-4" />导入 Skill{availableCount ? <span className="skill-update-badge" aria-hidden="true">{availableCount > 9 ? "9+" : availableCount}</span> : null}</button></header><div className="apple-edit-content">{loadError ? <p className="muted mt-4 text-sm">{loadError}</p> : null}{!skills.length ? <EmptyStateCard loading={!loaded} icon={<Puzzle className="h-5 w-5" strokeWidth={1.8} />}><p className="muted">还没有导入 Skill。</p><button type="button" className="apple-inline-btn" onClick={() => void openImport()}>从本机导入</button></EmptyStateCard> : null}{skills.length ? <div className="space-y-2">{skills.map((skill) => <SkillRow key={skill.name} skill={skill} busy={busy !== null} onRun={run} onPreview={openPreview} />)}</div> : null}</div></section><AppDialog open={previewName !== null} onOpenChange={(open) => { if (!open) setPreviewName(null); }} title={previewName ?? "Skill"} footer={<button type="button" className="apple-action-button app-button--primary" onClick={() => setPreviewName(null)}>完成</button>}><Suspense fallback={<div className="muted py-8 text-center">正在加载预览…</div>}><div className="skill-markdown-preview max-h-[60vh] overflow-auto">{previewContent ? <MarkdownPreview>{previewContent}</MarkdownPreview> : <div className="muted py-8 text-center">加载中…</div>}</div></Suspense></AppDialog></>;
 }
 
 function ImportPage({ candidates, selectedPaths, busy, onBack, onToggle, onToggleAll, onConfirm }: { candidates: SkillCandidate[]; selectedPaths: string[]; busy: string | null; onBack: () => void; onToggle: (path: string) => void; onToggleAll: () => void; onConfirm: () => void }) {
