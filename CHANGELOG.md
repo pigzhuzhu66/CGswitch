@@ -17,6 +17,16 @@
 - Apple 芯片（M 系列）→ `CGswitch-v0.11.0-macOS-arm64.dmg`
 - Intel 芯片 → `CGswitch-v0.11.0-macOS-x64.dmg`
 
+### macOS 首次打开
+
+当前 macOS 安装包未进行 Apple 开发者签名与公证。首次打开如果提示「"CGswitch" 已损坏，无法打开」，不是软件损坏。将应用拖入「应用程序」后，在终端执行：
+
+```bash
+xattr -cr /Applications/CGswitch.app
+```
+
+然后再次打开 CGswitch；如果安装到了其他目录，请将命令中的路径替换为实际的 `.app` 路径。
+
 ## [0.10.4] - 2026-09-04
 
 ### 新增
