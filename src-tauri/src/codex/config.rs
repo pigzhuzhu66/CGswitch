@@ -289,7 +289,7 @@ pub fn remove_managed_mcp_servers(document: &mut DocumentMut) {
         .and_then(Item::as_table_mut)
         .map(|servers| {
             for name in MANAGED_MCP_SERVERS {
-                servers.remove(*name);
+                servers.remove(name);
             }
             servers.is_empty()
         })
