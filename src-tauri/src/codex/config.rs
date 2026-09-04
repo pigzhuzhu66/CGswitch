@@ -12,6 +12,13 @@ pub fn parse_document(text: &str) -> AppResult<DocumentMut> {
         .map_err(|error| app_err!("Codex 配置不是有效 TOML: {error}"))
 }
 
+/// 从 CGswitch 快照中移除 Codex 自己管理的 MCP，避免重启时把插件状态写回 live。
+pub fn without_managed_mcp_servers(text: &str) -> AppResult<String> {
+    let mut document = parse_document(text)?;
+    remove_managed_mcp_servers(&mut document);
+    Ok(document.to_string())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct TomlDiagnostic {
     pub from: usize,
@@ -273,6 +280,23 @@ pub const MANAGED_MCP_SERVERS: &[&str] = &["node_repl", "computer-use", "cua_rep
 /// 名称是否为 Codex 官方应用托管的 MCP 条目。
 pub fn is_managed_mcp_name(name: &str) -> bool {
     MANAGED_MCP_SERVERS.contains(&name)
+}
+
+pub fn remove_managed_mcp_servers(document: &mut DocumentMut) {
+    let remove_section = document
+        .as_table_mut()
+        .get_mut("mcp_servers")
+        .and_then(Item::as_table_mut)
+        .map(|servers| {
+            for name in MANAGED_MCP_SERVERS {
+                servers.remove(*name);
+            }
+            servers.is_empty()
+        })
+        .unwrap_or(false);
+    if remove_section {
+        document.as_table_mut().remove("mcp_servers");
+    }
 }
 
 /// 读取 [mcp_servers.*] 下全部服务器（按文件顺序，跳过 Codex 托管条目）；段缺失返回空列表。

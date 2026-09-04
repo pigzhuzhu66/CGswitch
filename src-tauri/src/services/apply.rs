@@ -7,6 +7,22 @@ use super::{
 use crate::auth::codex_oauth::CodexOAuthManager;
 
 impl AppContext {
+    pub fn sync_active_profile_from_live(&self) -> AppResult<bool> {
+        let _guard = self
+            .operation
+            .lock()
+            .map_err(|_| app_err!("操作锁已损坏"))?;
+        self.sync_active_profile_from_live_locked()
+    }
+
+    pub(super) fn sync_active_profile_from_live_locked(&self) -> AppResult<bool> {
+        let Some(document) = self.live_document() else {
+            return Ok(false);
+        };
+        self.sync_active_profile_document(&document)?;
+        Ok(true)
+    }
+
     pub fn apply_profile(&self, id: &str) -> AppResult<()> {
         let _guard = self
             .operation
@@ -358,7 +374,9 @@ impl AppContext {
             }
         }
         // 快照跟随当前 live 完整文本，保证供应商是完整状态（所见即所得，不掩码密钥）
-        live.raw_config = Some(document.to_string());
+        live.raw_config = Some(codex_config::without_managed_mcp_servers(
+            &document.to_string(),
+        )?);
         if live == profile.payload {
             return Ok(false);
         }

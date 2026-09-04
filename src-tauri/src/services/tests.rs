@@ -861,6 +861,36 @@ experimental_bearer_token = "old-key"
 }
 
 #[test]
+fn sync_active_profile_from_live_persists_external_mcp_changes() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = crate::paths::from_home(home.path()).unwrap();
+    paths.ensure().unwrap();
+    std::fs::create_dir_all(&paths.codex_home).unwrap();
+    std::fs::write(
+        paths.codex_config(),
+        "model = \"gpt-5.6\"\n\n[mcp_servers.computer-use]\ncommand = \"SkyComputerUseClient\"\nenabled = true\n",
+    )
+    .unwrap();
+
+    let context = AppContext::new(paths).unwrap();
+    let profile = context.capture_profile("电脑自动化").unwrap();
+    context.apply_profile(&profile.id).unwrap();
+    std::fs::write(
+        context.paths.codex_config(),
+        "model = \"gpt-5.6\"\n\n[mcp_servers.computer-use]\ncommand = \"SkyComputerUseClient\"\nenabled = false\n",
+    )
+    .unwrap();
+
+    context.sync_active_profile_from_live().unwrap();
+    let stored = context.database.profile(&profile.id).unwrap();
+    assert!(stored
+        .payload
+        .raw_config
+        .as_deref()
+        .is_some_and(|text| !text.contains("[mcp_servers.computer-use]")));
+}
+
+#[test]
 fn only_exposed_paths_can_be_opened() {
     let home = tempfile::tempdir().unwrap();
     let context = AppContext::new(crate::paths::from_home(home.path()).unwrap()).unwrap();
