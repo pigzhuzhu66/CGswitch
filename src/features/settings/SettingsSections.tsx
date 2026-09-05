@@ -1,4 +1,4 @@
-import { Database, DatabaseBackup, Download, ExternalLink, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, Save, Sun, Upload } from "lucide-react";
+import { Database, DatabaseBackup, Download, ExternalLink, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, RefreshCw, Save, Sun, Upload } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { api, isTauri } from "../../api";
@@ -10,7 +10,7 @@ import { AppSelect } from "../../components/AppSelect";
 import { AppSwitch } from "../../components/AppSwitch";
 import { TrashIcon } from "../../components/TrashIcon";
 import { updateFailureMessage } from "../updates/updateText";
-import { checkForAppUpdate, type AppUpdate } from "../updates/appUpdate";
+import { checkForAppUpdate } from "../updates/appUpdate";
 import type { DatabaseBackupInfo, PathInfo, Settings } from "../../types";
 import version from "../../../VERSION?raw";
 
@@ -38,7 +38,7 @@ export function SettingsAdvanced({ form, onPatch, paths, backupsEpoch, onOpenPat
   const [renameTarget, setRenameTarget] = useState<DatabaseBackupInfo | null>(null);
   const [renameText, setRenameText] = useState("");
   const [renaming, setRenaming] = useState(false);
-  const [backupOpen, setBackupOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(true);
 
   const loadBackups = async () => { try { setBackups(await api.listDatabaseBackups()); } catch { setBackups([]); } };
   useEffect(() => { void loadBackups(); }, [backupsEpoch]);
@@ -161,17 +161,19 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   // StrictMode 下 effect 双跑共用同一组件实例，state 守卫两次都读到旧值，必须用 ref 防重入
   const checkingRef = useRef(false);
-  const [updating, setUpdating] = useState(false);
-  const [update, setUpdate] = useState<AppUpdate | null>(null);
   const openRepository = () => void api.openUrl("https://github.com/zeno528/CGSwitch").catch((error) => feedback.error(String(error)));
   const checkUpdate = async () => {
     if (checkingRef.current) return;
     checkingRef.current = true;
     setCheckingUpdate(true);
     try {
-      const next = await checkForAppUpdate();
-      setUpdate(next);
-      if (!next) feedback.success("已是最新版本");
+      const update = await checkForAppUpdate();
+      if (!update) {
+        feedback.success("已是最新版本");
+      } else {
+        feedback.info(`发现新版本 v${update.version}，正在下载并安装`);
+        await update.install();
+      }
     } catch (error) {
       feedback.error(updateFailureMessage(error));
     } finally {
@@ -179,44 +181,29 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
       setCheckingUpdate(false);
     }
   };
-  useEffect(() => { void checkUpdate(); }, []);
-  const installUpdate = async () => {
-    if (!update || updating) return;
-    setUpdating(true);
-    feedback.info("正在下载并安装更新");
-    try { await update.install(); } catch (error) { feedback.error(updateFailureMessage(error)); }
-    finally { setUpdating(false); }
-  };
 
   return (
     <div className="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
-      <div className="flex items-center gap-3">
-        <img src="/logo.svg" alt="CGswitch" className="h-12 w-12 shrink-0 dark:invert" />
-        <div>
-          <div className="apple-wordmark">CGswitch</div>
-          <div className="app-version mt-1.5">版本 {version.trim()}</div>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="flex items-center gap-3">
+          <img src="/logo.svg" alt="CGswitch" className="h-12 w-12 shrink-0 dark:invert" />
+          <div>
+            <div className="apple-wordmark">CGswitch</div>
+            <div className="app-version mt-1.5">版本 {version.trim()}</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+        <button type="button" className="apple-action-button" title="打开 GitHub 项目仓库" onClick={openRepository}>
+          <GithubMark className="h-4 w-4" />
+          GitHub
+          <ExternalLink className="h-3.5 w-3.5 text-[var(--text-secondary)]" strokeWidth={2} aria-hidden="true" />
+        </button>
+        <button type="button" className="apple-action-button" disabled={checkingUpdate} onClick={() => void checkUpdate()}>
+          <RefreshCw className={`h-4 w-4 text-accent ${checkingUpdate ? "animate-spin" : ""}`} strokeWidth={2} />
+          检查更新
+        </button>
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" className="apple-list-row min-w-0 flex-1 basis-48 cursor-pointer text-left transition-colors hover:bg-(--profile-chip-bg)" title="打开 GitHub 项目仓库" onClick={openRepository}>
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
-              <GithubMark className="h-[18px] w-[18px]" />
-            </span>
-            <span className="setting-title">GitHub</span>
-          </span>
-          <ExternalLink className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" strokeWidth={2} aria-hidden="true" />
-        </button>
-        <button type="button" className="apple-list-row min-w-0 flex-1 basis-48 cursor-pointer text-left transition-colors hover:bg-(--profile-chip-bg)" disabled={checkingUpdate} onClick={() => void checkUpdate()}>
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
-              {checkingUpdate ? <LoaderCircle className="h-[18px] w-[18px] animate-spin" strokeWidth={2} /> : <Download className="h-[18px] w-[18px]" strokeWidth={2} />}
-            </span>
-            <span className="setting-title">检查更新</span>
-          </span>
-        </button>
-      </div>
-      {update ? <div className="mt-3 flex items-center justify-between rounded-[var(--radius-control-sm)] border border-[var(--panel-ring)] px-3 py-2.5"><div className="text-sm font-medium">发现新版本 v{update.version}</div><button type="button" className="apple-action-button app-button--primary" disabled={updating} onClick={() => void installUpdate()}>{updating ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={2} /> : null}升级</button></div> : null}
       <hr className="my-4 border-0 border-t border-[var(--panel-divider)]" />
       <h2 className="setting-title">数据与路径</h2>
       <p className="setting-description mt-1.5">常用数据位置，点击文件夹图标即可打开。</p>

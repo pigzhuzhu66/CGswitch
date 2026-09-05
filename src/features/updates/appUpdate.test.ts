@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { toAppUpdate } from "./appUpdate";
 
+vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
+
 describe("toAppUpdate", () => {
   it("只暴露版本号和安装动作", async () => {
     const downloadAndInstall = vi.fn().mockResolvedValue(undefined);

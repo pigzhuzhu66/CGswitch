@@ -2,7 +2,7 @@
   "name": "cgswitch",
   "packageManager": "pnpm@11.9.0",
   "private": true,
-  "version": "0.11.3",
+  "version": "0.11.4",
   "type": "module",
   "scripts": {
     "sync-version": "node scripts/sync-version.mjs",
@@ -42,6 +42,7 @@
     "@radix-ui/react-toast": "1.2.23",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "2.11.0",
     "lucide-react": "1.33.0",
     "react": "19.2.8",

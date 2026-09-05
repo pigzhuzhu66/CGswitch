@@ -32,9 +32,9 @@ describe("SettingsSections", () => {
     expect(html).not.toContain("检查 GitHub 正式发布版本");
   });
 
-  it("只在进入关于页面时检查应用更新", () => {
+  it("更新检查仅手动触发，不再自动检查", () => {
     expect(appShellSource).not.toContain("AppUpdateBootstrap");
-    expect(settingsSectionsSource).toContain("useEffect(() => { void checkUpdate(); }, []);");
+    expect(settingsSectionsSource).not.toContain("useEffect(() => { void checkUpdate(); }, []);");
   });
 
   it("检查更新用 ref 防重入，避免 StrictMode 双跑导致重复通知", () => {

@@ -1,4 +1,5 @@
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { isTauri } from "../../api";
 
 export interface AppUpdate {
@@ -7,7 +8,14 @@ export interface AppUpdate {
 }
 
 export function toAppUpdate(update: Pick<Update, "version" | "downloadAndInstall">): AppUpdate {
-  return { version: update.version, install: () => update.downloadAndInstall() };
+  // macOS 的 downloadAndInstall 只替换 .app 不重启，装完手动 relaunch
+  return {
+    version: update.version,
+    install: async () => {
+      await update.downloadAndInstall();
+      await relaunch();
+    },
+  };
 }
 
 export async function checkForAppUpdate(): Promise<AppUpdate | null> {
