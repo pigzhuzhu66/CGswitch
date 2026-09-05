@@ -206,18 +206,13 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
       </div>
       <hr className="my-4 border-0 border-t border-[var(--panel-divider)]" />
       <h2 className="setting-title">数据与路径</h2>
-      <p className="setting-description mt-1.5">常用数据位置，点击文件夹图标即可打开。</p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+      <div className="mt-2 divide-y divide-[var(--panel-divider)] overflow-hidden rounded-[var(--radius-control)] border border-[var(--panel-ring)]">
         {paths.map((item) => (
-          <div key={item.label} className="flex min-w-0 items-center justify-between gap-3 rounded-[var(--radius-control-sm)] border border-[var(--panel-ring)] px-3 py-2.5">
-            <div className="min-w-0">
-              <div className="text-sm font-medium">{item.label}</div>
-              <div className="mono muted meta-xs mt-0.5 truncate" title={item.path}>{item.path}</div>
-            </div>
-            <button type="button" className="apple-icon-button shrink-0 text-[var(--text-secondary)] hover:text-accent disabled:opacity-40" disabled={Boolean(openingPath)} title={`打开${item.label}`} onClick={() => onOpenPath(item)}>
-              {openingPath === item.path ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={2} /> : <FolderOpen className="h-4 w-4" strokeWidth={2} />}
-            </button>
-          </div>
+          <button key={item.label} type="button" className="flex w-full min-w-0 items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-black/5 disabled:opacity-40 dark:hover:bg-white/8" disabled={Boolean(openingPath)} title={`打开${item.label}`} onClick={() => onOpenPath(item)}>
+            <span className="shrink-0 text-sm font-medium">{item.label}</span>
+            <span className="mono muted meta-xs min-w-0 flex-1 truncate" title={item.path}>{item.path.replace(/^\/(Users|home)\/[^/]+/, "~")}</span>
+            {openingPath === item.path ? <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-accent" strokeWidth={2} /> : <FolderOpen className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" strokeWidth={2} />}
+          </button>
         ))}
       </div>
     </div>

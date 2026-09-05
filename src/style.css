@@ -57,6 +57,7 @@
   --icon-button-size: 2rem;
   --radius-control: 0.75rem;
   --radius-control-sm: 0.5rem;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
   --main-top-inset: 1rem;
   --edit-footer-padding-right: var(--gap-main);
   --motion-fast: 150ms;
@@ -213,7 +214,7 @@ textarea::placeholder {
 }
 
 .mono {
-  font-family: Consolas, "Cascadia Mono", monospace;
+  font-family: var(--font-mono);
 }
 
 .skill-markdown-preview {
@@ -252,7 +253,7 @@ textarea::placeholder {
   border-radius: 5px;
   background: rgb(0 0 0 / 0.05);
   padding: 1px 5px;
-  font-family: Consolas, "Cascadia Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -1828,7 +1829,7 @@ textarea.app-input::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .cm-editor .cm-content,
 .cm-editor .cm-line,
 .cm-editor .cm-gutterElement {
-  font-family: Consolas, "Cascadia Mono", monospace !important;
+  font-family: var(--font-mono) !important;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.6;
