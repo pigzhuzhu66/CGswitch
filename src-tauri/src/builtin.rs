@@ -203,8 +203,8 @@ mod tests {
     fn embedded_catalogs_keep_original_size_and_line_endings() {
         assert_eq!(DEEPSEEK_MODELS.len(), 114364);
         assert_eq!(count(DEEPSEEK_MODELS, b"\r\n"), 205);
-        assert_eq!(ZHIPU_MODELS.len(), 2543);
-        assert_eq!(count(ZHIPU_MODELS, b"\r\n"), 72);
+        assert_eq!(ZHIPU_MODELS.len(), 4061);
+        assert_eq!(count(ZHIPU_MODELS, b"\r\n"), 114);
         assert_eq!(MINIMAX_CATALOG.len(), 953);
         assert_eq!(count(MINIMAX_CATALOG, b"\r\n"), 25);
         // OpenCode 目录为构造产物（无官方文件），不做字节级快照；
