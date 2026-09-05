@@ -68,8 +68,8 @@ const webProfiles: ProfileSummary[] = [
 
 const webPaths = [
   { label: "应用数据目录", path: "C:\\Users\\<user>\\.cgswitch" },
-  { label: "Codex 配置", path: "C:\\Users\\<user>\\.codex\\config.toml" },
   { label: "备份目录", path: "C:\\Users\\<user>\\.cgswitch\\backups" },
+  { label: "Codex 配置", path: "C:\\Users\\<user>\\.codex\\config.toml" },
 ];
 
 function patchContextOverrideForWeb(text: string, enabled: boolean, compactTokenLimit: number): string {

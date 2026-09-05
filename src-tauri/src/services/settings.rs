@@ -157,12 +157,12 @@ impl AppContext {
                 path: self.paths.root.display().to_string(),
             },
             PathInfo {
-                label: "Codex 配置".into(),
-                path: self.paths.codex_config().display().to_string(),
-            },
-            PathInfo {
                 label: "备份目录".into(),
                 path: self.paths.root.join("backups").display().to_string(),
+            },
+            PathInfo {
+                label: "Codex 配置".into(),
+                path: self.paths.codex_config().display().to_string(),
             },
         ]
     }

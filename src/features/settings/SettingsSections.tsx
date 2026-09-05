@@ -1,6 +1,6 @@
-import { Database, DatabaseBackup, Download, ExternalLink, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, RefreshCw, Save, Sun, Upload } from "lucide-react";
+import { ArrowUpCircle, Database, DatabaseBackup, Download, ExternalLink, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, RefreshCw, Save, Sun, Upload } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, isTauri } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { AppDialog } from "../../components/AppDialog";
@@ -10,7 +10,7 @@ import { AppSelect } from "../../components/AppSelect";
 import { AppSwitch } from "../../components/AppSwitch";
 import { TrashIcon } from "../../components/TrashIcon";
 import { updateFailureMessage } from "../updates/updateText";
-import { checkForAppUpdate } from "../updates/appUpdate";
+import { useAppUpdate } from "../updates/AppUpdateProvider";
 import type { DatabaseBackupInfo, PathInfo, Settings } from "../../types";
 import version from "../../../VERSION?raw";
 
@@ -158,27 +158,15 @@ interface SettingsAboutProps { paths: PathInfo[]; onOpenPath: (item: PathInfo) =
 
 export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutProps) {
   const feedback = useFeedback();
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  // StrictMode 下 effect 双跑共用同一组件实例，state 守卫两次都读到旧值，必须用 ref 防重入
-  const checkingRef = useRef(false);
+  const { update, checking, installing, check, install } = useAppUpdate();
   const openRepository = () => void api.openUrl("https://github.com/zeno528/CGSwitch").catch((error) => feedback.error(String(error)));
+  // 检查只负责发现并展示版本号，升级必须由用户点击「立即升级」触发
   const checkUpdate = async () => {
-    if (checkingRef.current) return;
-    checkingRef.current = true;
-    setCheckingUpdate(true);
     try {
-      const update = await checkForAppUpdate();
-      if (!update) {
-        feedback.success("已是最新版本");
-      } else {
-        feedback.info(`发现新版本 v${update.version}，正在下载并安装`);
-        await update.install();
-      }
+      const found = await check();
+      if (!found) feedback.success("已是最新版本");
     } catch (error) {
       feedback.error(updateFailureMessage(error));
-    } finally {
-      checkingRef.current = false;
-      setCheckingUpdate(false);
     }
   };
 
@@ -198,12 +186,24 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
           GitHub
           <ExternalLink className="h-3.5 w-3.5 text-[var(--text-secondary)]" strokeWidth={2} aria-hidden="true" />
         </button>
-        <button type="button" className="apple-action-button" disabled={checkingUpdate} onClick={() => void checkUpdate()}>
-          <RefreshCw className={`h-4 w-4 text-accent ${checkingUpdate ? "animate-spin" : ""}`} strokeWidth={2} />
+        <button type="button" className="apple-action-button" disabled={checking} onClick={() => void checkUpdate()}>
+          <RefreshCw className={`h-4 w-4 text-accent ${checking ? "animate-spin" : ""}`} strokeWidth={2} />
           检查更新
         </button>
         </div>
       </div>
+      {update ? (
+        <div className="update-available-card mt-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <ArrowUpCircle className="h-4 w-4 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" />
+            <span className="font-medium">发现新版本 v{update.version}</span>
+          </div>
+          <button type="button" className="apple-action-button app-button--primary" disabled={installing} onClick={() => void install()}>
+            {installing ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
+            {installing ? "正在下载安装…" : "立即升级"}
+          </button>
+        </div>
+      ) : null}
       <hr className="my-4 border-0 border-t border-[var(--panel-divider)]" />
       <h2 className="setting-title">数据与路径</h2>
       <div className="mt-2 divide-y divide-[var(--panel-divider)] overflow-hidden rounded-[var(--radius-control)] border border-[var(--panel-ring)]">
