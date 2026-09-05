@@ -68,8 +68,8 @@ const webProfiles: ProfileSummary[] = [
 
 const webPaths = [
   { label: "应用数据目录", path: "C:\\Users\\<user>\\.cgswitch" },
-  { label: "Codex 配置", path: "C:\\Users\\<user>\\.codex\\config.toml" },
   { label: "备份目录", path: "C:\\Users\\<user>\\.cgswitch\\backups" },
+  { label: "Codex 配置", path: "C:\\Users\\<user>\\.codex\\config.toml" },
 ];
 
 function patchContextOverrideForWeb(text: string, enabled: boolean, compactTokenLimit: number): string {
@@ -474,6 +474,7 @@ let webSettings: Settings = {
   autostart_enabled: false,
   silent_start: false,
   minimize_to_tray: false,
+  auto_check_update: true,
   auto_backup_interval_hours: 0,
   database_backup_keep_count: 5,
 };

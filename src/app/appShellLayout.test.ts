@@ -10,7 +10,7 @@ describe("AppShell 布局", () => {
   it("保持侧栏导航紧贴品牌区，并让设置按钮锚定底部", () => {
     expect(source).toContain("apple-sidebar relative h-full shrink-0");
     expect(source).toContain('className="relative mx-1.5 mt-3 space-y-1"');
-    expect(source).toContain('className="absolute inset-x-1.5 bottom-4"');
+    expect(source).toContain('className="absolute inset-x-1.5 bottom-4 flex flex-col gap-1.5"');
   });
 
   it("让窗口控制区与主卡片仅保留微小间隙", () => {

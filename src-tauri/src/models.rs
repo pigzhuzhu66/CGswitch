@@ -251,6 +251,8 @@ pub struct Settings {
     pub silent_start: bool,
     #[serde(default)]
     pub minimize_to_tray: bool,
+    #[serde(default = "default_auto_check_update")]
+    pub auto_check_update: bool,
     #[serde(default)]
     pub auto_backup_interval_hours: u64,
     #[serde(default = "default_database_backup_keep_count")]
@@ -265,6 +267,10 @@ fn default_database_backup_keep_count() -> u32 {
     5
 }
 
+fn default_auto_check_update() -> bool {
+    true
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -273,6 +279,7 @@ impl Default for Settings {
             autostart_enabled: false,
             silent_start: false,
             minimize_to_tray: false,
+            auto_check_update: default_auto_check_update(),
             auto_backup_interval_hours: 0,
             database_backup_keep_count: default_database_backup_keep_count(),
         }
