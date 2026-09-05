@@ -127,7 +127,8 @@ jobs:
     # 校验和所有平台构建成功后才会执行；任何失败都不会创建发行
     needs: build
     # 手动触发执行：构建完直接把资产收进草稿。
-    # tag 不存在时，由 gh release create 自动创建（--target 指向本次 commit）；
+    # tag 由 git push 创建（releases API 的 --target 在 GITHUB_TOKEN 下受 workflow-scope
+    # 限制会 403，见 cli/cli#9514；git 协议不受限）；release 不带 --target 挂到已有 tag。
     # 用 GITHUB_TOKEN 创建 release/tag 不会再次触发本工作流（官方防递归机制）。
     runs-on: ubuntu-latest
     permissions:
@@ -148,9 +149,13 @@ jobs:
             insec { print }
           ' CHANGELOG.md > "$NOTES"
           [ -s "$NOTES" ] || { echo "::error::CHANGELOG.md 缺少 ## [$VERSION] 段落（需由 /release skill 先提交）"; exit 1; }
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
           STATE="$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null || true)"
           if [ -z "$STATE" ]; then
-            gh release create "$TAG" --draft --title "$TAG" --notes-file "$NOTES" --target "$GITHUB_SHA"
+            gh release create "$TAG" --draft --title "$TAG" --notes-file "$NOTES"
           elif [ "$STATE" = true ]; then
             gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES"
           else
