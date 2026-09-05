@@ -77,16 +77,23 @@ pub fn format_document(text: &str) -> String {
     taplo::formatter::format(text, taplo::formatter::Options::default())
 }
 
-pub fn patch_context_override(text: &str, enabled: bool) -> AppResult<String> {
+pub fn patch_context_override(
+    text: &str,
+    enabled: bool,
+    compact_token_limit: i64,
+) -> AppResult<String> {
     let mut document = parse_document(text)?;
     if enabled {
+        if !(1..=1_000_000).contains(&compact_token_limit) {
+            return Err(app_err!("压缩阈值必须在 1 到 1000000 Token 之间"));
+        }
         document.as_table_mut().insert(
             "model_context_window",
             Item::Value(Value::from(1_000_000_i64)),
         );
         document.as_table_mut().insert(
             "model_auto_compact_token_limit",
-            Item::Value(Value::from(900_000_i64)),
+            Item::Value(Value::from(compact_token_limit)),
         );
     } else {
         document.as_table_mut().remove("model_context_window");
@@ -853,17 +860,29 @@ model_auto_compact_token_limit = 200000
 goals = true
 "#;
 
-        let enabled = patch_context_override(source, true).unwrap();
+        let enabled = patch_context_override(source, true, 900_000).unwrap();
         assert!(enabled.contains("model_context_window = 1000000"));
         assert!(enabled.contains("model_auto_compact_token_limit = 900000"));
         assert!(enabled.contains("# keep this comment"));
         assert_eq!(enabled.matches("model_context_window").count(), 1);
         assert_eq!(enabled.matches("model_auto_compact_token_limit").count(), 1);
 
-        let disabled = patch_context_override(&enabled, false).unwrap();
+        let disabled = patch_context_override(&enabled, false, 900_000).unwrap();
         assert!(!disabled.contains("model_context_window"));
         assert!(!disabled.contains("model_auto_compact_token_limit"));
         assert!(disabled.contains("# keep this comment"));
+    }
+
+    #[test]
+    fn patch_context_override_uses_custom_compact_limit_and_rejects_out_of_range_values() {
+        let source = "model = \"gpt-5.6\"\n";
+
+        let enabled = patch_context_override(source, true, 750_000).unwrap();
+        assert!(enabled.contains("model_context_window = 1000000"));
+        assert!(enabled.contains("model_auto_compact_token_limit = 750000"));
+
+        assert!(patch_context_override(source, true, 0).is_err());
+        assert!(patch_context_override(source, true, 1_000_001).is_err());
     }
 
     #[test]

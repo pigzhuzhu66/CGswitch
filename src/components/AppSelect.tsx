@@ -1,4 +1,5 @@
 import { Check, ChevronDown } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
@@ -39,7 +40,8 @@ export function AppSelect<T extends string | number>({
   useEffect(() => {
     if (!open) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     };
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
@@ -107,6 +109,24 @@ export function AppSelect<T extends string | number>({
     setOpen(false);
   };
 
+  const menu = (
+    <div ref={menuRef} className="app-select-menu" data-open={open} data-placement={placement} style={menuStyle} role="listbox" aria-label={placeholder ?? "选项"} aria-hidden={!open}>
+      {options.map((option) => <button
+        key={String(option.value)}
+        type="button"
+        role="option"
+        tabIndex={open ? 0 : -1}
+        aria-selected={selected?.value === option.value}
+        className="app-select-option"
+        data-selected={selected?.value === option.value}
+        onClick={() => selectOption(option)}
+      >
+        <span>{renderLabel?.(option) ?? option.label}</span>
+        {selected?.value === option.value ? <Check className="app-select-option__check" size={16} strokeWidth={2.5} aria-hidden="true" /> : null}
+      </button>)}
+    </div>
+  );
+
   return (
     <div ref={rootRef} className="app-select-wrap" data-open={open}>
       <button
@@ -128,21 +148,7 @@ export function AppSelect<T extends string | number>({
         <span className="app-select__label">{selected ? renderLabel?.(selected) ?? selected.label : placeholder ?? "请选择"}</span>
         <ChevronDown className="app-select__icon" size={16} strokeWidth={2} aria-hidden="true" />
       </button>
-      <div ref={menuRef} className="app-select-menu" data-open={open} data-placement={placement} style={menuStyle} role="listbox" aria-label={placeholder ?? "选项"} aria-hidden={!open}>
-        {options.map((option) => <button
-          key={String(option.value)}
-          type="button"
-          role="option"
-          tabIndex={open ? 0 : -1}
-          aria-selected={selected?.value === option.value}
-          className="app-select-option"
-          data-selected={selected?.value === option.value}
-          onClick={() => selectOption(option)}
-        >
-          <span>{renderLabel?.(option) ?? option.label}</span>
-          {selected?.value === option.value ? <Check className="app-select-option__check" size={16} strokeWidth={2.5} aria-hidden="true" /> : null}
-        </button>)}
-      </div>
+      {createPortal(menu, document.body)}
     </div>
   );
 }
