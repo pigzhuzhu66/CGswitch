@@ -785,8 +785,12 @@ body.drag-active * {
   font-weight: 600;
 }
 
+.apple-edit-toolbar--footer .app-button--primary {
+  border-color: transparent;
+}
+
 .apple-edit-toolbar--footer .apple-action-button:not(.app-button--primary) {
-  background: var(--panel-bg);
+  background: var(--tile-bg);
 }
 
 .apple-edit-toolbar--footer .apple-action-button:not(.app-button--primary):hover {
