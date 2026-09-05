@@ -36,4 +36,9 @@ describe("SettingsSections", () => {
     expect(appShellSource).not.toContain("AppUpdateBootstrap");
     expect(settingsSectionsSource).toContain("useEffect(() => { void checkUpdate(); }, []);");
   });
+
+  it("检查更新用 ref 防重入，避免 StrictMode 双跑导致重复通知", () => {
+    expect(settingsSectionsSource).toContain("if (checkingRef.current) return;");
+    expect(settingsSectionsSource).not.toContain("if (checkingUpdate) return;");
+  });
 });
