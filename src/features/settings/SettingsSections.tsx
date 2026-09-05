@@ -38,7 +38,7 @@ export function SettingsAdvanced({ form, onPatch, paths, backupsEpoch, onOpenPat
   const [renameTarget, setRenameTarget] = useState<DatabaseBackupInfo | null>(null);
   const [renameText, setRenameText] = useState("");
   const [renaming, setRenaming] = useState(false);
-  const [backupOpen, setBackupOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(true);
 
   const loadBackups = async () => { try { setBackups(await api.listDatabaseBackups()); } catch { setBackups([]); } };
   useEffect(() => { void loadBackups(); }, [backupsEpoch]);
@@ -184,31 +184,25 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
 
   return (
     <div className="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
-      <div className="flex items-center gap-3">
-        <img src="/logo.svg" alt="CGswitch" className="h-12 w-12 shrink-0 dark:invert" />
-        <div>
-          <div className="apple-wordmark">CGswitch</div>
-          <div className="app-version mt-1.5">版本 {version.trim()}</div>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="flex items-center gap-3">
+          <img src="/logo.svg" alt="CGswitch" className="h-12 w-12 shrink-0 dark:invert" />
+          <div>
+            <div className="apple-wordmark">CGswitch</div>
+            <div className="app-version mt-1.5">版本 {version.trim()}</div>
+          </div>
         </div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" className="apple-list-row min-w-0 flex-1 basis-48 cursor-pointer text-left transition-colors hover:bg-(--profile-chip-bg)" title="打开 GitHub 项目仓库" onClick={openRepository}>
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
-              <GithubMark className="h-[18px] w-[18px]" />
-            </span>
-            <span className="setting-title">GitHub</span>
-          </span>
-          <ExternalLink className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" strokeWidth={2} aria-hidden="true" />
+        <div className="flex flex-wrap gap-2">
+        <button type="button" className="apple-action-button" title="打开 GitHub 项目仓库" onClick={openRepository}>
+          <GithubMark className="h-4 w-4" />
+          GitHub
+          <ExternalLink className="h-3.5 w-3.5 text-[var(--text-secondary)]" strokeWidth={2} aria-hidden="true" />
         </button>
-        <button type="button" className="apple-list-row min-w-0 flex-1 basis-48 cursor-pointer text-left transition-colors hover:bg-(--profile-chip-bg)" disabled={checkingUpdate} onClick={() => void checkUpdate()}>
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
-              <RefreshCw className={`h-[18px] w-[18px] ${checkingUpdate ? "animate-spin" : ""}`} strokeWidth={2} />
-            </span>
-            <span className="setting-title">检查更新</span>
-          </span>
+        <button type="button" className="apple-action-button" disabled={checkingUpdate} onClick={() => void checkUpdate()}>
+          <RefreshCw className={`h-4 w-4 text-accent ${checkingUpdate ? "animate-spin" : ""}`} strokeWidth={2} />
+          检查更新
         </button>
+        </div>
       </div>
       <hr className="my-4 border-0 border-t border-[var(--panel-divider)]" />
       <h2 className="setting-title">数据与路径</h2>
