@@ -10,7 +10,7 @@ const providerSource = readFileSync(new URL("./AppUpdateProvider.tsx", import.me
 const render = (enabled: boolean) => renderToStaticMarkup(
   <FeedbackProvider>
     <AppUpdateProvider enabled={enabled}>
-      <UpdateNotice collapsed={false} />
+      <UpdateNotice />
     </AppUpdateProvider>
   </FeedbackProvider>,
 );
@@ -27,9 +27,18 @@ describe("AppUpdateProvider", () => {
     expect(providerSource).toContain("autoCheckedRef.current = true");
   });
 
-  it("升级必须由用户点击「升级到 v…」触发，安装失败走 toast", () => {
-    expect(providerSource).toContain(`升级到 v${"${update.version}"}`);
+  it("升级必须由用户点击「立即升级」触发，安装失败走 toast", () => {
+    expect(providerSource).toContain("立即升级");
     expect(providerSource).toContain("feedback.error(updateFailureMessage(error))");
     expect(providerSource).not.toContain("downloadAndInstall");
+  });
+
+  it("悬浮卡片提供更新日志入口（GitHub 最新 Release 页）", () => {
+    expect(providerSource).toContain("更新日志");
+    expect(providerSource).toContain("releases/latest");
+  });
+
+  it("升级期间悬浮卡片强制保持显示，hover 移开不消失", () => {
+    expect(providerSource).toContain("const open = hovered || pinned || installing;");
   });
 });

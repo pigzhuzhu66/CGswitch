@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpCircle, LoaderCircle } from "lucide-react";
+import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
-import { AppDialog } from "../../components/AppDialog";
 import { checkForAppUpdate, type AppUpdate } from "./appUpdate";
 import { updateFailureMessage } from "./updateText";
+
+/** 更新日志入口：GitHub 最新 Release 页 */
+export const releaseNotesUrl = "https://github.com/zeno528/CGswitch/releases/latest";
 
 interface AppUpdateContextValue {
   /** 已发现的可用更新；null 表示已是最新或尚未检查 */
@@ -69,34 +72,41 @@ export function AppUpdateProvider({ enabled, children }: { enabled: boolean; chi
   return <AppUpdateContext.Provider value={{ update, checking, installing, check, install }}>{children}</AppUpdateContext.Provider>;
 }
 
-/** 侧边栏更新横幅（设置按钮上方）+ 点击后的升级确认弹窗；无可用更新时不渲染。 */
-export function UpdateNotice({ collapsed }: { collapsed: boolean }) {
+/** 侧边栏更新横幅（设置按钮上方）：hover / 点击弹出悬浮卡片（完整版本号 + 更新日志 + 立即升级）。
+    横幅文案不带版本号，避免侧边栏宽度截断；无可用更新时不渲染。 */
+export function UpdateNotice() {
   const { update, installing, install } = useAppUpdate();
-  const [open, setOpen] = useState(false);
+  const feedback = useFeedback();
+  const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
   if (!update) return null;
+  // 升级期间强制保持显示，避免 hover 移开后卡片消失、下载安装失去反馈
+  const open = hovered || pinned || installing;
+  // 打开更新日志后收起卡片，避免挡住侧边栏
+  const openChangelog = () => {
+    setPinned(false);
+    setHovered(false);
+    void api.openUrl(releaseNotesUrl).catch((error) => feedback.error(String(error)));
+  };
   return (
-    <>
-      <button type="button" className="update-notice-button" title={`发现新版本 v${update.version}`} onClick={() => setOpen(true)}>
+    <div className="relative" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <button type="button" className="update-notice-button" onClick={() => setPinned((value) => !value)}>
         <ArrowUpCircle strokeWidth={2} aria-hidden="true" />
-        <span className="apple-sidebar-label" aria-hidden={collapsed}>新版本 v{update.version}</span>
-        {collapsed ? <span className="apple-sidebar-flyout" aria-hidden="true">发现新版本 v{update.version}</span> : null}
+        <span className="apple-sidebar-label">发现新版本</span>
       </button>
-      <AppDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="发现新版本"
-        footer={
-          <>
-            <button type="button" className="apple-action-button" onClick={() => setOpen(false)}>稍后</button>
+      {open ? (
+        <div className="update-notice-popover">
+          <div className="text-sm font-semibold">发现新版本 v{update.version}</div>
+          <p className="muted meta-xs mt-1">下载并安装新版本，完成后自动重启</p>
+          <div className="mt-2.5 flex gap-2">
+            <button type="button" className="apple-action-button" onClick={openChangelog}>更新日志</button>
             <button type="button" className="apple-action-button app-button--primary" disabled={installing} onClick={() => void install()}>
               {installing ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
-              {installing ? "正在下载安装…" : `升级到 v${update.version}`}
+              {installing ? "下载安装中…" : "立即升级"}
             </button>
-          </>
-        }
-      >
-        <p className="text-sm text-[var(--text-secondary)]">检测到新版本 v{update.version}，升级将下载安装并自动重启应用。</p>
-      </AppDialog>
-    </>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

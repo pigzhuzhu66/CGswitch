@@ -35,6 +35,7 @@ describe("SettingsSections", () => {
 
   it("手动检查发现新版只展示版本号，升级由用户点击触发", () => {
     expect(settingsSectionsSource).toContain("立即升级");
+    expect(settingsSectionsSource).toContain("更新日志");
     expect(settingsSectionsSource).toContain("if (!found) feedback.success(\"已是最新版本\")");
     // 不再沿用旧逻辑：检查到新版立即自动下载安装
     expect(settingsSectionsSource).not.toContain("正在下载并安装");
@@ -45,7 +46,7 @@ describe("SettingsSections", () => {
     const appShellPath = new URL("../../app/AppShell.tsx", import.meta.url);
     const appShellSource = readFileSync(appShellPath, "utf8");
     expect(appShellSource).toContain("<AppUpdateProvider enabled={Boolean(state?.settings.auto_check_update)}>");
-    expect(appShellSource).toContain("<UpdateNotice collapsed={sidebar.sidebarCollapsed} />");
+    expect(appShellSource).toContain("<UpdateNotice />");
     expect(settingsSectionsSource).not.toContain("useEffect(() => { void checkUpdate(); }, []);");
   });
 
@@ -55,12 +56,14 @@ describe("SettingsSections", () => {
     expect(providerSource).toContain("if (checkingRef.current) return update;");
   });
 
-  it("通用设置区提供自动检查更新开关", () => {
+  it("自动检查更新开关位于应用分区而非通用区", () => {
+    const settingsViewSource = readFileSync(new URL("./SettingsView.tsx", import.meta.url), "utf8");
+    expect(settingsViewSource).toContain('checked={form.auto_check_update}');
+    expect(settingsViewSource).toContain("启动时检查新版本，发现后仅提示");
     const form: Settings = { theme: "system", auto_restart: false, autostart_enabled: false, silent_start: false, minimize_to_tray: false, auto_check_update: true, auto_backup_interval_hours: 0, database_backup_keep_count: 5 };
     const html = renderToStaticMarkup(
       <FeedbackProvider><SettingsGeneral form={form} onPatch={() => undefined} /></FeedbackProvider>,
     );
-    expect(html).toContain("自动检查更新");
-    expect(html).toContain("发现后仅提示");
+    expect(html).not.toContain("自动检查更新");
   });
 });

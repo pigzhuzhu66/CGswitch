@@ -195,7 +195,7 @@ export default function AppShell() {
               </button>
             </nav>
             <div className="absolute inset-x-1.5 bottom-4 flex flex-col gap-1.5">
-              <UpdateNotice collapsed={sidebar.sidebarCollapsed} />
+              <UpdateNotice />
               <button type="button" className={navClass(view === "settings")} aria-label="设置" onClick={() => goSettings()} onMouseEnter={() => sidebar.setSidebarFlyoutArmed(true)}>
                 <SettingsIcon strokeWidth={2} aria-hidden="true" />
                 <span className="apple-sidebar-label" aria-hidden={sidebar.sidebarCollapsed}>设置</span>

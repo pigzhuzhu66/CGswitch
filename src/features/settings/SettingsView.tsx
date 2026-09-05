@@ -1,6 +1,7 @@
 import {
   AppWindow,
   ArrowLeft,
+  ArrowUpCircle,
   CircleUserRound,
   Info,
   RefreshCw,
@@ -53,22 +54,41 @@ export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved
     {section === "general" ? <SettingsGeneral form={form} onPatch={(patch) => void saveGeneral(patch)} /> : null}
     {section === "codex" ? (
       <div className="apple-group mt-[var(--gap-section)] p-[var(--gap-card)]">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
-              <RefreshCw className="h-[18px] w-[18px]" strokeWidth={2} />
-            </span>
-            <div>
-              <div className="setting-title">应用配置后自动重启 Codex</div>
-              <div className="setting-description mt-0.5">
-                开启后应用配置会自动重启 Codex 生效；关闭则只保存配置，稍后可手动重启。
+        <div className="flex flex-col gap-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
+                <RefreshCw className="h-[18px] w-[18px]" strokeWidth={2} />
+              </span>
+              <div>
+                <div className="setting-title">应用配置后自动重启 Codex</div>
+                <div className="setting-description mt-0.5">
+                  开启后应用配置会自动重启 Codex 生效；关闭则只保存配置，稍后可手动重启。
+                </div>
               </div>
             </div>
+            <AppSwitch
+              checked={form.auto_restart}
+              onCheckedChange={(value) => void saveGeneral({ auto_restart: value })}
+            />
           </div>
-          <AppSwitch
-            checked={form.auto_restart}
-            onCheckedChange={(value) => void saveGeneral({ auto_restart: value })}
-          />
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <span className="settings-icon-tile grid h-9 w-9 shrink-0 place-items-center rounded-xl text-accent">
+                <ArrowUpCircle className="h-[18px] w-[18px]" strokeWidth={2} />
+              </span>
+              <div>
+                <div className="setting-title">自动检查更新</div>
+                <div className="setting-description mt-0.5">
+                  启动时检查新版本，发现后仅提示，可在关于页更新。
+                </div>
+              </div>
+            </div>
+            <AppSwitch
+              checked={form.auto_check_update}
+              onCheckedChange={(value) => void saveGeneral({ auto_check_update: value })}
+            />
+          </div>
         </div>
       </div>
     ) : null}
