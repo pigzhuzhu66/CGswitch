@@ -36,9 +36,16 @@ function hasLongContextOverride(text: string) {
   return /^\s*model_context_window\s*=/m.test(text) && /^\s*model_auto_compact_token_limit\s*=/m.test(text);
 }
 
+// 阈值行格式：readCompactTokenLimit 解析与 replaceCompactTokenLimit 写入共用同一 pattern，二者不可漂移
+const compactTokenLimitLine = /^(\s*model_auto_compact_token_limit\s*=\s*)(\d+)\s*$/m;
+
 function readCompactTokenLimit(text: string) {
-  const match = /^\s*model_auto_compact_token_limit\s*=\s*(\d+)\s*$/m.exec(text);
-  return match?.[1] ?? defaultCompactTokenLimit;
+  return compactTokenLimitLine.exec(text)?.[2] ?? defaultCompactTokenLimit;
+}
+
+// 输入框实时联动：把配置文本里的阈值行替换为新值；键不存在时原样返回（由 blur 时的后端补丁兜底补写）
+function replaceCompactTokenLimit(text: string, limit: number) {
+  return text.replace(compactTokenLimitLine, `$1${limit}`);
 }
 
 function hasSystemProxyOverride(text: string) {
@@ -541,7 +548,14 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
                         </label>
                         <label className="flex items-center gap-1.5 text-xs" title="达到此 Token 数时自动压缩上下文。">
                           <span className="whitespace-nowrap">压缩阈值</span>
-                          <input className="app-input compact-token-input h-8 w-24 px-2 text-xs" type="number" min={1} max={1_000_000} step={1} inputMode="numeric" value={compactTokenLimit} disabled={!longContextEnabled || patchingLongContext || saving} onChange={(event) => setCompactTokenLimit(event.target.value)} onBlur={() => void updateCompactTokenLimit()} />
+                          <input className="app-input compact-token-input h-8 w-24 px-2 text-xs" type="number" min={1} max={1_000_000} step={1} inputMode="numeric" value={compactTokenLimit} disabled={!longContextEnabled || patchingLongContext || saving} onChange={(event) => {
+                          const next = event.target.value;
+                          setCompactTokenLimit(next);
+                          // 实时联动编辑器：合法输入立即写入 configText，最终校验与格式化仍由 blur 时的后端补丁完成
+                          const limit = Number(next);
+                          if (!longContextEnabled || patchingLongContext || !Number.isInteger(limit) || limit < 1 || limit > 1_000_000) return;
+                          setConfigText((current) => replaceCompactTokenLimit(current, limit));
+                        }} onBlur={() => void updateCompactTokenLimit()} />
                           <span className="muted">Token</span>
                         </label>
                       </div>
