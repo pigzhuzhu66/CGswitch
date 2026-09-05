@@ -1543,7 +1543,7 @@ button:focus-visible {
 }
 
 .app-select:disabled { cursor: not-allowed; opacity: 0.5; }
-.app-select__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-select__label { display: flex; min-width: 0; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-select-wrap[data-open="true"] { z-index: 30; }
 .app-select-wrap[data-open="true"] .app-select__icon { color: var(--accent); transform: rotate(180deg); }
 
