@@ -802,7 +802,7 @@ body.drag-active * {
 .apple-edit-toolbar--header {
   margin-bottom: 0;
   position: relative;
-  z-index: 1;
+  z-index: 52;
 }
 
 .apple-edit-content {
@@ -1760,6 +1760,10 @@ textarea.app-input::-webkit-scrollbar { width: 0; height: 0; display: none; }
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
+
+.compact-token-input[type="number"] { appearance: textfield; }
+.compact-token-input[type="number"]::-webkit-inner-spin-button,
+.compact-token-input[type="number"]::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
 
 .app-input-focus-frame:focus-within {
   z-index: 1;

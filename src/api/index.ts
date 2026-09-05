@@ -100,8 +100,8 @@ export const api = {
     catalogText: string | null,
     authText: string | null,
   ) => call<ProfileDetail>("update_profile_config", { id, configText, catalogText, authText }),
-  patchChatgptContextConfig: (configText: string, enabled: boolean) =>
-    call<string>("patch_chatgpt_context_config", { configText, enabled }),
+  patchChatgptContextConfig: (configText: string, enabled: boolean, compactTokenLimit: number) =>
+    call<string>("patch_chatgpt_context_config", { configText, enabled, compactTokenLimit }),
   patchSystemProxyConfig: (configText: string, enabled: boolean) =>
     call<string>("patch_system_proxy_config", { configText, enabled }),
   validateToml: (text: string) => call<TomlDiagnostic[]>("validate_toml", { text }),

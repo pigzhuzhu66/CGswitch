@@ -72,7 +72,10 @@ const webPaths = [
   { label: "备份目录", path: "C:\\Users\\<user>\\.cgswitch\\backups" },
 ];
 
-function patchContextOverrideForWeb(text: string, enabled: boolean): string {
+function patchContextOverrideForWeb(text: string, enabled: boolean, compactTokenLimit: number): string {
+  if (enabled && (!Number.isInteger(compactTokenLimit) || compactTokenLimit < 1 || compactTokenLimit > 1_000_000)) {
+    throw new Error("压缩阈值必须在 1 到 1000000 Token 之间");
+  }
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text
     .split(/\r?\n/)
@@ -83,7 +86,7 @@ function patchContextOverrideForWeb(text: string, enabled: boolean): string {
     );
   if (enabled) {
     const sectionIndex = lines.findIndex((line) => /^\s*\[/.test(line));
-    lines.splice(sectionIndex < 0 ? lines.length : sectionIndex, 0, "model_context_window = 1000000", "model_auto_compact_token_limit = 900000");
+    lines.splice(sectionIndex < 0 ? lines.length : sectionIndex, 0, "model_context_window = 1000000", `model_auto_compact_token_limit = ${compactTokenLimit}`);
   }
   return lines.join(newline);
 }
@@ -891,6 +894,7 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       return patchContextOverrideForWeb(
         String(args?.configText ?? ""),
         Boolean(args?.enabled),
+        Number(args?.compactTokenLimit ?? 900_000),
       ) as T;
     case "patch_system_proxy_config":
       return patchSystemProxyForWeb(

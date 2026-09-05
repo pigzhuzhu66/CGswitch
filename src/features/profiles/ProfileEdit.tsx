@@ -30,9 +30,15 @@ interface ProfileEditProps {
 }
 
 const manageChatgptAccountsValue = "__manage_chatgpt_accounts__";
+const defaultCompactTokenLimit = "900000";
 
 function hasLongContextOverride(text: string) {
   return /^\s*model_context_window\s*=/m.test(text) && /^\s*model_auto_compact_token_limit\s*=/m.test(text);
+}
+
+function readCompactTokenLimit(text: string) {
+  const match = /^\s*model_auto_compact_token_limit\s*=\s*(\d+)\s*$/m.exec(text);
+  return match?.[1] ?? defaultCompactTokenLimit;
 }
 
 function hasSystemProxyOverride(text: string) {
@@ -75,6 +81,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const [configTouched, setConfigTouched] = useState(false);
   const [catalogTouched, setCatalogTouched] = useState(false);
   const [longContextEnabled, setLongContextEnabled] = useState(false);
+  const [compactTokenLimit, setCompactTokenLimit] = useState(defaultCompactTokenLimit);
   const [patchingLongContext, setPatchingLongContext] = useState(false);
   const [systemProxyEnabled, setSystemProxyEnabled] = useState(false);
   const [patchingSystemProxy, setPatchingSystemProxy] = useState(false);
@@ -218,6 +225,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           setBoundAccountId(loaded.account_id);
           setShowBalance(loaded.show_balance);
           setLongContextEnabled(loaded.provider === null && hasLongContextOverride(loaded.raw_config ?? loaded.config_fragment));
+          setCompactTokenLimit(readCompactTokenLimit(loaded.raw_config ?? loaded.config_fragment));
           setSystemProxyEnabled(hasSystemProxyOverride(loaded.raw_config ?? loaded.config_fragment));
           if (loaded.provider === null) {
             const source = resolveAuthSource(loaded);
@@ -298,7 +306,10 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
 
   useEffect(() => {
     if (create && configText !== liveConfigFragment) setConfigTouched(true);
-    if (!patchingLongContext && showLongContextOverride) setLongContextEnabled(hasLongContextOverride(configText));
+    if (!patchingLongContext && showLongContextOverride) {
+      setLongContextEnabled(hasLongContextOverride(configText));
+      setCompactTokenLimit(readCompactTokenLimit(configText));
+    }
   }, [configText, create, liveConfigFragment, patchingLongContext, showLongContextOverride]);
 
   useEffect(() => {
@@ -338,6 +349,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     setConfigText(nextConfig);
     setConfigInitial(nextConfig);
     setLongContextEnabled(kind === "chatgpt" && hasLongContextOverride(nextConfig));
+    setCompactTokenLimit(readCompactTokenLimit(nextConfig));
     setSystemProxyEnabled(hasSystemProxyOverride(nextConfig));
     setActiveTab("config");
     if (kind === "chatgpt") void loadAuthStatus();
@@ -347,11 +359,29 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     if (patchingLongContext) return;
     setPatchingLongContext(true);
     try {
-      const next = await api.patchChatgptContextConfig(configText, enabled);
+      const next = await api.patchChatgptContextConfig(configText, enabled, Number(compactTokenLimit));
       setConfigText(next);
       setLongContextEnabled(enabled);
     } catch (error) {
       feedback.error(`更新长上下文配置失败：${String(error)}`);
+    } finally {
+      setPatchingLongContext(false);
+    }
+  };
+
+  const updateCompactTokenLimit = async () => {
+    const limit = Number(compactTokenLimit);
+    if (patchingLongContext || !Number.isInteger(limit) || limit < 1 || limit > 1_000_000) {
+      feedback.error("压缩阈值必须在 1 到 1000000 Token 之间");
+      setCompactTokenLimit(readCompactTokenLimit(configText));
+      return;
+    }
+    setPatchingLongContext(true);
+    try {
+      const next = await api.patchChatgptContextConfig(configText, true, limit);
+      setConfigText(next);
+    } catch (error) {
+      feedback.error(`更新压缩阈值失败：${String(error)}`);
     } finally {
       setPatchingLongContext(false);
     }
@@ -504,10 +534,17 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
                 {activeTab === "config" ? (
                   <div className="flex items-center gap-2">
                     {showLongContextOverride ? (
-                      <label className={`flex items-center gap-2 rounded-[10px] border px-2.5 py-1 text-xs transition-colors ${longContextEnabled ? "border-accent/30 bg-accent/10 text-accent" : "border-[var(--panel-ring)]"}`} title="可能降低模型性能并增加 Token 消耗，仅在需要时开启。">
-                        <input type="checkbox" checked={longContextEnabled} disabled={patchingLongContext || saving} onChange={(event) => void toggleLongContext(event.target.checked)} />
-                        <span className="whitespace-nowrap font-medium">1M 上下文窗口</span>
-                      </label>
+                      <div className="flex items-center gap-2">
+                        <label className={`flex items-center gap-2 rounded-[10px] border px-2.5 py-1 text-xs transition-colors ${longContextEnabled ? "border-accent/30 bg-accent/10 text-accent" : "border-[var(--panel-ring)]"}`} title="可能降低模型性能并增加 Token 消耗，仅在需要时开启。">
+                          <input type="checkbox" checked={longContextEnabled} disabled={patchingLongContext || saving} onChange={(event) => void toggleLongContext(event.target.checked)} />
+                          <span className="whitespace-nowrap font-medium">1M 上下文窗口</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs" title="达到此 Token 数时自动压缩上下文。">
+                          <span className="whitespace-nowrap">压缩阈值</span>
+                          <input className="app-input compact-token-input h-8 w-24 px-2 text-xs" type="number" min={1} max={1_000_000} step={1} inputMode="numeric" value={compactTokenLimit} disabled={!longContextEnabled || patchingLongContext || saving} onChange={(event) => setCompactTokenLimit(event.target.value)} onBlur={() => void updateCompactTokenLimit()} />
+                          <span className="muted">Token</span>
+                        </label>
+                      </div>
                     ) : null}
                     <label className={`flex items-center gap-2 rounded-[10px] border px-2.5 py-1 text-xs transition-colors ${systemProxyEnabled ? "border-accent/30 bg-accent/10 text-accent" : "border-[var(--panel-ring)]"}`} title="让 Codex 的网络请求遵循操作系统代理设置，重启 Codex 后生效。">
                       <input type="checkbox" checked={systemProxyEnabled} disabled={patchingSystemProxy || saving} onChange={(event) => void toggleSystemProxy(event.target.checked)} />
