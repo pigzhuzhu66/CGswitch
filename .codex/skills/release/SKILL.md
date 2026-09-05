@@ -145,10 +145,24 @@ xattr -cr /Applications/CGswitch.app
 > 默认流程到 Step 3 为止。本节起必须用户明确指示（如"继续"、"push"、"推上去"、"触发构建"）才执行，不要自行越界。
 
 1. 推送日志提交：`git push origin main`（工作流从仓库读取 VERSION 与发行日志）。
-2. 触发 Release 工作流（手动触发，不 push tag——tag 由工作流用 GITHUB_TOKEN 自动创建，避免递归触发）。`release_mode` 输入决定最终形态，**按用户指令选择**，用户未指定时用默认 draft：
-   - `gh workflow run release.yml --ref main` → draft（默认）：构建完停在草稿，走 Step 6 人工发布
-   - `gh workflow run release.yml --ref main -f release_mode=prerelease` → 构建完自动以预发行公开（不占 latest 指针）
-   - `gh workflow run release.yml --ref main -f release_mode=latest` → 构建完自动正式发布并通知关注者
+2. 触发 Release 工作流前**必须**先用 AskUserQuestion 让用户选择 `release_mode`，**禁止** AI 默认 draft 或自行猜。手动触发工作流（不 push tag——tag 由工作流用 GITHUB_TOKEN 自动创建，避免递归触发）。
+
+   AskUserQuestion 调用模板：
+
+   - `header`: `Release 模式`
+   - `question`: `选择 Release 工作流的 release_mode？`
+   - `multiSelect`: `false`
+   - `options`（推荐项置首）：
+     - **draft（推荐）**：构建完停在草稿态，走 Step 6 人工发布，不通知关注者
+     - **prerelease**：构建完自动公开为预发行，不占 latest 指针，通知关注者
+     - **latest**：构建完自动正式发布并更新 latest 指针，通知关注者
+   - `header` ≤ 12 字符；其他字段用户原文如实呈现
+
+   拿到用户选择后，按对应命令触发：
+
+   - draft → `gh workflow run release.yml --ref main`
+   - prerelease → `gh workflow run release.yml --ref main -f release_mode=prerelease`
+   - latest → `gh workflow run release.yml --ref main -f release_mode=latest`
 3. 等 10 秒后取 run：`gh run list --workflow=Release --limit 1 --json databaseId,status,headSha`
 4. 推送前可选本地预检 `pnpm check`（与工作流 verify job 同一条链），失败就地修复并补充提交；⚠️ 项目 node_modules 是 Windows 平台构建的，必须在 **Windows 侧**执行（WSL 里跑会触发 corepack 重建依赖、破坏 Windows 开发环境）；跳过也可，工作流 verify 会兜底。
 
