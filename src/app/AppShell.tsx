@@ -11,6 +11,7 @@ import McpView from "../features/mcp/McpView";
 import PluginsView from "../features/plugins/PluginsView";
 import SkillsView from "../features/skills/SkillsView";
 import SettingsView from "../features/settings/SettingsView";
+import { AutoUpdateCheck } from "../features/updates/AutoUpdateCheck";
 import type { SkillSummary } from "../types";
 
 const appWindow = isTauri ? getCurrentWindow() : null;
@@ -133,6 +134,8 @@ export default function AppShell() {
 
   return (
     <FeedbackProvider>
+      {/* settings 就绪后启动静默检查一次更新；checkForAppUpdate 内部已守卫非 Tauri 环境 */}
+      <AutoUpdateCheck enabled={Boolean(state?.settings.auto_check_update)} />
       <div className={`flex h-full min-h-0 flex-col ${isMacWindow ? "is-mac" : ""}`}>
         <div className="apple-window-chrome">
           {isMacWindow ? <div className="apple-chrome-inset" data-tauri-drag-region aria-hidden="true" /> : null}

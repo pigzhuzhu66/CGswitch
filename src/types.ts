@@ -171,6 +171,7 @@ export interface Settings {
   autostart_enabled: boolean;
   silent_start: boolean;
   minimize_to_tray: boolean;
+  auto_check_update: boolean;
   auto_backup_interval_hours: number;
   database_backup_keep_count: number;
 }

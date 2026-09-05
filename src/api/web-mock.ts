@@ -474,6 +474,7 @@ let webSettings: Settings = {
   autostart_enabled: false,
   silent_start: false,
   minimize_to_tray: false,
+  auto_check_update: true,
   auto_backup_interval_hours: 0,
   database_backup_keep_count: 5,
 };
