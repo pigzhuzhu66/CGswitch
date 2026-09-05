@@ -802,7 +802,7 @@ body.drag-active * {
 .apple-edit-toolbar--header {
   margin-bottom: 0;
   position: relative;
-  z-index: 52;
+  z-index: 1;
 }
 
 .apple-edit-content {
@@ -1551,7 +1551,9 @@ button:focus-visible {
   top: 0;
   left: 0;
   bottom: auto;
-  z-index: 1;
+  /* 菜单经 createPortal 渲染在 body 下（脱离 .app-select-wrap 的 z-30 抬升），
+     须高于 sticky 标题栏（z-10）/侧栏浮标（z-30）/页内工具栏（z-1），低于对话框层（50/51） */
+  z-index: 45;
   display: grid;
   width: max-content;
   min-width: 0;
@@ -1634,13 +1636,17 @@ button:focus-visible {
   padding-right: calc(var(--control-height) * 2 + 0.5rem);
 }
 
-.app-input-stepper__input[type="number"] {
+/* 隐藏 number 输入的原生步进按钮：app-input-stepper 与 compact-token-input 共用同一视觉意图，只此一处定义 */
+.app-input-stepper__input[type="number"],
+.compact-token-input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
 }
 
 .app-input-stepper__input[type="number"]::-webkit-inner-spin-button,
-.app-input-stepper__input[type="number"]::-webkit-outer-spin-button {
+.app-input-stepper__input[type="number"]::-webkit-outer-spin-button,
+.compact-token-input[type="number"]::-webkit-inner-spin-button,
+.compact-token-input[type="number"]::-webkit-outer-spin-button {
   margin: 0;
   -webkit-appearance: none;
 }
@@ -1760,10 +1766,6 @@ textarea.app-input::-webkit-scrollbar { width: 0; height: 0; display: none; }
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
-
-.compact-token-input[type="number"] { appearance: textfield; }
-.compact-token-input[type="number"]::-webkit-inner-spin-button,
-.compact-token-input[type="number"]::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
 
 .app-input-focus-frame:focus-within {
   z-index: 1;
