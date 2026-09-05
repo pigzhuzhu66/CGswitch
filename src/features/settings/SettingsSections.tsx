@@ -1,6 +1,6 @@
 import { Database, DatabaseBackup, Download, ExternalLink, FolderOpen, LoaderCircle, Moon, MoonStar, Monitor, PanelBottomClose, Pencil, Power, Save, Sun, Upload } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, isTauri } from "../../api";
 import { useFeedback } from "../../app/Feedback";
 import { AppDialog } from "../../components/AppDialog";
@@ -159,11 +159,14 @@ interface SettingsAboutProps { paths: PathInfo[]; onOpenPath: (item: PathInfo) =
 export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutProps) {
   const feedback = useFeedback();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  // StrictMode 下 effect 双跑共用同一组件实例，state 守卫两次都读到旧值，必须用 ref 防重入
+  const checkingRef = useRef(false);
   const [updating, setUpdating] = useState(false);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
   const openRepository = () => void api.openUrl("https://github.com/zeno528/CGSwitch").catch((error) => feedback.error(String(error)));
   const checkUpdate = async () => {
-    if (checkingUpdate) return;
+    if (checkingRef.current) return;
+    checkingRef.current = true;
     setCheckingUpdate(true);
     try {
       const next = await checkForAppUpdate();
@@ -172,6 +175,7 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
     } catch (error) {
       feedback.error(updateFailureMessage(error));
     } finally {
+      checkingRef.current = false;
       setCheckingUpdate(false);
     }
   };
