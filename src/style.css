@@ -1762,6 +1762,9 @@ textarea.app-input {
 
 textarea.app-input::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
+/* 工具栏组合控件内嵌的紧凑输入框：压掉 .app-input 的 min-height/font-size（font:inherit 会覆盖 Tailwind 字号），嵌入 h-8 整体不超高 */
+.app-input--compact { min-height: 1.5rem; font-size: 0.75rem; }
+
 .app-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);

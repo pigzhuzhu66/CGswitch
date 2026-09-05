@@ -539,16 +539,16 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
                   {tabs.map((tab) => <button key={tab.id} type="button" className={`relative flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] font-semibold transition-colors ${activeTab === tab.id ? "bg-(--selection-bg) text-accent" : "muted hover:bg-black/5 dark:hover:bg-white/8"}`} aria-pressed={activeTab === tab.id} title={tab.title} onClick={() => { setActiveTab(tab.id); setEditorDiagnostics({ count: 0, firstLine: null }); }}>{tab.id === "config" ? <Settings className="h-3.5 w-3.5" strokeWidth={2} /> : <FileBraces className="h-3.5 w-3.5" strokeWidth={2} />}<span>{tab.label}</span>{((tab.id === "config" && configDirty) || (tab.id === "models" && catalogDirty) || (tab.id === "auth" && authDirty)) ? <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" /> : null}</button>)}
                 </div>
                 {activeTab === "config" ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex select-none items-center gap-2">
                     {showLongContextOverride ? (
-                      <div className="flex items-center gap-2">
-                        <label className={`flex items-center gap-2 rounded-[10px] border px-2.5 py-1 text-xs transition-colors ${longContextEnabled ? "border-accent/30 bg-accent/10 text-accent" : "border-[var(--panel-ring)]"}`} title="可能降低模型性能并增加 Token 消耗，仅在需要时开启。">
+                      <div className={`flex h-8 items-center overflow-hidden rounded-[10px] border text-xs transition-colors ${longContextEnabled ? "border-accent/30 bg-accent/10" : "border-[var(--panel-ring)]"}`}>
+                        <label className={`flex h-full cursor-pointer items-center gap-2 px-2.5 transition-colors ${longContextEnabled ? "text-accent" : ""}`} title="可能降低模型性能并增加 Token 消耗，仅在需要时开启。">
                           <input type="checkbox" checked={longContextEnabled} disabled={patchingLongContext || saving} onChange={(event) => void toggleLongContext(event.target.checked)} />
                           <span className="whitespace-nowrap font-medium">1M 上下文窗口</span>
                         </label>
-                        <label className="flex items-center gap-1.5 text-xs" title="达到此 Token 数时自动压缩上下文。">
+                        <label className={`flex h-full items-center gap-1.5 border-l border-[var(--panel-divider)] px-2.5 transition-opacity ${longContextEnabled ? "" : "opacity-40"}`} title="达到此 Token 数时自动压缩上下文。">
                           <span className="whitespace-nowrap">压缩阈值</span>
-                          <input className="app-input compact-token-input h-8 w-24 px-2 text-xs" type="number" min={1} max={1_000_000} step={1} inputMode="numeric" value={compactTokenLimit} disabled={!longContextEnabled || patchingLongContext || saving} onChange={(event) => {
+                          <input className="app-input app-input--compact compact-token-input h-6 w-20 px-1.5 text-xs" type="number" min={1} max={1_000_000} step={1} inputMode="numeric" value={compactTokenLimit} disabled={!longContextEnabled || patchingLongContext || saving} onChange={(event) => {
                           const next = event.target.value;
                           setCompactTokenLimit(next);
                           // 实时联动编辑器：合法输入立即写入 configText，最终校验与格式化仍由 blur 时的后端补丁完成
@@ -556,11 +556,11 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
                           if (!longContextEnabled || patchingLongContext || !Number.isInteger(limit) || limit < 1 || limit > 1_000_000) return;
                           setConfigText((current) => replaceCompactTokenLimit(current, limit));
                         }} onBlur={() => void updateCompactTokenLimit()} />
-                          <span className="muted">Token</span>
+                          <span>Token</span>
                         </label>
                       </div>
                     ) : null}
-                    <label className={`flex items-center gap-2 rounded-[10px] border px-2.5 py-1 text-xs transition-colors ${systemProxyEnabled ? "border-accent/30 bg-accent/10 text-accent" : "border-[var(--panel-ring)]"}`} title="让 Codex 的网络请求遵循操作系统代理设置，重启 Codex 后生效。">
+                    <label className={`flex h-8 items-center gap-2 rounded-[10px] border px-2.5 text-xs transition-colors ${systemProxyEnabled ? "border-accent/30 bg-accent/10 text-accent" : "border-[var(--panel-ring)]"}`} title="让 Codex 的网络请求遵循操作系统代理设置，重启 Codex 后生效。">
                       <input type="checkbox" checked={systemProxyEnabled} disabled={patchingSystemProxy || saving} onChange={(event) => void toggleSystemProxy(event.target.checked)} />
                       <span className="whitespace-nowrap font-medium">遵循系统代理</span>
                     </label>
