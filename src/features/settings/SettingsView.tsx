@@ -80,7 +80,7 @@ export default function SettingsView({ state, onPreviewTheme, onRefresh, onSaved
               <div>
                 <div className="setting-title">自动检查更新</div>
                 <div className="setting-description mt-0.5">
-                  启动时检查新版本，发现后仅提示，可在关于页更新。
+                  启动时检查新版本，发现后在侧边栏提示更新。
                 </div>
               </div>
             </div>

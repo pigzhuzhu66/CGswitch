@@ -59,7 +59,7 @@ describe("SettingsSections", () => {
   it("自动检查更新开关位于应用分区而非通用区", () => {
     const settingsViewSource = readFileSync(new URL("./SettingsView.tsx", import.meta.url), "utf8");
     expect(settingsViewSource).toContain('checked={form.auto_check_update}');
-    expect(settingsViewSource).toContain("启动时检查新版本，发现后仅提示");
+    expect(settingsViewSource).toContain("启动时检查新版本，发现后在侧边栏提示更新");
     const form: Settings = { theme: "system", auto_restart: false, autostart_enabled: false, silent_start: false, minimize_to_tray: false, auto_check_update: true, auto_backup_interval_hours: 0, database_backup_keep_count: 5 };
     const html = renderToStaticMarkup(
       <FeedbackProvider><SettingsGeneral form={form} onPatch={() => undefined} /></FeedbackProvider>,

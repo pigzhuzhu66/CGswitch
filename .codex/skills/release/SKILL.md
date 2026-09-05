@@ -1,19 +1,19 @@
 ---
 name: release
-description: CGswitch 发版流水线（**默认仅本地 commit 为止**）：AI 读 CHANGELOG 历史与 git 三态（最新 tag / HEAD VERSION / working tree VERSION），**单次展示** bump 级别建议（用户确认）→ AI 跑 `node scripts/bump-version.mjs <level>`（**禁止手写**）→ **展示** CHANGELOG 草稿（用户确认）→ 写入 CHANGELOG + 本地 commit。**Step 3 写入本地 commit 即终止**；AI 不主动询问、不主动执行任何 push / 触发 Release 工作流 / 盯构建 / 发布动作，这些扩展步骤必须由用户用明确指令单独启动。当用户说"发版"、"发行"、"release"、"发个新版本"、"发布新版本"时使用。
+description: CGswitch 发版流水线（**默认仅本地 commit 为止**）：AI 读 CHANGELOG 历史与 git 三态（最新 tag / HEAD VERSION / working tree VERSION），**单次展示** bump 级别建议（用户确认）→ AI 跑 `node scripts/bump-version.mjs <level>`（**禁止手写**）→ **展示** CHANGELOG 草稿（用户确认）→ 写入 CHANGELOG + 本地 commit。**Step 3 写入本地 commit 即终止**；AI 不主动询问、不主动执行任何 push / 盯构建 / 发布动作。push 到 main 后 Release 工作流自动触发（构建完停在草稿），公开发布仍须用户确认。当用户说"发版"、"发行"、"release"、"发个新版本"、"发布新版本"时使用。
 ---
 
 # CGswitch 发版
 
 分工：本 skill 做需要判断的部分——bump 级别建议、CHANGELOG 草稿（撰写须由 Agent 完成并经用户确认）、本地 commit、跑 bump-version 命令；`.github/workflows/release.yml` 做确定性的部分——校验、三平台构建、创建 tag 与草稿发行页、上传资产。草稿不会通知关注者；执行发布那一刻 GitHub 才给关注者发通知邮件。
 
-工作流由手动触发（推荐，`workflow_dispatch`）或 tag 推送触发；手动触发时工作流用 `GITHUB_TOKEN` 创建 tag 和草稿，不会递归触发自身。
+工作流由 push 到 main 自动触发（要求 VERSION 与 CHANGELOG.md 有变更且内容齐备，不满足则绿色跳过），构建完停在**草稿**；也可手动 `workflow_dispatch` 触发并可传 `release_mode` 直接预发行/正式发布。工作流用 `GITHUB_TOKEN` 创建 tag 和草稿，不会递归触发自身。
 
 ## 默认流程边界
 
 **Step 0–3 是默认范围**：建议 bump 级别（用户确认） + 跑 bump 命令 + 起草 CHANGELOG 草稿（用户确认） + 写入本地 commit。**Step 3 写入本地 commit 即终止。**
 
-Step 4–6（push / `gh workflow run` / 盯构建 / 发布）属于扩展流程，**必须用户明确启动**才执行，常见触发词如"继续"、"push"、"推上去"、"触发构建"、"发布"、"发版（确认发布）"。**用户不说就停手**——AI 在 Step 3 之后只汇报 commit 结果，**不主动询问也不主动执行**任何扩展动作。
+Step 4–6（push / 盯构建 / 发布）属于扩展流程，**必须用户明确启动**才执行，常见触发词如"继续"、"push"、"推上去"、"触发构建"、"发布"、"发版（确认发布）"。**用户不说就停手**——AI 在 Step 3 之后只汇报 commit 结果，**不主动询问也不主动执行**任何扩展动作。
 
 **角色分工硬约束**：
 
@@ -140,29 +140,21 @@ xattr -cr /Applications/CGswitch.app
    提交信息：`chore(release): v<版本>`
 3. **到此停下**：汇报版本号、commit hash、CHANGELOG 段落摘要，**会话停在此处**。**不询问用户是否继续**（避免被读成对扩展动作的暗示），**不主动执行**任何 push / 触发工作流 / 发布操作。Step 4–6 需用户用明确指令单独启动。
 
-### Step 4: 推送日志并触发工作流（不手动打 tag）— 需用户明确启动才执行
+### Step 4: 推送（自动触发构建，停在草稿）— 需用户明确启动才执行
 
-> 默认流程到 Step 3 为止。本节起必须用户明确指示（如"继续"、"push"、"推上去"、"触发构建"）才执行，不要自行越界。
+> 默认流程到 Step 3 为止。本节起必须用户明确指示（如"继续"、"push"、"推上去"）才执行，不要自行越界。
 
-1. 推送日志提交：`git push origin main`（工作流从仓库读取 VERSION 与发行日志）。
-2. 触发 Release 工作流前**必须**先用 AskUserQuestion 让用户选择 `release_mode`，**禁止** AI 默认 draft 或自行猜。手动触发工作流（不 push tag——tag 由工作流用 GITHUB_TOKEN 自动创建，避免递归触发）。
+1. 推送发版提交：`git push origin main`（工作流从仓库读取 VERSION 与发行日志）。push 会**自动触发** Release 工作流，release_mode 为空 → 构建完停在**草稿**，走 Step 6 人工发布；不手动打 tag（tag 由工作流用 GITHUB_TOKEN 自动创建，避免递归触发）。
+2. 仅当用户明确要求**直接预发行 / 正式发布**（不走人工发布）时，先取消 push 触发的 run，再手动 dispatch 对应模式：
 
-   AskUserQuestion 调用模板：
+   ```bash
+   gh run list --workflow=Release --limit 1 --json databaseId,event,status   # 找 event=push 的 run
+   gh run cancel <run-id>
+   gh workflow run release.yml --ref main -f release_mode=prerelease   # 或 latest
+   ```
 
-   - `header`: `Release 模式`
-   - `question`: `选择 Release 工作流的 release_mode？`
-   - `multiSelect`: `false`
-   - `options`（推荐项置首）：
-     - **draft（推荐）**：构建完停在草稿态，走 Step 6 人工发布，不通知关注者
-     - **prerelease**：构建完自动公开为预发行，不占 latest 指针，通知关注者
-     - **latest**：构建完自动正式发布并更新 latest 指针，通知关注者
-   - `header` ≤ 12 字符；其他字段用户原文如实呈现
+   不取消也能工作（同一并发组排队，dispatch 那条最终更新草稿并发布），但会白跑一轮三平台构建。
 
-   拿到用户选择后，按对应命令触发：
-
-   - draft → `gh workflow run release.yml --ref main`
-   - prerelease → `gh workflow run release.yml --ref main -f release_mode=prerelease`
-   - latest → `gh workflow run release.yml --ref main -f release_mode=latest`
 3. 等 10 秒后取 run：`gh run list --workflow=Release --limit 1 --json databaseId,status,headSha`
 4. 推送前可选本地预检 `pnpm check`（与工作流 verify job 同一条链），失败就地修复并补充提交；⚠️ 项目 node_modules 是 Windows 平台构建的，必须在 **Windows 侧**执行（WSL 里跑会触发 corepack 重建依赖、破坏 Windows 开发环境）；跳过也可，工作流 verify 会兜底。
 
@@ -182,7 +174,7 @@ xattr -cr /Applications/CGswitch.app
 2. 用户确认后执行：`gh release edit v<版本> --draft=false --latest`
 3. 变体处理：
    - 用户说"预发布"：加 `--prerelease`，去掉 `--latest`
-   - 用户要改日志：改 `CHANGELOG.md` 对应版本段落，提交推送后重新触发工作流（`gh workflow run release.yml --ref main`），工作流会用新段落更新既有草稿后再发布
+   - 用户要改日志：改 `CHANGELOG.md` 对应版本段落，提交推送后工作流自动重跑，用新段落更新既有草稿后再发布
 4. 发布后告知用户：关注者通知已发出，附 release 页面链接 `https://github.com/zeno528/CGswitch/releases/tag/v<版本>`
 
 ## 示例
@@ -197,15 +189,17 @@ xattr -cr /Applications/CGswitch.app
 
 **场景 B（扩展流程，需用户明确指示）**：用户在场景 A 之后说"推上去，发布"
 
-1. **Step 4**：`git push origin main` + `gh workflow run release.yml --ref main`
+1. **Step 4**：`git push origin main` → Release 工作流自动触发（构建完停在草稿）
 2. **Step 5**：后台 `gh run watch` 盯 Release 工作流至全绿（工作流自动建 tag、草稿并上传 4 个资产）
 3. **Step 6**：展示 4 个资产（Windows setup/msi、macOS x64/arm64 dmg）+ 日志全文，等确认 → 用户回复"发布" → `gh release edit v0.7.4 --draft=false --latest`，报告链接
 
 ## Troubleshooting
 
-**工作流未触发**：确认 `gh workflow run release.yml --ref main` 已执行、`.github/workflows/release.yml` 已合入 main；`gh run list --workflow=Release` 查看队列。
+**工作流未触发**：push 后 `gh run list --workflow=Release` 查看队列；确认改动包含 VERSION 或 CHANGELOG.md（paths 过滤，普通提交不触发）且推的是 main。手动兜底：`gh workflow run release.yml --ref main`。
 
-**verify 第 0 步失败（VERSION 为空 / 缺 CHANGELOG 段落）**：说明版本号或日志没提交。补上 `CHANGELOG.md` 中的 `## [<版本>] - <日期>` 段落（或修正 VERSION），提交推送后重新触发。
+**verify 绿色跳过（push 自动触发，`::notice` 提示）**：属正常，两种情况——① VERSION 与 CHANGELOG 顶部段落不一致（如只改其一、提前写未来版本段落）；② 该版本已公开发布（改文案不会重发）。
+
+**verify 第 0 步失败（手动 dispatch 时 VERSION 为空 / 顶部段落与 VERSION 不一致）**：说明版本号与日志没同步提交。补上 `CHANGELOG.md` 顶部的 `## [<版本>] - <日期>` 段落并让 VERSION 一致，提交推送后重新触发。
 
 **草稿已存在（重跑场景）**：工作流会检测到草稿并更新（`gh release edit`），不会重复建。
 

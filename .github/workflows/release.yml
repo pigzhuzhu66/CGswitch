@@ -1,12 +1,21 @@
 # 发版流水线（构建+发布准备）：由 /release skill 负责版本号、撰写发行日志并提交；
 # 本工作流承担确定性动作——校验、三平台构建、创建发行页、上传产物。
-# 触发方式：手动触发（workflow_dispatch），仅允许从 main 分支执行；
+# 触发方式：push 到 main 且 VERSION / CHANGELOG.md 有变更时自动触发；
 # 构建完成先建草稿、传资产（用 GITHUB_TOKEN 创建 release/tag）。
-# release_mode 输入决定最终形态：draft（默认）停在草稿等人工发布，不通知关注者；
+# 自动触发（push）时 release_mode 输入为空，天然停在草稿等人工发布；
+# 手动触发（workflow_dispatch）可传 release_mode：draft（默认）停在草稿，不通知关注者；
 # prerelease 构建完自动以预发行公开（不占 latest 指针）；latest 构建完自动正式发布并通知关注者。
 name: Release
 
 on:
+  # 自动触发：push 到 main 且版本号或更新日志有变更；verify 校验通过（两者齐备）才真正构建，
+  # 不满足则在 verify 阶段绿色跳过（见 guard 步骤），日常非发版提交不受影响
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
+      - CHANGELOG.md
   # 手动触发（Actions UI → Run workflow），版本提交后从 main 分支执行；
   # CLI 传参：gh workflow run release.yml --ref main -f release_mode=<draft|prerelease|latest>
   workflow_dispatch:
@@ -31,6 +40,9 @@ jobs:
   verify:
     name: verify (Windows)
     runs-on: windows-latest
+    outputs:
+      # push 触发但非发版提交（版本号与更新日志未齐备）时为 true，下游全部跳过
+      skip: ${{ steps.guard.outputs.skip }}
     steps:
       - name: 仅允许从 main 分支发行
         shell: bash
@@ -42,32 +54,65 @@ jobs:
             exit 1
           }
       - uses: actions/checkout@v7
-      # 第 0 秒拦截：VERSION 非空、CHANGELOG 中存在对应版本段落，
-      # 不满足直接失败，避免浪费三平台构建
-      - name: 校验 VERSION 与 CHANGELOG 段落
+      # 第 0 秒拦截：VERSION 非空、CHANGELOG 中存在对应版本段落，两者齐备才继续构建。
+      # push 自动触发下不满足属正常（如只改 CHANGELOG 错字）：绿色跳过，不算失败；
+      # 手动触发说明用户明确要发版，不满足直接失败提示补齐
+      - id: guard
+        name: 校验 VERSION 与 CHANGELOG 段落
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="$(cat VERSION)"
-          [ -n "$VERSION" ] || { echo "::error::VERSION 文件为空"; exit 1; }
-          grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "::error::CHANGELOG.md 缺少 ## [$VERSION] 段落（需由 /release skill 先提交）"; exit 1; }
+          # 一致性校验：CHANGELOG 顶部第一个段落必须就是当前 VERSION。
+          # 只查「段落存在」不够——历史段落永远存在，两者不同步时会误触发构建甚至误发行
+          HEAD_SECTION="$(grep -m1 '^## \[' CHANGELOG.md | sed 's/^## \[\([^]]*\)\].*/\1/')"
+          if [ -z "$VERSION" ] || [ "$HEAD_SECTION" != "$VERSION" ]; then
+            if [ "$EVENT_NAME" = "push" ]; then
+              echo "::notice::VERSION($VERSION) 与 CHANGELOG 顶部段落($HEAD_SECTION) 不一致，判定为非发版提交，跳过发行构建"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              [ -n "$VERSION" ] || echo "::error::VERSION 文件为空"
+              [ "$HEAD_SECTION" = "$VERSION" ] || echo "::error::CHANGELOG.md 顶部段落是 [$HEAD_SECTION]，与 VERSION($VERSION) 不一致（需由 /release skill 同步提交两者）"
+              exit 1
+            fi
+            exit 0
+          fi
+          # 版本已公开发布：改 CHANGELOG 也不会重发（release job 本就拒绝修改已公开内容），跳过省一轮构建
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "v$VERSION" --json isDraft -q .isDraft 2>/dev/null || true)"
+            if [ "$IS_DRAFT" = "false" ]; then
+              echo "::notice::v$VERSION 已公开发布，跳过重复构建"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
       - run: corepack enable
+        if: steps.guard.outputs.skip != 'true'
         shell: bash
       - uses: actions/setup-node@v7
+        if: steps.guard.outputs.skip != 'true'
         with:
           node-version: 24
           cache: pnpm
       - run: rustup component add rustfmt clippy
+        if: steps.guard.outputs.skip != 'true'
         shell: bash
         working-directory: src-tauri
       - uses: Swatinem/rust-cache@v2
+        if: steps.guard.outputs.skip != 'true'
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
+        if: steps.guard.outputs.skip != 'true'
       - run: pnpm check
+        if: steps.guard.outputs.skip != 'true'
       - run: pnpm build
+        if: steps.guard.outputs.skip != 'true'
 
   build:
     needs: verify
+    if: needs.verify.outputs.skip != 'true'
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -124,8 +169,10 @@ jobs:
           if-no-files-found: error
 
   release:
-    # 校验和所有平台构建成功后才会执行；任何失败都不会创建发行
-    needs: build
+    # 校验和所有平台构建成功后才会执行；任何失败都不会创建发行。
+    # needs 显式列出 verify 以便读取其 skip 输出（仅间接依赖时 needs 上下文拿不到）
+    needs: [verify, build]
+    if: needs.verify.outputs.skip != 'true'
     # 手动触发执行：构建完直接把资产收进草稿。
     # tag 由 git push 创建（releases API 的 --target 在 GITHUB_TOKEN 下受 workflow-scope
     # 限制会 403，见 cli/cli#9514；git 协议不受限）；release 不带 --target 挂到已有 tag。
