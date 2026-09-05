@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "sync-version": "node scripts/sync-version.mjs",
+    "skills:sync": "node scripts/sync-skills.mjs",
+    "postinstall": "node scripts/sync-skills.mjs",
     "version:patch": "node scripts/bump-version.mjs patch",
     "version:minor": "node scripts/bump-version.mjs minor",
     "version:major": "node scripts/bump-version.mjs major",
