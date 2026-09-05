@@ -36,6 +36,7 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(
             WindowStateBuilder::default()
                 .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
@@ -124,6 +125,12 @@ pub fn run() {
             commands::open_path,
         ])
         .setup(|app| {
+            // macOS 上窗口配置 visible:false 不生效（创建后实际处于可见状态），
+            // 统一先隐藏一次；非静默启动时由前端在 settings 加载后 show()。
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
+            }
+
             use tauri_plugin_autostart::ManagerExt;
 
             #[cfg(desktop)]
