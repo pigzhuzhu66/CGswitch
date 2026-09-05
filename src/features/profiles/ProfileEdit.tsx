@@ -52,6 +52,11 @@ function hasSystemProxyOverride(text: string) {
   return /^\s*respect_system_proxy\s*=/m.test(text);
 }
 
+// 仅匹配 [features.context_management] 段内的 experimental_mode = true；[^[] 保证不跨入下一个段头
+function hasContextManagementOverride(text: string) {
+  return /^\s*\[features\.context_management\]\s*\n[^[]*?^\s*experimental_mode\s*=\s*true\s*$/m.test(text);
+}
+
 function normalizeNewlines(text: string) {
   return text.replace(/\r\n/g, "\n");
 }
@@ -92,6 +97,8 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
   const [patchingLongContext, setPatchingLongContext] = useState(false);
   const [systemProxyEnabled, setSystemProxyEnabled] = useState(false);
   const [patchingSystemProxy, setPatchingSystemProxy] = useState(false);
+  const [contextMgmtEnabled, setContextMgmtEnabled] = useState(false);
+  const [patchingContextMgmt, setPatchingContextMgmt] = useState(false);
   const [showBalance, setShowBalance] = useState(false);
   const [savingBalance, setSavingBalance] = useState(false);
   const [editorDiagnostics, setEditorDiagnostics] = useState<EditorDiagnosticSummary>({ count: 0, firstLine: null });
@@ -234,6 +241,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
           setLongContextEnabled(loaded.provider === null && hasLongContextOverride(loaded.raw_config ?? loaded.config_fragment));
           setCompactTokenLimit(readCompactTokenLimit(loaded.raw_config ?? loaded.config_fragment));
           setSystemProxyEnabled(hasSystemProxyOverride(loaded.raw_config ?? loaded.config_fragment));
+          setContextMgmtEnabled(hasContextManagementOverride(loaded.raw_config ?? loaded.config_fragment));
           if (loaded.provider === null) {
             const source = resolveAuthSource(loaded);
             if (source === "oauth") {
@@ -324,6 +332,11 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     if (!patchingSystemProxy) setSystemProxyEnabled(hasSystemProxyOverride(configText));
   }, [configText, patchingSystemProxy]);
 
+  useEffect(() => {
+    if (!initialized.current) return;
+    if (!patchingContextMgmt) setContextMgmtEnabled(hasContextManagementOverride(configText));
+  }, [configText, patchingContextMgmt]);
+
   const selectPreset = async (kind: string) => {
     const preset = builtinPresets.find((item) => item.kind === kind);
     if (!preset) return;
@@ -358,6 +371,7 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
     setLongContextEnabled(kind === "chatgpt" && hasLongContextOverride(nextConfig));
     setCompactTokenLimit(readCompactTokenLimit(nextConfig));
     setSystemProxyEnabled(hasSystemProxyOverride(nextConfig));
+    setContextMgmtEnabled(hasContextManagementOverride(nextConfig));
     setActiveTab("config");
     if (kind === "chatgpt") void loadAuthStatus();
   };
@@ -405,6 +419,20 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
       feedback.error(`更新系统代理设置失败：${String(error)}`);
     } finally {
       setPatchingSystemProxy(false);
+    }
+  };
+
+  const toggleContextManagement = async (enabled: boolean) => {
+    if (patchingContextMgmt) return;
+    setPatchingContextMgmt(true);
+    try {
+      const next = await api.patchContextManagementConfig(configText, enabled);
+      setConfigText(next);
+      setContextMgmtEnabled(enabled);
+    } catch (error) {
+      feedback.error(`更新上下文管理配置失败：${String(error)}`);
+    } finally {
+      setPatchingContextMgmt(false);
     }
   };
 
@@ -560,6 +588,14 @@ export default function ProfileEdit({ profile, create = false, onBack, onChanged
                         </label>
                       </div>
                     ) : null}
+                    <label
+                      className={`flex h-8 items-center gap-2 rounded-[10px] border px-2.5 text-xs transition-colors ${contextMgmtEnabled ? "border-accent/30 bg-accent/10 text-accent" : "border-[var(--panel-ring)]"}`}
+                      title="上下文窗口滚动与 Token 预算提醒，需 ChatGPT 订阅登录官方后端，重启 Codex 后生效。"
+                    >
+                      <input type="checkbox" checked={contextMgmtEnabled} disabled={patchingContextMgmt || saving} onChange={(event) => void toggleContextManagement(event.target.checked)} />
+                      <span className="whitespace-nowrap font-medium">上下文管理</span>
+                      <span className="meta-xs muted">实验性</span>
+                    </label>
                     <label className={`flex h-8 items-center gap-2 rounded-[10px] border px-2.5 text-xs transition-colors ${systemProxyEnabled ? "border-accent/30 bg-accent/10 text-accent" : "border-[var(--panel-ring)]"}`} title="让 Codex 的网络请求遵循操作系统代理设置，重启 Codex 后生效。">
                       <input type="checkbox" checked={systemProxyEnabled} disabled={patchingSystemProxy || saving} onChange={(event) => void toggleSystemProxy(event.target.checked)} />
                       <span className="whitespace-nowrap font-medium">遵循系统代理</span>

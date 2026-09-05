@@ -107,6 +107,29 @@ function patchSystemProxyForWeb(text: string, enabled: boolean): string {
   return lines.join(newline);
 }
 
+// 与后端一致：开启时写入 [features.context_management] 段（experimental_mode = true），关闭时移除整个段
+function patchContextManagementForWeb(text: string, enabled: boolean): string {
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  let inContextManagement = false;
+  const lines = text.split(/\r?\n/).filter((line) => {
+    if (/^\s*\[/.test(line)) inContextManagement = /^\s*\[features\.context_management\]/.test(line);
+    return !inContextManagement;
+  });
+  if (!enabled) return lines.join(newline);
+  const featuresIndex = lines.findIndex((line) => /^\s*\[features\]/.test(line));
+  let at = lines.length;
+  if (featuresIndex >= 0) {
+    for (let i = featuresIndex + 1; i < lines.length; i++) {
+      if (/^\s*\[/.test(lines[i])) {
+        at = i;
+        break;
+      }
+    }
+  }
+  lines.splice(at, 0, "[features.context_management]", "experimental_mode = true");
+  return lines.join(newline);
+}
+
 // 与后端一致：安装/卸载驱动 codex plugin CLI；列表读 codex plugin list、
 // 插件列表与 Codex Skill 注册表分开；插件 origin 只描述插件来源
 let webPlugins: PluginSummary[] = [
@@ -898,6 +921,11 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
       ) as T;
     case "patch_system_proxy_config":
       return patchSystemProxyForWeb(
+        String(args?.configText ?? ""),
+        Boolean(args?.enabled),
+      ) as T;
+    case "patch_context_management_config":
+      return patchContextManagementForWeb(
         String(args?.configText ?? ""),
         Boolean(args?.enabled),
       ) as T;

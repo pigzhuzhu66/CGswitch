@@ -75,6 +75,7 @@ pub fn run() {
             commands::update_profile_config,
             commands::patch_chatgpt_context_config,
             commands::patch_system_proxy_config,
+            commands::patch_context_management_config,
             commands::validate_toml,
             commands::format_toml,
             commands::delete_profile,

@@ -124,6 +124,31 @@ pub fn patch_system_proxy(text: &str, enabled: bool) -> AppResult<String> {
     Ok(document.to_string())
 }
 
+pub fn patch_context_management(text: &str, enabled: bool) -> AppResult<String> {
+    let mut document = parse_document(text)?;
+    if enabled {
+        let features = document
+            .as_table_mut()
+            .entry("features")
+            .or_insert_with(|| Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| app_err!("features 不是 TOML table"))?;
+        let context_management = features
+            .entry("context_management")
+            .or_insert_with(|| Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| app_err!("features.context_management 不是 TOML table"))?;
+        context_management.insert("experimental_mode", Item::Value(Value::from(true)));
+    } else if let Some(features) = document
+        .as_table_mut()
+        .get_mut("features")
+        .and_then(Item::as_table_mut)
+    {
+        features.remove("context_management");
+    }
+    Ok(document.to_string())
+}
+
 pub fn read_profile(path: &Path) -> AppResult<ProfilePayload> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| app_err!("无法读取 {}: {error}", path.display()))?;
@@ -883,6 +908,18 @@ goals = true
 
         assert!(patch_context_override(source, true, 0).is_err());
         assert!(patch_context_override(source, true, 1_000_001).is_err());
+    }
+
+    #[test]
+    fn context_management_can_be_toggled_without_losing_features() {
+        let source = "[features]\ngoals = true\n";
+        let enabled = patch_context_management(source, true).unwrap();
+        assert!(enabled.contains("goals = true"));
+        assert!(enabled.contains("experimental_mode = true"));
+
+        let disabled = patch_context_management(&enabled, false).unwrap();
+        assert!(disabled.contains("goals = true"));
+        assert!(!disabled.contains("experimental_mode"));
     }
 
     #[test]

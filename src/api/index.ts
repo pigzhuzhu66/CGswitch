@@ -104,6 +104,8 @@ export const api = {
     call<string>("patch_chatgpt_context_config", { configText, enabled, compactTokenLimit }),
   patchSystemProxyConfig: (configText: string, enabled: boolean) =>
     call<string>("patch_system_proxy_config", { configText, enabled }),
+  patchContextManagementConfig: (configText: string, enabled: boolean) =>
+    call<string>("patch_context_management_config", { configText, enabled }),
   validateToml: (text: string) => call<TomlDiagnostic[]>("validate_toml", { text }),
   formatToml: (text: string) => call<string>("format_toml", { text }),
   listPlugins: () => call<PluginSummary[]>("list_plugins"),
