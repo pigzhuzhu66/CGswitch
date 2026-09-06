@@ -243,15 +243,36 @@ fn find_codex_cli(home: &Path) -> Option<PathBuf> {
 const PLUGIN_CLI_TIMEOUT_FAST_SECS: u64 = 20;
 const PLUGIN_CLI_TIMEOUT_NETWORK_SECS: u64 = 60;
 
+/// 是否联网操作（add/upgrade/update 底层走 git，慢网/代理下耗时长）。
+fn is_network_plugin_op(args: &[&str]) -> bool {
+    args.iter()
+        .any(|arg| matches!(*arg, "add" | "upgrade" | "update"))
+}
+
 fn plugin_cli_timeout(args: &[&str]) -> Duration {
-    let network = args
-        .iter()
-        .any(|arg| matches!(*arg, "add" | "upgrade" | "update"));
-    Duration::from_secs(if network {
+    Duration::from_secs(if is_network_plugin_op(args) {
         PLUGIN_CLI_TIMEOUT_NETWORK_SECS
     } else {
         PLUGIN_CLI_TIMEOUT_FAST_SECS
     })
+}
+
+/// 超时报错按档位区分：联网操作大概率是 GitHub 连通问题；
+/// 本地操作（list/remove）卡住与网络无关，不能误导用户去查代理。
+fn plugin_timeout_message(args: &[&str], timeout: Duration) -> String {
+    if is_network_plugin_op(args) {
+        format!(
+            "插件操作超时（{} 秒）：无法连通 GitHub。\
+             请确认网络可访问 github.com，或在代理软件中开启系统代理 / TUN 模式后重试",
+            timeout.as_secs()
+        )
+    } else {
+        format!(
+            "插件操作超时（{} 秒）：codex CLI 长时间无响应，已终止。请重试；\
+             若持续出现请重启 CGswitch 后再试",
+            timeout.as_secs()
+        )
+    }
 }
 
 /// 探测当前可用的代理地址：显式环境变量优先，其次读系统代理。
@@ -339,6 +360,58 @@ fn looks_like_network_error(detail: &str) -> bool {
     .any(|needle| detail.contains(needle))
 }
 
+/// `wait_child_with_timeout` 收集到的子进程输出。
+struct ChildOutput {
+    status: std::process::ExitStatus,
+    stdout: String,
+    stderr: String,
+}
+
+/// 读空一根管道（在独立线程里跑，直到 EOF）。
+fn drain_pipe(mut pipe: Option<impl Read>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    if let Some(pipe) = pipe.as_mut() {
+        let _ = pipe.read_to_end(&mut bytes);
+    }
+    bytes
+}
+
+/// 等待子进程退出并收集 stdout/stderr，超时则 kill 并返回 `None`。
+/// 排水线程必须在轮询前启动：OS 管道缓冲只有几 KB～几十 KB，
+/// 若等进程退出后再读，大输出（如 `list --available --json` 的市场全量目录）
+/// 会写满管道令子进程永远无法退出，只能等到超时被 kill。
+fn wait_child_with_timeout(
+    mut child: std::process::Child,
+    timeout: Duration,
+) -> std::io::Result<Option<ChildOutput>> {
+    let stdout_pipe = child.stdout.take();
+    let stderr_pipe = child.stderr.take();
+    let stdout_reader = std::thread::spawn(move || drain_pipe(stdout_pipe));
+    let stderr_reader = std::thread::spawn(move || drain_pipe(stderr_pipe));
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait()? {
+            Some(status) => break status,
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                // kill 后管道写端关闭、排水线程随之 EOF 结束；join 避免线程悬挂
+                let _ = stdout_reader.join();
+                let _ = stderr_reader.join();
+                return Ok(None);
+            }
+            None => std::thread::sleep(Duration::from_millis(150)),
+        }
+    };
+    let stdout = String::from_utf8_lossy(&stdout_reader.join().unwrap_or_default()).to_string();
+    let stderr = String::from_utf8_lossy(&stderr_reader.join().unwrap_or_default()).to_string();
+    Ok(Some(ChildOutput {
+        status,
+        stdout,
+        stderr,
+    }))
+}
+
 /// 跑 `codex plugin <args>`，返回 stdout；失败时把 CLI 的报错带出来，
 /// 网络类失败追加代理提示；整体限时，防止 git 卡死拖住 UI。
 fn run_codex_plugin(home: &Path, args: &[&str]) -> AppResult<String> {
@@ -371,40 +444,20 @@ fn run_codex_plugin(home: &Path, args: &[&str]) -> AppResult<String> {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    let mut child = command
+    let child = command
         .spawn()
         .map_err(|error| app_err!("执行 codex CLI 失败: {error}"))?;
     let timeout = plugin_cli_timeout(args);
-    let deadline = Instant::now() + timeout;
-    let status = loop {
-        match child
-            .try_wait()
-            .map_err(|error| app_err!("执行 codex CLI 失败: {error}"))?
-        {
-            Some(status) => break status,
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(app_err!(
-                    "插件操作超时（{} 秒）：无法连通 GitHub。\
-                     请确认网络可访问 github.com，或在代理软件中开启系统代理 / TUN 模式后重试",
-                    timeout.as_secs()
-                ));
-            }
-            None => std::thread::sleep(Duration::from_millis(150)),
-        }
+    let Some(output) = wait_child_with_timeout(child, timeout)
+        .map_err(|error| app_err!("执行 codex CLI 失败: {error}"))?
+    else {
+        return Err(app_err!("{}", plugin_timeout_message(args, timeout)));
     };
-    // 进程已退出，管道里是残留输出（codex plugin 的输出量很小，不会撑满缓冲区）
-    let mut stdout_bytes = Vec::new();
-    let mut stderr_bytes = Vec::new();
-    if let Some(mut pipe) = child.stdout.take() {
-        let _ = pipe.read_to_end(&mut stdout_bytes);
-    }
-    if let Some(mut pipe) = child.stderr.take() {
-        let _ = pipe.read_to_end(&mut stderr_bytes);
-    }
-    let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
-    let stderr = String::from_utf8_lossy(&stderr_bytes).to_string();
+    let ChildOutput {
+        status,
+        stdout,
+        stderr,
+    } = output;
     if !status.success() {
         let detail = if stderr.trim().is_empty() {
             stdout.trim()
@@ -2443,6 +2496,94 @@ ponytail@ponytail               installed, disabled 4.9.0         C:\\cache\\pon
         assert!(!super::looks_like_network_error(
             "marketplace already added"
         ));
+    }
+
+    #[test]
+    fn plugin_timeout_message_matches_operation_tier() {
+        let network = super::plugin_timeout_message(
+            &["marketplace", "add", "o/r"],
+            Duration::from_secs(super::PLUGIN_CLI_TIMEOUT_NETWORK_SECS),
+        );
+        assert!(network.contains("GitHub"));
+        let local = super::plugin_timeout_message(
+            &["list"],
+            Duration::from_secs(super::PLUGIN_CLI_TIMEOUT_FAST_SECS),
+        );
+        assert!(!local.contains("GitHub"), "本地操作超时不能诊断为网络问题");
+        assert!(local.contains("20"));
+    }
+
+    /// 管道排水回归测试的子进程入口：父测试以本环境变量拉起当前测试二进制，
+    /// 正常跑测试时无此变量，直接通过。
+    const TEST_CHILD_MODE_ENV: &str = "CGSWITCH_PLUGINS_TEST_CHILD_MODE";
+
+    #[test]
+    fn plugins_test_child_entry() {
+        let Some(mode) = std::env::var(TEST_CHILD_MODE_ENV).ok() else {
+            return;
+        };
+        match mode.as_str() {
+            // 向 stdout 写 2 MB，远超任何 OS 管道缓冲
+            "firehose" => {
+                use std::io::Write;
+                let chunk = "x".repeat(1024);
+                let mut stdout = std::io::stdout().lock();
+                for _ in 0..2048 {
+                    writeln!(stdout, "{chunk}").ok();
+                }
+                stdout.flush().ok();
+            }
+            // 挂住不退出，验证超时 kill 路径
+            "stall" => std::thread::sleep(Duration::from_secs(60)),
+            _ => {}
+        }
+        std::process::exit(0);
+    }
+
+    fn spawn_test_child(mode: &str) -> std::process::Child {
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("plugins_test_child_entry")
+            .arg("--nocapture")
+            .env(TEST_CHILD_MODE_ENV, mode)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap()
+    }
+
+    #[test]
+    fn wait_child_drains_large_output_without_deadlock() {
+        let started = Instant::now();
+        let output =
+            super::wait_child_with_timeout(spawn_test_child("firehose"), Duration::from_secs(15))
+                .unwrap()
+                .expect("大输出必须靠预排水线程收完，否则子进程写满管道永不退出");
+        assert!(output.status.success());
+        // 子进程输出 2048 行 × 1025 字节 ≈ 2 MB（测试框架自身会附加少量字节，
+        // 故用阈值断言：写满管道若未预排水，只能收到 ~64 KB 残留且走超时路径）
+        assert!(
+            output.stdout.len() > 2_000_000,
+            "应完整收下全部输出，实际 {} 字节",
+            output.stdout.len()
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "不应等到超时才返回"
+        );
+    }
+
+    #[test]
+    fn wait_child_kills_stalled_process_on_deadline() {
+        let started = Instant::now();
+        let outcome =
+            super::wait_child_with_timeout(spawn_test_child("stall"), Duration::from_secs(2))
+                .unwrap();
+        assert!(outcome.is_none(), "挂死的子进程应按超时终止");
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "应在超时时间点附近返回"
+        );
     }
 
     #[cfg(target_os = "macos")]
