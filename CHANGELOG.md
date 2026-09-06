@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## [0.12.5] - 2026-09-06
+
+### 新增
+- 应用内更新升级并重启后，会弹出「已更新到 vX.Y.Z」提示，仅显示一次
+
+### 如何选择安装包
+
+**Windows**：默认下载 `CGswitch-v0.12.5-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+**macOS**：
+- Apple 芯片（M 系列）→ `CGswitch-v0.12.5-macOS-arm64.dmg`
+- Intel 芯片 → `CGswitch-v0.12.5-macOS-x64.dmg`
+
+### macOS 首次打开
+
+提示「"CGswitch" 已损坏，无法打开」时，终端执行（路径换成你的实际安装位置）：
+
+```bash
+xattr -cr /Applications/CGswitch.app
+```
+
 ## [0.12.3] - 2026-09-06
 
 ### 修复
