@@ -143,6 +143,22 @@ impl AppContext {
         Ok(settings)
     }
 
+    pub fn set_update_marker(&self, version: &str) -> AppResult<()> {
+        atomic_write(&self.paths.update_marker, version.as_bytes())
+    }
+
+    /// 读取并清除「已更新到 vX」标记（一次性消费）；无标记返回 None。
+    pub fn take_update_marker(&self) -> AppResult<Option<String>> {
+        match std::fs::read_to_string(&self.paths.update_marker) {
+            Ok(text) => {
+                let _ = std::fs::remove_file(&self.paths.update_marker);
+                Ok(Some(text.trim().to_string()))
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(app_err!("无法读取更新标记: {error}")),
+        }
+    }
+
     pub fn open_path(&self, path: &str) -> AppResult<()> {
         if !self.is_managed_path(path) {
             return Err(app_err!("不能打开未列出的本机路径"));

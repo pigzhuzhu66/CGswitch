@@ -61,12 +61,17 @@ export function AppUpdateProvider({ enabled, children }: { enabled: boolean; chi
     void check("sidebar").catch((error) => console.warn("自动检查更新失败：", updateFailureMessage(error)));
   }, [enabled, check]);
 
-  // 应用内更新重启回来：读到安装时留下的版本标记即弹「更新成功」通知（与 enabled 无关，标记只会在更新后存在一次）
+  // 应用内更新重启回来：读到安装时留下的版本标记即弹「更新成功」通知（与 enabled 无关，标记只会在更新后存在一次）。
+  // 标记由后端原子落盘（Windows 安装器会立即杀进程，localStorage 异步提交可能丢）；
+  // 旧版本写在 localStorage 的键也兜底消费一次，覆盖升级过渡期
   useEffect(() => {
-    const updatedVersion = localStorage.getItem(UPDATED_VERSION_KEY);
-    if (!updatedVersion) return;
-    localStorage.removeItem(UPDATED_VERSION_KEY);
-    feedback.success(`已更新到 v${updatedVersion}`);
+    void (async () => {
+      const legacy = localStorage.getItem(UPDATED_VERSION_KEY);
+      if (legacy) localStorage.removeItem(UPDATED_VERSION_KEY);
+      const updatedVersion = legacy ?? (await api.takeUpdateMarker().catch(() => null));
+      if (!updatedVersion) return;
+      feedback.success(`已更新到 v${updatedVersion}`);
+    })();
   }, [feedback]);
 
   const install = useCallback(async (source: UpdateSource) => {

@@ -468,6 +468,9 @@ function webProfileDetail(id: string): ProfileDetail {
   };
 }
 
+/** Web 调试模式的「已更新到 vX」一次性标记（真实环境存后端文件） */
+let webUpdateMarker: string | null = null;
+
 let webSettings: Settings = {
   theme: "system",
   auto_restart: false,
@@ -580,6 +583,14 @@ export async function webInvoke<T>(command: string, args?: Record<string, unknow
   switch (command) {    case "get_state":
     case "get_settings":
       return webState() as T;
+    case "set_update_marker":
+      webUpdateMarker = (args?.version as string) ?? null;
+      return null as T;
+    case "take_update_marker": {
+      const marker = webUpdateMarker;
+      webUpdateMarker = null;
+      return marker as T;
+    }
     case "get_codex_status":
       return webState().codex as T;
     case "capture_profile": {

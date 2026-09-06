@@ -1,32 +1,51 @@
 import { describe, expect, it, vi } from "vitest";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { toAppUpdate, UPDATED_VERSION_KEY } from "./appUpdate";
+import { toAppUpdate } from "./appUpdate";
+
+const { setUpdateMarker, takeUpdateMarker } = vi.hoisted(() => ({
+  setUpdateMarker: vi.fn(async (_version: string) => undefined),
+  takeUpdateMarker: vi.fn(async () => null as string | null),
+}));
 
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
+vi.mock("../../api", () => ({
+  api: { setUpdateMarker, takeUpdateMarker },
+  isTauri: true,
+}));
 
 describe("toAppUpdate", () => {
-  it("只暴露版本号和安装动作", async () => {
-    const store = new Map<string, string>();
-    const events: string[] = [];
-    vi.stubGlobal("localStorage", {
-      setItem: (key: string, value: string) => {
-        events.push("mark");
-        store.set(key, value);
-      },
-      removeItem: (key: string) => void store.delete(key),
-    });
-    const download = vi.fn(async () => { events.push("download"); });
-    const install = vi.fn(async () => { events.push("install"); });
+  it("安装成功：下载后先把版本标记原子落盘，再启动安装器", async () => {
+    const download = vi.fn(async () => {});
+    const install = vi.fn(async () => {});
     vi.mocked(relaunch).mockClear();
+    setUpdateMarker.mockClear();
+    takeUpdateMarker.mockClear();
     const update = toAppUpdate({ version: "0.10.5", download, install });
 
     expect(update.version).toBe("0.10.5");
     await update.install();
     expect(download).toHaveBeenCalledOnce();
     expect(install).toHaveBeenCalledOnce();
-    expect(events).toEqual(["download", "mark", "install"]);
+    // 顺序必须是 download → 标记落盘 → install：Windows 安装器启动即杀进程，
+    // localStorage 异步提交来不及写盘会让升级后通知丢失
+    const [downloadAt, markAt, installAt] = [download, setUpdateMarker, install].map(
+      (mock) => mock.mock.invocationCallOrder[0],
+    );
+    expect(downloadAt).toBeLessThan(markAt);
+    expect(markAt).toBeLessThan(installAt);
+    expect(setUpdateMarker).toHaveBeenCalledWith("0.10.5");
+    expect(takeUpdateMarker).not.toHaveBeenCalled();
     expect(relaunch).toHaveBeenCalledOnce();
-    // 安装成功后留下版本标记，重启回来据此弹「更新成功」通知
-    expect(store.get(UPDATED_VERSION_KEY)).toBe("0.10.5");
+  });
+
+  it("安装失败：清除标记并向上抛错", async () => {
+    setUpdateMarker.mockClear();
+    takeUpdateMarker.mockClear();
+    const failure = vi.fn(async () => { throw new Error("安装器启动失败"); });
+    const update = toAppUpdate({ version: "0.10.5", download: vi.fn(async () => {}), install: failure });
+
+    await expect(update.install()).rejects.toThrow("安装器启动失败");
+    expect(setUpdateMarker).toHaveBeenCalledWith("0.10.5");
+    expect(takeUpdateMarker).toHaveBeenCalledOnce();
   });
 });

@@ -102,6 +102,8 @@ pub fn run() {
             commands::open_url,
             commands::get_settings,
             commands::save_settings,
+            commands::set_update_marker,
+            commands::take_update_marker,
             commands::list_plugins,
             commands::list_skills,
             commands::get_skill_content,

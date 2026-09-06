@@ -7,6 +7,10 @@ pub struct AppPaths {
     pub root: PathBuf,
     pub database: PathBuf,
     pub settings: PathBuf,
+    /// 应用内更新「已更新到 vX」一次性标记：安装成功前写入，新版本启动时消费。
+    /// 存文件而不是前端 localStorage——Windows 安装器会立即结束进程，WebView 的
+    /// localStorage 异步落盘可能来不及提交导致标记丢失、通知不弹。
+    pub update_marker: PathBuf,
     pub config_backup: PathBuf,
     pub database_backup: PathBuf,
     pub codex_files_backup: PathBuf,
@@ -41,6 +45,7 @@ pub fn from_home(home: &Path) -> AppResult<AppPaths> {
     Ok(AppPaths {
         database: root.join("cgswitch.db"),
         settings: root.join("settings.json"),
+        update_marker: root.join("update-marker"),
         config_backup: root.join("backups").join("config"),
         database_backup: root.join("backups").join("database"),
         codex_files_backup: root.join("backups").join("codex-files"),

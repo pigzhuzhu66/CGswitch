@@ -167,5 +167,7 @@ export const api = {
   openUrl: (url: string) => call<void>("open_url", { url }),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<Settings>("save_settings", { settings }),
+  setUpdateMarker: (version: string) => call<void>("set_update_marker", { version }),
+  takeUpdateMarker: () => call<string | null>("take_update_marker"),
   openPath: (path: string) => call<void>("open_path", { path }),
 };

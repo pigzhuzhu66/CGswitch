@@ -1,5 +1,22 @@
 use super::*;
 
+#[test]
+fn update_marker_writes_once_and_consumes_once() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = crate::paths::from_home(home.path()).unwrap();
+    paths.ensure().unwrap();
+    let context = AppContext::new(paths).unwrap();
+
+    // 无标记 → None；写入 → 读取即消费；再读 → None（一次性）
+    assert_eq!(context.take_update_marker().unwrap(), None);
+    context.set_update_marker("0.13.4").unwrap();
+    assert_eq!(
+        context.take_update_marker().unwrap(),
+        Some("0.13.4".to_string())
+    );
+    assert_eq!(context.take_update_marker().unwrap(), None);
+}
+
 fn chatgpt_test_context() -> (tempfile::TempDir, AppContext) {
     let home = tempfile::tempdir().unwrap();
     let paths = crate::paths::from_home(home.path()).unwrap();

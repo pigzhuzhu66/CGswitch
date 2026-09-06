@@ -310,10 +310,15 @@ fn detect_system_proxy() -> Option<String> {
     }
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        // 与 run_codex_plugin 同理：GUI 进程 spawn 控制台程序必须隐藏窗口，
+        // 否则插件页每次 CLI 调用都会闪出 reg.exe 黑窗
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let settings = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
         let reg_value = |name: &str| {
             std::process::Command::new("reg")
                 .args(["query", settings, "/v", name])
+                .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .ok()
                 .map(|output| String::from_utf8_lossy(&output.stdout).to_string())

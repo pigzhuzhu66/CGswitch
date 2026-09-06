@@ -758,6 +758,18 @@ pub fn get_settings(state: State<'_, AppContext>) -> AppResult<Settings> {
     state.settings()
 }
 
+/// 应用内更新安装成功前写入「已更新到 vX」标记（须在启动安装器/退出进程前完成落盘）。
+#[tauri::command]
+pub fn set_update_marker(version: String, state: State<'_, AppContext>) -> AppResult<()> {
+    state.set_update_marker(&version)
+}
+
+/// 新版本启动时消费标记：返回版本号并清除文件，无标记返回 null。
+#[tauri::command]
+pub fn take_update_marker(state: State<'_, AppContext>) -> AppResult<Option<String>> {
+    state.take_update_marker()
+}
+
 #[tauri::command]
 pub fn save_settings(
     app: AppHandle,
