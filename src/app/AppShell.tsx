@@ -37,6 +37,13 @@ export default function AppShell() {
       await refresh();
       if (cancelled) return;
       if (isTauri && !stateRef.current?.settings.silent_start) {
+        // 等首绘（双 rAF ≈ 一帧完成）再显示，窗口出现即完整内容；
+        // 更新重启等热启动下加载极快，不等首绘会闪出空白窗口。
+        // 隐藏窗口里 rAF 可能被节流，150ms 兜底保证窗口必定显示。
+        await Promise.race([
+          new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+          new Promise((resolve) => window.setTimeout(resolve, 150)),
+        ]);
         try {
           await appWindow?.show();
           await appWindow?.setFocus();
