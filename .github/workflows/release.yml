@@ -169,8 +169,8 @@ jobs:
       - uses: actions/checkout@v7
       - id: version
         run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
-      # 发行说明：CHANGELOG.md 有对应段落就用它（/release skill 会写）；没写更新日志则留空，
-      # 由 GitHub 按提交记录自动生成。已存在草稿（重跑场景）则更新，已公开则拒绝改动
+      # 发行说明 = CHANGELOG.md 对应段落（可选，/release skill 会写）+ 安装指南兜底（必带，
+      # 没写更新日志时用户也能知道下载哪个包）。已存在草稿（重跑场景）则更新，已公开则拒绝改动
       - name: 创建草稿发行页
         run: |
           TAG="v$VERSION"
@@ -180,17 +180,41 @@ jobs:
             insec && /^## \[/ && index($0, "## [" v "]") != 1 { exit }
             insec { print }
           ' CHANGELOG.md > "$NOTES"
-          NOTES_ARGS=()
-          if [ -s "$NOTES" ]; then NOTES_ARGS=(--notes-file "$NOTES"); fi
+          GUIDE="$(mktemp)"
+          cat > "$GUIDE" <<'EOF'
+
+          ---
+
+          ## 如何选择安装包
+
+          **Windows**：默认下载 `CGswitch-v__VERSION__-Windows-setup.exe`，双击安装即可。需要批量部署、静默安装等场景可选用 `.msi` 版本。
+
+          **macOS**：
+
+          - Apple 芯片（M 系列）→ `CGswitch-v__VERSION__-macOS-arm64.dmg`
+          - Intel 芯片 → `CGswitch-v__VERSION__-macOS-x64.dmg`
+
+          ## macOS 首次打开
+
+          首次打开 macOS 版本时，如果系统阻止打开应用，请先将应用拖入「应用程序」，再前往「系统设置 → 隐私与安全性」，允许打开该应用。如果仍无法打开，再在终端执行：
+
+          ```bash
+          xattr -cr /Applications/CGswitch.app
+          ```
+
+          然后再次打开 CGswitch；如果安装到了其他目录，请将命令中的路径替换为实际的 .app 路径。
+          EOF
+          sed -i "s/__VERSION__/$VERSION/g" "$GUIDE"
+          cat "$NOTES" "$GUIDE" > "$NOTES.full" && mv "$NOTES.full" "$NOTES"
           if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             git tag "$TAG" "$GITHUB_SHA"
             git push origin "refs/tags/$TAG"
           fi
           STATE="$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null || true)"
           if [ -z "$STATE" ]; then
-            gh release create "$TAG" --draft --title "$TAG" "${NOTES_ARGS[@]}"
+            gh release create "$TAG" --draft --title "$TAG" --notes-file "$NOTES"
           elif [ "$STATE" = true ]; then
-            gh release edit "$TAG" --title "$TAG" "${NOTES_ARGS[@]}"
+            gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES"
           else
             echo "::error::发行 $TAG 已经公开，拒绝修改已发布内容；请先递增 VERSION。"
             exit 1
