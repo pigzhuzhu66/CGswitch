@@ -717,6 +717,12 @@ body.drag-active * {
   padding: 0.75rem;
 }
 
+/* 安装中文案变宽会挤压按钮：禁止按钮压缩与文本换行，放不下时整颗换行（卡片高度自适应） */
+.update-notice-popover .apple-action-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* 透明桥：覆盖横幅与卡片之间的空隙，鼠标横移时不离开容器，卡片不消失 */
 .update-notice-popover::before {
   content: "";
@@ -1724,6 +1730,11 @@ button:focus-visible {
 .compact-token-input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
+}
+
+/* .app-input 的 width:100%（layer 外、源码靠后）压过 w-* 工具类，带 [type] 提优先级 */
+.compact-token-input[type="number"] {
+  width: 5rem;
 }
 
 .app-input-stepper__input[type="number"]::-webkit-inner-spin-button,
