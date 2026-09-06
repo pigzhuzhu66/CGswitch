@@ -8,7 +8,7 @@ const files = import.meta.glob<string>("./assets/providers/*.svg", {
 
 const LABELS: Record<string, string> = {
   "openai-chatgpt": "ChatGPT",
-  zhipu: "智谱",
+  zhipu: "Zhipu",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   opencode: "OpenCode",

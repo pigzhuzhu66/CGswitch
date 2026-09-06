@@ -679,11 +679,10 @@ body.drag-active * {
   flex-shrink: 0;
 }
 
-/* 侧边栏更新横幅（设置按钮上方，仿 Codex 更新提示）：发现新版本时出现。
-   描边样式与导航按钮的实底选中态区分（横幅是提示，不是「当前页」） */
+/* 侧边栏更新横幅（设置按钮上方）：默认透明，仅在交互时显示高亮。 */
 .update-notice-button {
   align-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border: 1px solid transparent;
   border-radius: var(--sidebar-nav-radius);
   color: var(--accent);
   display: flex;
@@ -693,12 +692,15 @@ body.drag-active * {
   padding-inline: var(--sidebar-nav-padding);
   position: relative;
   width: 100%;
-  background: transparent;
-  transition: background-color var(--motion-fast) ease-out;
+  transition: transform var(--motion-fast) ease-out, background-color var(--motion-fast) ease-out;
 }
 
 .update-notice-button:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--selection-bg);
+}
+
+.update-notice-button:active {
+  transform: scale(0.97);
 }
 
 /* 横幅悬浮卡片：hover / 点击横幅时在侧边栏右缘弹出，展示完整版本号与操作，
@@ -708,7 +710,8 @@ body.drag-active * {
   left: calc(100% + 0.6rem);
   bottom: 0;
   z-index: 30;
-  width: 15rem;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
   border-radius: 12px;
   background: var(--panel-bg);
   box-shadow:
@@ -717,7 +720,7 @@ body.drag-active * {
   padding: 0.75rem;
 }
 
-/* 安装中文案变宽会挤压按钮：禁止按钮压缩与文本换行，放不下时整颗换行（卡片高度自适应） */
+/* 安装中文案变宽时保持两个操作按钮同一行 */
 .update-notice-popover .apple-action-button {
   flex-shrink: 0;
   white-space: nowrap;

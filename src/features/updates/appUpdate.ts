@@ -10,14 +10,20 @@ export interface AppUpdate {
 /** 应用内更新安装成功后、重启前写入，下次启动读到即弹「更新成功」通知 */
 export const UPDATED_VERSION_KEY = "cgswitch.updated-version";
 
-export function toAppUpdate(update: Pick<Update, "version" | "downloadAndInstall">): AppUpdate {
-  // macOS 的 downloadAndInstall 只替换 .app 不重启，装完手动 relaunch
+export function toAppUpdate(update: Pick<Update, "version" | "download" | "install">): AppUpdate {
   return {
     version: update.version,
     install: async () => {
-      await update.downloadAndInstall();
-      // localStorage 同步落盘且升级不清理 WebView 数据，重启后可读到
+      await update.download();
+      // Windows 的 install 成功启动安装器后会退出当前进程，标记必须在此之前落盘。
       localStorage.setItem(UPDATED_VERSION_KEY, update.version);
+      try {
+        await update.install();
+      } catch (error) {
+        localStorage.removeItem(UPDATED_VERSION_KEY);
+        throw error;
+      }
+      // macOS / Linux 安装后不会自动重启，手动 relaunch；Windows 不会走到这里。
       await relaunch();
     },
   };

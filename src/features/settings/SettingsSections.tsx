@@ -163,7 +163,7 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
   // 检查只负责发现并展示版本号，升级必须由用户点击「立即升级」触发
   const checkUpdate = async () => {
     try {
-      const found = await check();
+      const found = await check("about");
       if (!found) feedback.success("已是最新版本");
     } catch (error) {
       feedback.error(updateFailureMessage(error));
@@ -203,7 +203,7 @@ export function SettingsAbout({ paths, onOpenPath, openingPath }: SettingsAboutP
               <button type="button" className="apple-action-button" title="在 GitHub 查看更新日志" onClick={() => void api.openUrl(releaseNotesUrl).catch((error) => feedback.error(String(error)))}>
                 更新日志
               </button>
-              <button type="button" className="apple-action-button app-button--primary" disabled={installing} onClick={() => void install()}>
+              <button type="button" className="apple-action-button app-button--primary" disabled={installing} onClick={() => void install("about")}>
                 {installing ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
                 {installing ? "正在下载安装…" : "立即升级"}
               </button>
