@@ -8,8 +8,8 @@
 name: Release
 
 on:
-  # 自动触发：push 到 main 且版本号或更新日志有变更；verify 校验通过（两者齐备）才真正构建，
-  # 不满足则在 verify 阶段绿色跳过（见 guard 步骤），日常非发版提交不受影响
+  # 自动触发：push 到 main 且 VERSION 或 CHANGELOG 有变更；VERSION 递增即发版（CHANGELOG 可选），
+  # 已公开发布的版本再推送则在 verify 阶段绿色跳过（见 guard 步骤）
   push:
     branches:
       - main
@@ -41,7 +41,7 @@ jobs:
     name: verify (Windows)
     runs-on: windows-latest
     outputs:
-      # push 触发但非发版提交（版本号与更新日志未齐备）时为 true，下游全部跳过
+      # 版本已公开发布（重复推送不重发）时为 true，下游全部跳过
       skip: ${{ steps.guard.outputs.skip }}
     steps:
       - name: 仅允许从 main 分支发行
@@ -54,31 +54,16 @@ jobs:
             exit 1
           }
       - uses: actions/checkout@v7
-      # 第 0 秒拦截：VERSION 非空、CHANGELOG 中存在对应版本段落，两者齐备才继续构建。
-      # push 自动触发下不满足属正常（如只改 CHANGELOG 错字）：绿色跳过，不算失败；
-      # 手动触发说明用户明确要发版，不满足直接失败提示补齐
+      # 第 0 秒拦截：VERSION 非空即视为发版（CHANGELOG 段落可选，没写则由 GitHub 自动生成说明）。
+      # 仅当该版本已公开发布时绿色跳过，避免重复推送重复构建
       - id: guard
-        name: 校验 VERSION 与 CHANGELOG 段落
+        name: 校验 VERSION
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="$(cat VERSION)"
-          # 一致性校验：CHANGELOG 顶部第一个段落必须就是当前 VERSION。
-          # 只查「段落存在」不够——历史段落永远存在，两者不同步时会误触发构建甚至误发行
-          HEAD_SECTION="$(grep -m1 '^## \[' CHANGELOG.md | sed 's/^## \[\([^]]*\)\].*/\1/')"
-          if [ -z "$VERSION" ] || [ "$HEAD_SECTION" != "$VERSION" ]; then
-            if [ "$EVENT_NAME" = "push" ]; then
-              echo "::notice::VERSION($VERSION) 与 CHANGELOG 顶部段落($HEAD_SECTION) 不一致，判定为非发版提交，跳过发行构建"
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-            else
-              [ -n "$VERSION" ] || echo "::error::VERSION 文件为空"
-              [ "$HEAD_SECTION" = "$VERSION" ] || echo "::error::CHANGELOG.md 顶部段落是 [$HEAD_SECTION]，与 VERSION($VERSION) 不一致（需由 /release skill 同步提交两者）"
-              exit 1
-            fi
-            exit 0
-          fi
+          [ -n "$VERSION" ] || { echo "::error::VERSION 文件为空"; exit 1; }
           # 版本已公开发布：改 CHANGELOG 也不会重发（release job 本就拒绝修改已公开内容），跳过省一轮构建
           if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
             IS_DRAFT="$(gh release view "v$VERSION" --json isDraft -q .isDraft 2>/dev/null || true)"
@@ -184,8 +169,8 @@ jobs:
       - uses: actions/checkout@v7
       - id: version
         run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
-      # 日志由 /release skill 写入 CHANGELOG.md 并随提交带进仓库；
-      # 这里用 awk 按标题格式提取当前版本段落作为发行说明；已存在草稿（重跑场景）则更新，已公开则拒绝改动
+      # 发行说明：CHANGELOG.md 有对应段落就用它（/release skill 会写）；没写更新日志则留空，
+      # 由 GitHub 按提交记录自动生成。已存在草稿（重跑场景）则更新，已公开则拒绝改动
       - name: 创建草稿发行页
         run: |
           TAG="v$VERSION"
@@ -195,16 +180,17 @@ jobs:
             insec && /^## \[/ && index($0, "## [" v "]") != 1 { exit }
             insec { print }
           ' CHANGELOG.md > "$NOTES"
-          [ -s "$NOTES" ] || { echo "::error::CHANGELOG.md 缺少 ## [$VERSION] 段落（需由 /release skill 先提交）"; exit 1; }
+          NOTES_ARGS=()
+          if [ -s "$NOTES" ]; then NOTES_ARGS=(--notes-file "$NOTES"); fi
           if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             git tag "$TAG" "$GITHUB_SHA"
             git push origin "refs/tags/$TAG"
           fi
           STATE="$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null || true)"
           if [ -z "$STATE" ]; then
-            gh release create "$TAG" --draft --title "$TAG" --notes-file "$NOTES"
+            gh release create "$TAG" --draft --title "$TAG" "${NOTES_ARGS[@]}"
           elif [ "$STATE" = true ]; then
-            gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES"
+            gh release edit "$TAG" --title "$TAG" "${NOTES_ARGS[@]}"
           else
             echo "::error::发行 $TAG 已经公开，拒绝修改已发布内容；请先递增 VERSION。"
             exit 1
