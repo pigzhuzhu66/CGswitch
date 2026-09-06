@@ -91,7 +91,8 @@ export function AppUpdateProvider({ enabled, children }: { enabled: boolean; chi
 }
 
 /** 侧边栏更新横幅（设置按钮上方）：hover / 点击弹出悬浮卡片（完整版本号 + 更新日志 + 立即升级）。
-    横幅文案不带版本号，避免侧边栏宽度截断；无可用更新时不渲染。 */
+    横幅文案不带版本号，避免侧边栏宽度截断；有可用更新即渲染（无论从哪个入口发现）。
+    升级中状态跟随发起入口：仅侧边栏发起时强制展开悬浮卡片，设置页发起时卡片不自动弹。 */
 export function UpdateNotice() {
   const { update, updateSource, installing, install } = useAppUpdate();
   const feedback = useFeedback();
@@ -108,9 +109,11 @@ export function UpdateNotice() {
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
   }, [pinned]);
-  if (!update || updateSource !== "sidebar") return null;
-  // 升级期间强制保持显示，避免 hover 移开后卡片消失、下载安装失去反馈
-  const open = hovered || pinned || installing;
+  if (!update) return null;
+  // 升级由哪个入口发起，进度就归哪个入口：install() 已把 updateSource 改写为发起方，
+  // 侧边栏发起时卡片强制保持展开（避免 hover 移开丢反馈）；设置页发起时这边不弹卡
+  const installingHere = installing && updateSource === "sidebar";
+  const open = hovered || pinned || installingHere;
   // 打开更新日志后收起卡片，避免挡住侧边栏
   const openChangelog = () => {
     setPinned(false);

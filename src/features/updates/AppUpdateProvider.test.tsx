@@ -38,7 +38,8 @@ describe("AppUpdateProvider", () => {
     expect(providerSource).toContain("releases/latest");
   });
 
-  it("升级期间悬浮卡片强制保持显示，hover 移开不消失", () => {
-    expect(providerSource).toContain("const open = hovered || pinned || installing;");
+  it("升级期间悬浮卡片强制保持显示，但仅限侧边栏发起的升级", () => {
+    expect(providerSource).toContain("const installingHere = installing && updateSource === \"sidebar\";");
+    expect(providerSource).toContain("const open = hovered || pinned || installingHere;");
   });
 });
