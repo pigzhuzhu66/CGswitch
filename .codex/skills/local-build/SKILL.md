@@ -1,6 +1,6 @@
 ---
 name: local-build
-description: 快速本地编译 CGswitch 安装包（自动检测 Windows / macOS 并走对应构建分支，Windows 出 NSIS exe / MSI，macOS 出 DMG / APP），构建完成后打开产物目录并列出安装包路径，供用户直接安装测试，不用等 GitHub Actions 发行工作流。当用户说"本地编译"、"本地构建"、"打个本地包"、"本地出个安装包"、"构建本地测试版"时使用。
+description: 快速本地编译 CGswitch 安装包（自动检测 Windows / macOS 并走对应构建分支，Windows 默认出 NSIS exe + MSI，用户明确说"只要一个 exe"时仅出 NSIS 单产物；macOS 出 DMG / APP），构建完成后打开产物目录并列出安装包路径，供用户直接安装测试，不用等 GitHub Actions 发行工作流。当用户说"本地编译"、"本地构建"、"打个本地包"、"本地出个安装包"、"构建本地测试版"、"打个 exe 就行"时使用。
 ---
 
 # 本地快速编译
@@ -50,25 +50,31 @@ NSIS 3.11 Modern UI 的官方推荐尺寸是 header `150×57`、welcome/finish s
 
 ### 构建
 
+**产物模式由用户在调用时指定**，未指定就走默认：
+
+- **默认**：NSIS exe + MSI 双产物，`pnpm tauri build`（与 Release 工作流一致）
+- **快速模式**：用户明确说"只要一个 exe / 不用 msi"时，`pnpm tauri build --bundles nsis`——CLI 覆盖只打 NSIS 一个包，省去 WiX/MSI 打包（约快 20-60 秒）。不要为此改 `tauri.conf.json` 的 `targets: "all"`，那是发行工作流出双资产用的
+
 用 PowerShell 工具在项目根目录执行，timeout 设 600000（10 分钟）：
 
 ```powershell
 $buildLog = Join-Path $env:TEMP "cgswitch-tauri-build-$PID.log"
-pnpm tauri build 2>&1 | Tee-Object -FilePath $buildLog
+pnpm tauri build 2>&1 | Tee-Object -FilePath $buildLog   # 快速模式改为: pnpm tauri build --bundles nsis
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (Select-String -LiteralPath $buildLog -Pattern 'Unsupported format|warning 5040' -Quiet) {
   throw "NSIS rejected an installer image; inspect $buildLog and fix the BMP format before distributing the package."
 }
 ```
 
-- 成功标志：输出 `Finished 2 bundles at:` 并列出两个路径
-- 该命令自动完成：sync-version（VERSION → 三处版本号同步）→ vite build → cargo release 编译 → NSIS + MSI 打包
-- `Finished 2 bundles at:` 不是唯一成功标准；NSIS `Unsupported format`/`warning 5040` 即使不阻断构建，也必须视为失败
+- 成功标志：默认输出 `Finished 2 bundles at:`（快速模式 `Finished 1 bundle at:`）并列出路径
+- 该命令自动完成：sync-version（VERSION → 三处版本号同步）→ vite build → cargo release 编译 → NSIS（+ MSI）打包
+- `Finished N bundles at:` 不是唯一成功标准；NSIS `Unsupported format`/`warning 5040` 即使不阻断构建，也必须视为失败
 
 ### 确认产物并打开目录
 
 ```powershell
-Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe", "src-tauri/target/release/bundle/msi/*.msi" | Select-Object Name, @{n='SizeMB';e={[math]::Round($_.Length/1MB,1)}}, LastWriteTime
+Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe" | Select-Object Name, @{n='SizeMB';e={[math]::Round($_.Length/1MB,1)}}, LastWriteTime
+if (Test-Path "src-tauri/target/release/bundle/msi") { Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" | Select-Object Name, @{n='SizeMB';e={[math]::Round($_.Length/1MB,1)}}, LastWriteTime }
 Invoke-Item "src-tauri/target/release/bundle/nsis"
 ```
 
@@ -77,22 +83,27 @@ Invoke-Item "src-tauri/target/release/bundle/nsis"
 | 产物 | 路径 | 说明 |
 |:---|:---|:---|
 | NSIS 安装包（推荐） | `src-tauri\target\release\bundle\nsis\CGswitch_<版本>_x64-setup.exe` | 标准安装体验 |
-| MSI 安装包 | `src-tauri\target\release\bundle\msi\CGswitch_<版本>_x64_en-US.msi` | 备选 |
+| MSI 安装包（仅默认构建） | `src-tauri\target\release\bundle\msi\CGswitch_<版本>_x64_en-US.msi` | 备选 |
 | 绿色版 | `src-tauri\target\release\cgswitch.exe` | 免安装直接运行 |
 
 ## Step 2M: macOS 分支
 
 ### 构建
 
+**产物模式由用户在调用时指定**，未指定就走默认：
+
+- **默认**：`.app` + DMG 双产物，`pnpm tauri build`
+- **指定模式**：用户明确说"只要 DMG"时，`pnpm tauri build --bundles dmg`——CLI 覆盖只出 DMG。不要为此改 `tauri.conf.json` 的 `targets: "all"`，那是发行工作流用的
+
 用 Bash 工具在项目根目录执行：
 
 ```bash
-pnpm tauri build
+pnpm tauri build   # 只要 DMG 时改为: pnpm tauri build --bundles dmg
 ```
 
 - timeout 设 600000（10 分钟）；首次冷编译 10-20 分钟属正常
-- 成功标志：输出 `Finished 2 bundles at:` 并列出两个路径
-- 自动完成：sync-version → vite build → cargo release 编译 → `.app` + DMG 打包
+- 成功标志：默认输出 `Finished 2 bundles at:`（只要 DMG 时 `Finished 1 bundle at:`）并列出路径
+- 自动完成：sync-version → vite build → cargo release 编译 → `.app`（+ DMG）打包
 - 只产当前机器架构的包（Apple Silicon 出 `aarch64`，Intel 出 `x86_64`），不产 universal 包
 
 ### 确认产物并打开目录
