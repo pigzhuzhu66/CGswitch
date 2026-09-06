@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { ArrowUpCircle, LoaderCircle } from "lucide-react";
 import { api } from "../../api";
 import { useFeedback } from "../../app/Feedback";
-import { checkForAppUpdate, type AppUpdate } from "./appUpdate";
+import { checkForAppUpdate, UPDATED_VERSION_KEY, type AppUpdate } from "./appUpdate";
 import { updateFailureMessage } from "./updateText";
 
 /** 更新日志入口：GitHub 最新 Release 页 */
@@ -56,6 +56,14 @@ export function AppUpdateProvider({ enabled, children }: { enabled: boolean; chi
     autoCheckedRef.current = true;
     void check().catch((error) => console.warn("自动检查更新失败：", updateFailureMessage(error)));
   }, [enabled, check]);
+
+  // 应用内更新重启回来：读到安装时留下的版本标记即弹「更新成功」通知（与 enabled 无关，标记只会在更新后存在一次）
+  useEffect(() => {
+    const updatedVersion = localStorage.getItem(UPDATED_VERSION_KEY);
+    if (!updatedVersion) return;
+    localStorage.removeItem(UPDATED_VERSION_KEY);
+    feedback.success(`已更新到 v${updatedVersion}`);
+  }, [feedback]);
 
   const install = useCallback(async () => {
     if (!update || installing) return;
