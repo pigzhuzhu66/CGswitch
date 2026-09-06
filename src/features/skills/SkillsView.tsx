@@ -51,6 +51,7 @@ export default function SkillsView({ cachedSkills, onSkillsChange, activationEpo
       feedback.success(`已导入 ${selectedPaths.length} 个 Skill`);
       setImporting(false);
       await refresh(true);
+      void scanForUpdates(); // 导入改变候选集，角标立即重扫，不等窗口重新聚焦
     } catch (error) { feedback.error(String(error)); }
     finally { setBusy(null); }
   };
@@ -60,7 +61,7 @@ export default function SkillsView({ cachedSkills, onSkillsChange, activationEpo
     setBusy(`${action}:${name}`);
     const previous = skills;
     if (action !== "delete") setSkills((current) => { const next = current.map((skill) => skill.name === name ? { ...skill, enabled: action === "enable" } : skill); setSkillsCache(next); onSkillsChange(next); return next; });
-    try { if (action === "enable") await api.enableSkill(name); if (action === "disable") await api.disableSkill(name); if (action === "delete") { await api.deleteSkill(name); feedback.success("Skill 已删除"); await refresh(true); } }
+    try { if (action === "enable") await api.enableSkill(name); if (action === "disable") await api.disableSkill(name); if (action === "delete") { await api.deleteSkill(name); feedback.success("Skill 已删除"); await refresh(true); void scanForUpdates(); } }
     catch (error) { if (action !== "delete") { setSkillsCache(previous); onSkillsChange(previous); setSkills(previous); } feedback.error(String(error)); }
     finally { setBusy(null); }
   };

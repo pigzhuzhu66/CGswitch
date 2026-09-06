@@ -1,5 +1,9 @@
+// @ts-expect-error 测试运行于 Node，但应用的浏览器 tsconfig 不加载 Node 类型。
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { availableSkillCount } from "./SkillsView";
+
+const viewSource = readFileSync(new URL("./SkillsView.tsx", import.meta.url), "utf8");
 
 describe("availableSkillCount", () => {
   it("统计已管理 Skill 的更新", () => {
@@ -13,5 +17,13 @@ describe("availableSkillCount", () => {
     expect(availableSkillCount([
       { name: "new-skill", description: null, store_path: "/tmp/new", source: "Agent", has_content_conflict: false, is_update: false, modified_at: 0 },
     ])).toBe(1);
+  });
+});
+
+describe("availableCount 刷新时机", () => {
+  it("导入与删除成功后立即重扫候选，角标不等窗口重新聚焦", () => {
+    // 导入和删除都会改变候选集；两处 refresh(true) 后必须跟 scanForUpdates()（同行或换行注释均可）
+    const callSites = viewSource.match(/await refresh\(true\);\s*(?:\/\/[^\n]*\n\s*)?void scanForUpdates\(\);/g) ?? [];
+    expect(callSites).toHaveLength(2);
   });
 });
