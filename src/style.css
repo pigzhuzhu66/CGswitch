@@ -183,12 +183,14 @@ textarea::placeholder {
   font-weight: 600;
 }
 
-:root.dark .apple-chip--accent {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
 :root.dark .apple-chip {
   background: rgb(255 255 255 / 0.08);
+}
+
+/* 暗色 accent 覆盖必须放在普通暗色胶囊规则之后：同特异性 (0,3,0)，
+   先声明的蓝底会被后声明的中性底覆盖 */
+:root.dark .apple-chip--accent {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 :root.dark .profile-card-meta .apple-chip {
